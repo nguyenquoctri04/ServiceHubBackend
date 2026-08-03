@@ -1,0 +1,59 @@
+// Prisma Schema for Notification Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("NOTIFICATION_DATABASE_URL")
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  READ
+}
+
+enum TemplateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model NotificationTemplate {
+  id        String               @id @default(uuid()) @db.Uuid
+  code      String               @unique @db.VarChar(100)
+  title     String?              @db.VarChar(255)
+  content   String?              @db.Text
+  channel   NotificationChannel? @default(IN_APP)
+  status    TemplateStatus?      @default(ACTIVE)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  notifications Notification[]
+
+  @@map("notification_templates")
+}
+
+model Notification {
+  id         String               @id @default(uuid()) @db.Uuid
+  userId     String?              @map("user_id") @db.Uuid
+  templateId String?              @map("template_id") @db.Uuid
+  title      String?              @db.VarChar(255)
+  content    String?              @db.Text
+  channel    NotificationChannel? @default(IN_APP)
+  status     NotificationStatus?  @default(PENDING)
+  sentAt     DateTime?            @map("sent_at")
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  template NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}

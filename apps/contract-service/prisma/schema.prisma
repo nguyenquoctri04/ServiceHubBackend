@@ -1,0 +1,204 @@
+// Prisma Schema for Contract Management Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTRACT_DATABASE_URL")
+}
+
+enum ViolationActionType {
+  WARNING
+  REQUEST_CORRECTION
+  FINE
+  DEDUCT_DEPOSIT
+  TERMINATE_CONTRACT
+  NO_ACTION
+}
+
+enum Source {
+  SYSTEM
+  PROVIDER
+  RESIDENT
+  ADMIN
+}
+
+enum ContractTemplateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ContractStatus {
+  DRAFT
+  WAITING_SIGN
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  CANCELLED
+}
+
+enum ParticipantRole {
+  LANDLORD
+  TENANT
+  CO_TENANT
+}
+
+enum TermStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ViolationStatus {
+  OPEN
+  PROCESSING
+  RESOLVED
+  CANCELLED
+}
+
+model ContractTemplate {
+  id          String                  @id @default(uuid()) @db.Uuid
+  providerId  String?                 @map("provider_id") @db.Uuid
+  name        String?                 @db.VarChar(255)
+  description String?                 @db.Text
+  content     Json?                   @db.JsonB
+  status      ContractTemplateStatus? @default(ACTIVE)
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
+
+  contracts Contract[]
+
+  @@map("contract_templates")
+}
+
+model TemplateVariable {
+  id        String @id @default(uuid()) @db.Uuid
+  key       String @db.VarChar(100)
+  label     String @db.VarChar(255)
+  groupName String @map("group_name") @db.VarChar(100)
+
+  @@map("template_variables")
+}
+
+model Contract {
+  id           String          @id @default(uuid()) @db.Uuid
+  providerId   String?         @map("provider_id") @db.Uuid
+  templateId   String?         @map("template_id") @db.Uuid
+  contractCode String?         @unique @map("contract_code") @db.VarChar(100)
+  startDate    DateTime?       @map("start_date") @db.Date
+  endDate      DateTime?       @map("end_date") @db.Date
+  status       ContractStatus? @default(DRAFT)
+  signedAt     DateTime?       @map("signed_at")
+  pdfUrl       String          @map("pdf_url") @db.Text
+  hashContract String?         @map("hash_contract") @db.Text
+  terminatedAt DateTime?       @map("terminated_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+
+  template     ContractTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  participants ContractParticipant[]
+  contractTerms ContractTerm[]
+  violations   Violation[]
+
+  @@map("contracts")
+}
+
+model ContractParticipant {
+  id         String           @id @default(uuid()) @db.Uuid
+  contractId String           @map("contract_id") @db.Uuid
+  residentId String?          @map("resident_id") @db.Uuid
+  role       ParticipantRole? @default(TENANT)
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@map("contract_participants")
+}
+
+model Term {
+  id        String      @id @default(uuid()) @db.Uuid
+  content   String?     @db.Text
+  status    TermStatus? @default(ACTIVE)
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  contractTerms ContractTerm[]
+
+  @@map("terms")
+}
+
+model ContractTerm {
+  id         String   @id @default(uuid()) @db.Uuid
+  contractId String   @map("contract_id") @db.Uuid
+  termId     String   @map("term_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  term     Term     @relation(fields: [termId], references: [id], onDelete: Cascade)
+
+  @@map("contract_terms")
+}
+
+model Violation {
+  id            String           @id @default(uuid()) @db.Uuid
+  contractId    String           @map("contract_id") @db.Uuid
+  violationType String?          @map("violation_type") @db.VarChar(100)
+  description   String?          @db.Text
+  violationDate DateTime?        @map("violation_date") @db.Date
+  status        ViolationStatus? @default(OPEN)
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  contract         Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  evidences        Evidence[]
+  violationActions ViolationAction[]
+
+  @@map("violations")
+}
+
+model Evidence {
+  id          String   @id @default(uuid()) @db.Uuid
+  violationId String?  @map("violation_id") @db.Uuid
+  url         String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  violation Violation? @relation(fields: [violationId], references: [id], onDelete: Cascade)
+
+  @@map("evidences")
+}
+
+model ViolationAction {
+  id              String               @id @default(uuid()) @db.Uuid
+  violationId     String               @map("violation_id") @db.Uuid
+  violationSource Source?              @map("violation_source")
+  performBy       String?              @map("perform_by") @db.Uuid
+  actionType      ViolationActionType? @map("action_type")
+  description     String?              @db.Text
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  violation Violation @relation(fields: [violationId], references: [id], onDelete: Cascade)
+
+  @@map("violation_actions")
+}
+
+// ==============================================================================
+// COMMENTED OUT TABLES (Chưa dùng tới theo yêu cầu)
+// ==============================================================================
+
+// model ContractFile {
+//   id           String   @id @default(uuid()) @db.Uuid
+//   contractId   String?  @map("contract_id") @db.Uuid
+//   pdfUrl       String   @map("pdf_url") @db.Text
+//   hashContract String?  @map("hash_contract") @db.Text
+//
+//   @@map("contract_files")
+// }
+
+// model ContractHistory {
+//   id         String   @id @default(uuid()) @db.Uuid
+//   contractId String   @map("contract_id") @db.Uuid
+//   action     String?  @db.VarChar(100)
+//   oldValue   Json?    @map("old_value") @db.JsonB
+//   newValue   Json?    @map("new_value") @db.JsonB
+//   createdBy  String?  @map("created_by") @db.Uuid
+//   createdAt  DateTime @default(now()) @map("created_at")
+//
+//   @@map("contract_histories")
+// }

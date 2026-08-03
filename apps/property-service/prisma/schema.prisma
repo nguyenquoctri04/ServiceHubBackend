@@ -1,0 +1,229 @@
+// Prisma Schema for Property Management Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("PROPERTY_DATABASE_URL")
+}
+
+enum PropertyType {
+  APARTMENT
+  BOARDING_HOUSE
+  DORMITORY
+  CO_LIVING
+  OFFICE
+  OTHER
+}
+
+enum PropertyStatus {
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum RoomStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  RESERVED
+  INACTIVE
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  INACTIVE
+  CANCELLED
+}
+
+enum MeterType {
+  ELECTRICITY
+  WATER
+  GAS
+  OTHER
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum RepairStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Property {
+  id           String          @id @default(uuid()) @db.Uuid
+  providerId   String          @map("provider_id") @db.Uuid
+  propertyName String          @map("property_name") @db.VarChar(255)
+  propertyType PropertyType?   @map("property_type")
+  description  String?         @db.Text
+  address      String?         @db.Text
+  status       PropertyStatus? @default(ACTIVE)
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  blocks    Block[]
+  roomTypes RoomType[]
+  rooms     Room[]
+
+  @@map("properties")
+}
+
+model Block {
+  id          String   @id @default(uuid()) @db.Uuid
+  propertyId  String   @map("property_id") @db.Uuid
+  blockCode   String?  @map("block_code") @db.VarChar(50)
+  blockName   String?  @map("block_name") @db.VarChar(255)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  floors   Floor[]
+
+  @@map("blocks")
+}
+
+model Floor {
+  id          String   @id @default(uuid()) @db.Uuid
+  blockId     String   @map("block_id") @db.Uuid
+  floorNumber Int?     @map("floor_number")
+  floorName   String?  @map("floor_name") @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  block Block  @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  rooms Room[]
+
+  @@map("floors")
+}
+
+model RoomType {
+  id           String   @id @default(uuid()) @db.Uuid
+  propertyId   String   @map("property_id") @db.Uuid
+  typeName     String?  @map("type_name") @db.VarChar(255)
+  area         Decimal? @db.Decimal(10, 2)
+  maxOccupancy Int?     @map("max_occupancy")
+  description  String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  rooms    Room[]
+
+  @@map("room_types")
+}
+
+model Room {
+  id          String      @id @default(uuid()) @db.Uuid
+  propertyId  String      @map("property_id") @db.Uuid
+  floorId     String?     @map("floor_id") @db.Uuid
+  roomTypeId  String      @map("room_type_id") @db.Uuid
+  roomNumber  String?     @map("room_number") @db.VarChar(100)
+  area        Decimal?    @db.Decimal(10, 2)
+  status      RoomStatus? @default(AVAILABLE)
+  description String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  floor    Floor?    @relation(fields: [floorId], references: [id], onDelete: SetNull)
+  roomType RoomType  @relation(fields: [roomTypeId], references: [id])
+  images   RoomImage[]
+  meterReadings MeterReading[]
+
+  @@map("rooms")
+}
+
+model RoomImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  roomId       String   @map("room_id") @db.Uuid
+  imageUrl     String?  @map("image_url") @db.Text
+  displayOrder Int?     @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@map("room_images")
+}
+
+model RoomServiceAssignment {
+  id         String            @id @default(uuid()) @db.Uuid
+  contractId String?           @map("contract_id") @db.Uuid
+  serviceId  String?           @map("service_id") @db.Uuid
+  required   Boolean?
+  status     AssignmentStatus? @default(ACTIVE)
+  createdAt  DateTime          @default(now()) @map("created_at")
+
+  @@map("room_service_assignments")
+}
+
+model MeterReading {
+  id            String     @id @default(uuid()) @db.Uuid
+  roomId        String?    @map("room_id") @db.Uuid
+  meterType     MeterType? @map("meter_type")
+  contractId    String?    @map("contract_id") @db.Uuid
+  previousMeter String?    @map("previous_meter") @db.Uuid
+  readingValue  Decimal?   @map("reading_value") @db.Decimal(12, 2)
+  recordedBy    String?    @map("recorded_by") @db.Uuid
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  room Room? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+
+  @@map("meter_readings")
+}
+
+model RepairRequest {
+  id          String        @id @default(uuid()) @db.Uuid
+  contractId  String?       @map("contract_id") @db.Uuid
+  description String?       @db.Text
+  priority    Priority?     @default(MEDIUM)
+  status      RepairStatus? @default(PENDING)
+  requestedBy String?       @map("requested_by") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  @@map("repair_requests")
+}
+
+// ==============================================================================
+// COMMENTED OUT TABLES (Chưa dùng tới theo yêu cầu)
+// ==============================================================================
+
+// model Facility {
+//   id           String   @id @default(uuid()) @db.Uuid
+//   facilityCode String?  @map("facility_code") @db.VarChar(100)
+//   facilityName String?  @map("facility_name") @db.VarChar(255)
+//   description  String?  @db.Text
+//   createdAt    DateTime @default(now()) @map("created_at")
+//
+//   @@map("facilities")
+// }
+
+// model RoomFacility {
+//   roomId     String  @map("room_id") @db.Uuid
+//   facilityId String  @map("facility_id") @db.Uuid
+//   quantity   Int?
+//   note       String? @db.Text
+//
+//   @@id([roomId, facilityId])
+//   @@map("room_facilities")
+// }
+
+// model Meter {
+//   id               String     @id @default(uuid()) @db.Uuid
+//   roomId           String?    @map("room_id") @db.Uuid
+//   meterType        MeterType? @map("meter_type")
+//   serialNumber     String?    @map("serial_number") @db.VarChar(100)
+//   installationDate DateTime?  @map("installation_date") @db.Date
+//   createdAt        DateTime   @default(now()) @map("created_at")
+//
+//   @@map("meters")
+// }

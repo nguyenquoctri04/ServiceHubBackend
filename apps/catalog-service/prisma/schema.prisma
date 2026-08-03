@@ -1,0 +1,93 @@
+// Prisma Schema for Service Catalog Service
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CATALOG_DATABASE_URL")
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ServiceType {
+  FOOD
+}
+
+enum PriceStatus {
+  ACTIVE
+  EXPIRED
+  SCHEDULED
+}
+
+model ServiceCategory {
+  id          String        @id @default(uuid()) @db.Uuid
+  title       String        @map("title") @db.VarChar(255)
+  description String?       @db.Text
+  status      ServiceStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  services Service[]
+
+  @@map("service_categories")
+}
+
+model Unit {
+  id         String  @id @default(uuid()) @db.Uuid
+  providerId String? @map("provider_id") @db.Uuid
+  unitName   String  @map("unit_name") @db.VarChar(100)
+
+  services Service[]
+
+  @@map("units")
+}
+
+model Service {
+  id          String        @id @default(uuid()) @db.Uuid
+  providerId  String        @map("provider_id") @db.Uuid
+  categoryId  String        @map("category_id") @db.Uuid
+  unitId      String        @map("unit_id") @db.Uuid
+  serviceName String        @map("service_name") @db.VarChar(255)
+  description String?       @db.Text
+  status      ServiceStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  category ServiceCategory @relation(fields: [categoryId], references: [id])
+  unit     Unit            @relation(fields: [unitId], references: [id])
+  prices   ServicePrice[]
+
+  @@map("services")
+}
+
+model ServicePrice {
+  id            String      @id @default(uuid()) @db.Uuid
+  serviceId     String      @map("service_id") @db.Uuid
+  price         Decimal     @db.Decimal(18, 2)
+  effectiveFrom DateTime    @map("effective_from") @db.Date
+  effectiveTo   DateTime?   @map("effective_to") @db.Date
+  status        PriceStatus @default(ACTIVE)
+  changedBy     String?     @map("changed_by") @db.Uuid
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  service    Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  priceTiers ServicePriceTier[]
+
+  @@map("service_prices")
+}
+
+model ServicePriceTier {
+  id             String   @id @default(uuid()) @db.Uuid
+  servicePriceId String   @map("service_price_id") @db.Uuid
+  fromValue      Decimal? @map("from_value") @db.Decimal(18, 2)
+  toValue        Decimal? @map("to_value") @db.Decimal(18, 2)
+  price          Decimal? @db.Decimal(18, 2)
+
+  servicePrice ServicePrice @relation(fields: [servicePriceId], references: [id], onDelete: Cascade)
+
+  @@map("service_price_tiers")
+}

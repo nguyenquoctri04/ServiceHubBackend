@@ -1,6 +1,6 @@
-// Prisma Schema for Billing & Payment Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-billing"
 }
 
 datasource db {
@@ -23,23 +23,16 @@ enum PaymentStatus {
   REFUNDED
 }
 
-enum TransactionStatus {
-  CREATED
-  PROCESSING
-  SUCCESS
-  FAILED
-}
-
 model Invoice {
-  id                 String         @id @default(uuid()) @db.Uuid
-  contractId         String?        @map("contract_id") @db.Uuid
-  paymentLinkId      String?        @unique @map("payment_link_id") @db.VarChar(255)
-  billingPeriodStart DateTime?      @map("billing_period_start") @db.Date
-  billingPeriodEnd   DateTime?      @map("billing_period_end") @db.Date
-  dueDate            DateTime?      @map("due_date") @db.Date
-  totalAmount        Decimal?       @map("total_amount") @db.Decimal(18, 2)
-  status             InvoiceStatus? @default(DRAFT)
-  createdAt          DateTime       @default(now()) @map("created_at")
+  id                 String        @id @default(uuid()) @db.Uuid
+  contractId         String?       @map("contract_id") @db.Uuid
+  paymentLinkId      String?       @unique @map("payment_link_id") @db.VarChar(100)
+  billingPeriodStart DateTime?     @map("billing_period_start") @db.Date
+  billingPeriodEnd   DateTime?     @map("billing_period_end") @db.Date
+  dueDate            DateTime?     @map("due_date") @db.Date
+  totalAmount        Decimal?      @map("total_amount") @db.Decimal(18, 2)
+  status             InvoiceStatus @default(DRAFT)
+  createdAt          DateTime      @default(now()) @map("created_at")
 
   items    InvoiceItem[]
   payments Payment[]
@@ -51,8 +44,6 @@ model InvoiceItem {
   id        String   @id @default(uuid()) @db.Uuid
   invoiceId String   @map("invoice_id") @db.Uuid
   serviceId String?  @map("service_id") @db.Uuid
-  itemName  String?  @map("item_name") @db.VarChar(255)
-  unitPrice Decimal? @map("unit_price") @db.Decimal(18, 2)
   quantity  Decimal? @db.Decimal(18, 2)
   amount    Decimal? @db.Decimal(18, 2)
   createdAt DateTime @default(now()) @map("created_at")
@@ -63,14 +54,13 @@ model InvoiceItem {
 }
 
 model Payment {
-  id            String         @id @default(uuid()) @db.Uuid
-  paymentLinkId String?        @map("payment_link_id") @db.VarChar(255)
-  invoiceId     String         @map("invoice_id") @db.Uuid
-  paymentMethod String?        @map("payment_method") @db.VarChar(100)
-  amount        Decimal?       @db.Decimal(18, 2)
-  status        PaymentStatus? @default(PENDING)
-  paidAt        DateTime?      @map("paid_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
+  id            String        @id @default(uuid()) @db.Uuid
+  paymentLinkId String?       @unique @map("payment_link_id") @db.VarChar(100)
+  invoiceId     String        @map("invoice_id") @db.Uuid
+  paymentMethod String?       @map("payment_method") @db.VarChar(50)
+  status        PaymentStatus @default(PENDING)
+  paidAt        DateTime?     @map("paid_at") @db.Timestamp(6)
+  createdAt     DateTime      @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 

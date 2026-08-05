@@ -1,6 +1,6 @@
-// Prisma Schema for Digital Signature Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-signature"
 }
 
 datasource db {
@@ -28,16 +28,13 @@ model GnupgKey {
 }
 
 model ContractSignature {
-  id             String           @id @default(uuid()) @db.Uuid
-  contractFileId String?          @map("contract_file_id") @db.Uuid
-  contractId     String?          @map("contract_id") @db.Uuid
-  gnupgKeyId     String?          @map("gnupg_key_id") @db.Uuid
-  status         SignatureStatus? @default(PENDING)
-  signatureData  String?          @map("signature_data") @db.Text
-  signedAt       DateTime?        @map("signed_at")
-  createdAt      DateTime         @default(now()) @map("created_at")
+  id         String          @id @default(uuid()) @db.Uuid
+  contractId String?         @map("contract_id") @db.Uuid
+  gnupgKeyId String?         @map("gnupg_key_id") @db.Uuid
+  status     SignatureStatus @default(PENDING)
+  createdAt  DateTime        @default(now()) @map("created_at")
 
-  gnupgKey GnupgKey? @relation(fields: [gnupgKeyId], references: [id], onDelete: SetNull)
+  gnupgKey GnupgKey? @relation(fields: [gnupgKeyId], references: [id])
 
   @@map("contract_signatures")
 }

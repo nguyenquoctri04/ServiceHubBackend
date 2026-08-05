@@ -1,6 +1,6 @@
-// Prisma Schema for Service Catalog Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-catalog"
 }
 
 datasource db {
@@ -13,10 +13,6 @@ enum ServiceStatus {
   INACTIVE
 }
 
-enum ServiceType {
-  FOOD
-}
-
 enum PriceStatus {
   ACTIVE
   EXPIRED
@@ -25,7 +21,7 @@ enum PriceStatus {
 
 model ServiceCategory {
   id          String        @id @default(uuid()) @db.Uuid
-  title       String        @map("title") @db.VarChar(255)
+  title       String        @db.VarChar(255)
   description String?       @db.Text
   status      ServiceStatus @default(ACTIVE)
   createdAt   DateTime      @default(now()) @map("created_at")
@@ -37,9 +33,9 @@ model ServiceCategory {
 }
 
 model Unit {
-  id         String  @id @default(uuid()) @db.Uuid
-  providerId String? @map("provider_id") @db.Uuid
-  unitName   String  @map("unit_name") @db.VarChar(100)
+  id         String   @id @default(uuid()) @db.Uuid
+  providerId String?  @map("provider_id") @db.Uuid
+  unitName   String   @map("unit_name") @db.VarChar(100)
 
   services Service[]
 
@@ -56,6 +52,7 @@ model Service {
   status      ServiceStatus @default(ACTIVE)
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
+  deletedAt   DateTime?     @map("deleted_at")
 
   category ServiceCategory @relation(fields: [categoryId], references: [id])
   unit     Unit            @relation(fields: [unitId], references: [id])
@@ -74,8 +71,8 @@ model ServicePrice {
   changedBy     String?     @map("changed_by") @db.Uuid
   createdAt     DateTime    @default(now()) @map("created_at")
 
-  service    Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  priceTiers ServicePriceTier[]
+  service Service            @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  tiers   ServicePriceTier[]
 
   @@map("service_prices")
 }

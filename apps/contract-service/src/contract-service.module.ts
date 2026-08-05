@@ -1,15 +1,21 @@
 import { Module } from '@nestjs/common';
-import { ContractServiceService } from './contract-service.service';
-import { ContractServiceAdminController } from './controllers/admin/contract-service-admin.controller';
-import { ContractServiceCustomerController } from './controllers/customer/contract-service-customer.controller';
-import { ContractServiceProviderController } from './controllers/provider/contract-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { TemplatesModule } from './templates/templates.module';
+import { ContractsModule } from './contracts/contracts.module';
+import { TermsModule } from './terms/terms.module';
+import { ViolationsModule } from './violations/violations.module';
 
 @Module({
-  controllers: [
-    ContractServiceAdminController,
-    ContractServiceCustomerController,
-    ContractServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    TemplatesModule,
+    ContractsModule,
+    TermsModule,
+    ViolationsModule
   ],
-  providers: [ContractServiceService],
+  controllers: [],
+  providers: [],
 })
 export class ContractServiceModule {}

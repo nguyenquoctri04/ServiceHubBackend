@@ -1,15 +1,17 @@
 import { Module } from '@nestjs/common';
-import { BillingServiceService } from './billing-service.service';
-import { BillingServiceAdminController } from './controllers/admin/billing-service-admin.controller';
-import { BillingServiceCustomerController } from './controllers/customer/billing-service-customer.controller';
-import { BillingServiceProviderController } from './controllers/provider/billing-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
-  controllers: [
-    BillingServiceAdminController,
-    BillingServiceCustomerController,
-    BillingServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    InvoicesModule,
+    PaymentsModule
   ],
-  providers: [BillingServiceService],
+  controllers: [],
+  providers: [],
 })
 export class BillingServiceModule {}

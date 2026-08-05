@@ -1,15 +1,19 @@
 import { Module } from '@nestjs/common';
-import { CatalogServiceService } from './catalog-service.service';
-import { CatalogServiceAdminController } from './controllers/admin/catalog-service-admin.controller';
-import { CatalogServiceCustomerController } from './controllers/customer/catalog-service-customer.controller';
-import { CatalogServiceProviderController } from './controllers/provider/catalog-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { CategoriesModule } from './categories/categories.module';
+import { UnitsModule } from './units/units.module';
+import { ServicesModule } from './services/services.module';
 
 @Module({
-  controllers: [
-    CatalogServiceAdminController,
-    CatalogServiceCustomerController,
-    CatalogServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    CategoriesModule,
+    UnitsModule,
+    ServicesModule
   ],
-  providers: [CatalogServiceService],
+  controllers: [],
+  providers: [],
 })
 export class CatalogServiceModule {}

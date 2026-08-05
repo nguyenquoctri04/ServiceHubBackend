@@ -1,27 +1,11 @@
-// Prisma Schema for Contract Management Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-contract"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("CONTRACT_DATABASE_URL")
-}
-
-enum ViolationActionType {
-  WARNING
-  REQUEST_CORRECTION
-  FINE
-  DEDUCT_DEPOSIT
-  TERMINATE_CONTRACT
-  NO_ACTION
-}
-
-enum Source {
-  SYSTEM
-  PROVIDER
-  RESIDENT
-  ADMIN
 }
 
 enum ContractTemplateStatus {
@@ -56,15 +40,31 @@ enum ViolationStatus {
   CANCELLED
 }
 
+enum ViolationActionType {
+  WARNING
+  REQUEST_CORRECTION
+  FINE
+  DEDUCT_DEPOSIT
+  TERMINATE_CONTRACT
+  NO_ACTION
+}
+
+enum Source {
+  SYSTEM
+  PROVIDER
+  RESIDENT
+  ADMIN
+}
+
 model ContractTemplate {
-  id          String                  @id @default(uuid()) @db.Uuid
-  providerId  String?                 @map("provider_id") @db.Uuid
-  name        String?                 @db.VarChar(255)
-  description String?                 @db.Text
-  content     Json?                   @db.JsonB
-  status      ContractTemplateStatus? @default(ACTIVE)
-  createdAt   DateTime                @default(now()) @map("created_at")
-  updatedAt   DateTime                @updatedAt @map("updated_at")
+  id          String                 @id @default(uuid()) @db.Uuid
+  providerId  String?                @map("provider_id") @db.Uuid
+  name        String?                @db.VarChar(255)
+  description String?                @db.Text
+  content     Json?
+  status      ContractTemplateStatus @default(ACTIVE)
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
 
   contracts Contract[]
 
@@ -81,33 +81,34 @@ model TemplateVariable {
 }
 
 model Contract {
-  id           String          @id @default(uuid()) @db.Uuid
-  providerId   String?         @map("provider_id") @db.Uuid
-  templateId   String?         @map("template_id") @db.Uuid
-  contractCode String?         @unique @map("contract_code") @db.VarChar(100)
-  startDate    DateTime?       @map("start_date") @db.Date
-  endDate      DateTime?       @map("end_date") @db.Date
-  status       ContractStatus? @default(DRAFT)
-  signedAt     DateTime?       @map("signed_at")
-  pdfUrl       String          @map("pdf_url") @db.Text
-  hashContract String?         @map("hash_contract") @db.Text
-  terminatedAt DateTime?       @map("terminated_at")
-  createdAt    DateTime        @default(now()) @map("created_at")
+  id           String         @id @default(uuid()) @db.Uuid
+  providerId   String?        @map("provider_id") @db.Uuid
+  templateId   String?        @map("template_id") @db.Uuid
+  contractCode String?        @unique @map("contract_code") @db.VarChar(100)
+  startDate    DateTime?      @map("start_date") @db.Date
+  endDate      DateTime?      @map("end_date") @db.Date
+  status       ContractStatus @default(DRAFT)
+  signedAt     DateTime?      @map("signed_at") @db.Timestamp(6)
+  pdfUrl       String         @map("pdf_url") @db.Text
+  hashContract String?        @map("hash_contract") @db.Text
+  terminatedAt DateTime?      @map("terminated_at") @db.Timestamp(6)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  deletedAt    DateTime?      @map("deleted_at")
 
-  template     ContractTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template     ContractTemplate?     @relation(fields: [templateId], references: [id])
   participants ContractParticipant[]
-  contractTerms ContractTerm[]
+  terms        ContractTerm[]
   violations   Violation[]
 
   @@map("contracts")
 }
 
 model ContractParticipant {
-  id         String           @id @default(uuid()) @db.Uuid
-  contractId String           @map("contract_id") @db.Uuid
-  residentId String?          @map("resident_id") @db.Uuid
-  role       ParticipantRole? @default(TENANT)
-  createdAt  DateTime         @default(now()) @map("created_at")
+  id         String          @id @default(uuid()) @db.Uuid
+  contractId String          @map("contract_id") @db.Uuid
+  residentId String?         @map("resident_id") @db.Uuid
+  role       ParticipantRole @default(TENANT)
+  createdAt  DateTime        @default(now()) @map("created_at")
 
   contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
 
@@ -115,10 +116,10 @@ model ContractParticipant {
 }
 
 model Term {
-  id        String      @id @default(uuid()) @db.Uuid
-  content   String?     @db.Text
-  status    TermStatus? @default(ACTIVE)
-  createdAt DateTime    @default(now()) @map("created_at")
+  id        String     @id @default(uuid()) @db.Uuid
+  content   String?    @db.Text
+  status    TermStatus @default(ACTIVE)
+  createdAt DateTime   @default(now()) @map("created_at")
 
   contractTerms ContractTerm[]
 
@@ -138,26 +139,25 @@ model ContractTerm {
 }
 
 model Violation {
-  id            String           @id @default(uuid()) @db.Uuid
-  contractId    String           @map("contract_id") @db.Uuid
-  violationType String?          @map("violation_type") @db.VarChar(100)
-  description   String?          @db.Text
-  violationDate DateTime?        @map("violation_date") @db.Date
-  status        ViolationStatus? @default(OPEN)
-  createdAt     DateTime         @default(now()) @map("created_at")
+  id            String          @id @default(uuid()) @db.Uuid
+  contractId    String          @map("contract_id") @db.Uuid
+  violationType String?         @map("violation_type") @db.VarChar(100)
+  description   String?         @db.Text
+  violationDate DateTime?       @map("violation_date") @db.Date
+  status        ViolationStatus @default(OPEN)
+  createdAt     DateTime        @default(now()) @map("created_at")
 
-  contract         Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  evidences        Evidence[]
-  violationActions ViolationAction[]
+  contract  Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  evidences Evidence[]
+  actions   ViolationAction[]
 
   @@map("violations")
 }
 
 model Evidence {
-  id          String   @id @default(uuid()) @db.Uuid
-  violationId String?  @map("violation_id") @db.Uuid
-  url         String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
+  id          String  @id @default(uuid()) @db.Uuid
+  violationId String? @map("violation_id") @db.Uuid
+  url         String? @db.Text
 
   violation Violation? @relation(fields: [violationId], references: [id], onDelete: Cascade)
 
@@ -165,40 +165,15 @@ model Evidence {
 }
 
 model ViolationAction {
-  id              String               @id @default(uuid()) @db.Uuid
-  violationId     String               @map("violation_id") @db.Uuid
-  violationSource Source?              @map("violation_source")
-  performBy       String?              @map("perform_by") @db.Uuid
-  actionType      ViolationActionType? @map("action_type")
-  description     String?              @db.Text
-  createdAt       DateTime             @default(now()) @map("created_at")
+  id              String              @id @default(uuid()) @db.Uuid
+  violationId     String              @map("violation_id") @db.Uuid
+  violationSource Source?             @map("violation_source")
+  performBy       String?             @map("perform_by") @db.Uuid
+  actionType      ViolationActionType @map("action_type")
+  description     String?             @db.Text
+  createdAt       DateTime            @default(now()) @map("created_at")
 
   violation Violation @relation(fields: [violationId], references: [id], onDelete: Cascade)
 
   @@map("violation_actions")
 }
-
-// ==============================================================================
-// COMMENTED OUT TABLES (Chưa dùng tới theo yêu cầu)
-// ==============================================================================
-
-// model ContractFile {
-//   id           String   @id @default(uuid()) @db.Uuid
-//   contractId   String?  @map("contract_id") @db.Uuid
-//   pdfUrl       String   @map("pdf_url") @db.Text
-//   hashContract String?  @map("hash_contract") @db.Text
-//
-//   @@map("contract_files")
-// }
-
-// model ContractHistory {
-//   id         String   @id @default(uuid()) @db.Uuid
-//   contractId String   @map("contract_id") @db.Uuid
-//   action     String?  @db.VarChar(100)
-//   oldValue   Json?    @map("old_value") @db.JsonB
-//   newValue   Json?    @map("new_value") @db.JsonB
-//   createdBy  String?  @map("created_by") @db.Uuid
-//   createdAt  DateTime @default(now()) @map("created_at")
-//
-//   @@map("contract_histories")
-// }

@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
-import { NotificationServiceService } from './notification-service.service';
-import { NotificationServiceAdminController } from './controllers/admin/notification-service-admin.controller';
-import { NotificationServiceCustomerController } from './controllers/customer/notification-service-customer.controller';
-import { NotificationServiceProviderController } from './controllers/provider/notification-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
-  controllers: [
-    NotificationServiceAdminController,
-    NotificationServiceCustomerController,
-    NotificationServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    NotificationsModule
   ],
-  providers: [NotificationServiceService],
+  controllers: [],
+  providers: [],
 })
 export class NotificationServiceModule {}

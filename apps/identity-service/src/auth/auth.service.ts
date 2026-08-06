@@ -1,17 +1,19 @@
-import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-// TODO: Import bcrypt or similar for password hashing, and JwtService for tokens.
-// For now, implementing the core logic scaffolding.
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService
+  ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto & { ipAddress?: string }) {
     this.logger.log(`Registering new identity for email: ${dto.email}`);
     
     // 1. Check if email exists
@@ -19,19 +21,19 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (existingUser) {
-      throw new BadRequestException('Email is already registered');
+      throw new RpcException({ message: 'Email is already registered', statusCode: 400 });
     }
 
     // 2. Find Role
     const role = await this.prisma.role.findUnique({
-      where: { name: dto.roleName },
+      where: { name: dto.role },
     });
     if (!role) {
-      throw new BadRequestException(`Role ${dto.roleName} not found`);
+      throw new RpcException({ message: `Role ${dto.role} not found`, statusCode: 400 });
     }
 
-    // 3. Hash Password (Placeholder logic)
-    const passwordHash = `hashed_${dto.password}`;
+    // 3. Hash Password
+    const passwordHash = await bcrypt.hash(dto.password, 10);
 
     // 4. Create Identity
     const newIdentity = await this.prisma.identity.create({
@@ -52,7 +54,7 @@ export class AuthService {
     };
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto & { ipAddress?: string }) {
     this.logger.log(`Attempting login for email: ${dto.email}`);
     
     // 1. Find User
@@ -62,30 +64,26 @@ export class AuthService {
     });
 
     if (!identity) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
     }
 
-    // 2. Verify Password (Placeholder logic)
-    const isPasswordValid = identity.passwordHash === `hashed_${dto.password}`;
+    // 2. Verify Password
+    const isPasswordValid = await bcrypt.compare(dto.password, identity.passwordHash);
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
     }
 
-    // 3. Generate Token (Placeholder logic)
-    const accessToken = `jwt_token_for_${identity.id}`;
-
-    // 4. Record Authentication History
+    // 3. Record Authentication History
     await this.prisma.authenticationHistory.create({
       data: {
         identityId: identity.id,
         action: 'LOGIN',
         status: 'SUCCESS',
-        ipAddress: '127.0.0.1', // Should be passed from gateway later
+        ipAddress: dto.ipAddress || 'Unknown',
       },
     });
 
     return {
-      accessToken,
       user: {
         id: identity.id,
         email: identity.email,

@@ -9,12 +9,12 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @MessagePattern({ cmd: 'auth.register' })
-  async register(@Payload() dto: RegisterDto) {
-    return await this.authService.register(dto);
+  async register(@Payload() payload: RegisterDto & { ipAddress?: string }) {
+    return await this.authService.register(payload);
   }
 
   @MessagePattern({ cmd: 'auth.login' })
-  async login(@Payload() dto: LoginDto) {
-    return await this.authService.login(dto);
+  async login(@Payload() payload: LoginDto & { ipAddress?: string }) {
+    return await this.authService.login(payload);
   }
 }

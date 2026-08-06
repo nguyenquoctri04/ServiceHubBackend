@@ -9,7 +9,9 @@ export function parseRedisUrl(urlStr?: string): RedisOptions {
       port: parseInt(redisUrl.port, 10) || 6379,
       username: redisUrl.username ? decodeURIComponent(redisUrl.username) : undefined,
       password: redisUrl.password ? decodeURIComponent(redisUrl.password) : undefined,
-      tls: redisUrl.protocol === 'rediss:' ? {} : undefined,
+      tls: redisUrl.protocol === 'rediss:' ? { rejectUnauthorized: false } : undefined,
+      retryStrategy: (times) => Math.min(times * 200, 5000),
+      maxRetriesPerRequest: null,
     };
   } catch (e) {
     return { host: 'localhost', port: 6379 };

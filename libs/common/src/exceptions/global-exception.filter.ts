@@ -1,9 +1,23 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
+import { throwError } from 'rxjs';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(GlobalExceptionFilter.name);
+
   catch(exception: any, host: ArgumentsHost) {
+    // Log mọi lỗi ra console để Dev dễ debug
+    if (exception instanceof HttpException) {
+      this.logger.error(`HTTP Status ${exception.getStatus()}: ${JSON.stringify(exception.getResponse())}`);
+    } else {
+      this.logger.error('Exception caught globally:', exception);
+    }
+    
+    if (exception instanceof Error && !(exception instanceof HttpException)) {
+      this.logger.error(exception.stack);
+    }
+
     const ctxType = host.getType();
     
     if (ctxType === 'http') {
@@ -14,10 +28,16 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-      let message = 'Internal server error';
+      let message: any = 'Internal server error';
       if (exception instanceof HttpException) {
         const resp = exception.getResponse();
-        message = typeof resp === 'string' ? resp : (resp as any).message || resp;
+        if (typeof resp === 'string') {
+          message = resp;
+        } else if (Array.isArray(resp)) {
+          message = resp;
+        } else {
+          message = (resp as any)?.message || exception.message;
+        }
       } else if (exception instanceof Error) {
         message = exception.message;
       }
@@ -32,10 +52,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     if (ctxType === 'rpc') {
-      if (exception instanceof RpcException) {
-        return exception;
-      }
-      return new RpcException(exception);
+      const errorPayload = exception instanceof HttpException
+        ? exception.getResponse()
+        : (exception instanceof Error ? exception.message : exception);
+        
+      return throwError(() => errorPayload);
     }
   }
 }

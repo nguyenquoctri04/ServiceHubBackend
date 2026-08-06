@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport, ClientsModuleAsyncOptions } from '@nestjs/microservices';
 
 import { parseRedisUrl } from '@app/common';
+import { AuthModule } from './auth/auth.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 
 const microservices = [
   'IDENTITY_SERVICE',
@@ -32,9 +34,11 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: '../../.env', // Monorepo structure, .env is in root
+      envFilePath: '.env', // Monorepo structure, .env is in root
     }),
     ClientsModule.registerAsync(clientProviders),
+    AuthModule,
+    DiagnosticsModule,
   ],
   controllers: [],
   providers: [],

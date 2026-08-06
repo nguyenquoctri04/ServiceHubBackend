@@ -5,7 +5,7 @@ import { ProvidersModule } from './providers/providers.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     PrismaModule,
     ProvidersModule
   ],

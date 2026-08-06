@@ -1,6 +1,6 @@
-// Prisma Schema for Provider Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-provider"
 }
 
 datasource db {
@@ -28,9 +28,21 @@ enum LegalDocumentType {
   OTHER
 }
 
+enum ProviderType {
+  PROPERTY_MANAGER
+  EXTERNAL_SERVICE
+}
+
+enum LinkStatus {
+  ACTIVE
+  INACTIVE
+  REJECTED
+}
+
 model Provider {
   id                     String         @id @default(uuid()) @db.Uuid
   identityId             String         @map("identity_id") @db.Uuid
+  providerType           ProviderType   @default(PROPERTY_MANAGER) @map("provider_type")
   providerCode           String         @unique @map("provider_code") @db.VarChar(50)
   providerName           String         @map("provider_name") @db.VarChar(255)
   numberCard             String?        @map("number_card") @db.VarChar(100)
@@ -42,6 +54,8 @@ model Provider {
   email                  String?        @db.VarChar(255)
   website                String?        @db.VarChar(255)
   address                String?        @db.Text
+  latitude               Decimal?       @db.Decimal(10, 8)
+  longitude              Decimal?       @db.Decimal(11, 8)
   companyName            String?        @map("company_name") @db.VarChar(255)
   taxCode                String?        @map("tax_code") @db.VarChar(100)
   businessLicenseNumber  String?        @map("business_license_number") @db.VarChar(100)
@@ -50,12 +64,30 @@ model Provider {
   status                 ProviderStatus @default(PENDING)
   createdAt              DateTime       @default(now()) @map("created_at")
   updatedAt              DateTime       @updatedAt @map("updated_at")
+  deletedAt              DateTime?      @map("deleted_at")
 
   legalDocuments ProviderLegalDocument[]
   settings       ProviderSetting[]
   statistic      ProviderStatistic?
+  propertyLinks  ProviderPropertyLink[]
 
   @@map("providers")
+}
+
+model ProviderPropertyLink {
+  id                            String     @id @default(uuid()) @db.Uuid
+  providerId                    String     @map("provider_id") @db.Uuid
+  propertyId                    String     @map("property_id") @db.Uuid
+  distanceKm                    Decimal?   @map("distance_km") @db.Decimal(10, 2)
+  isDistanceWarningAcknowledged Boolean    @default(false) @map("is_distance_warning_acknowledged")
+  status                        LinkStatus @default(ACTIVE)
+  createdAt                     DateTime   @default(now()) @map("created_at")
+  updatedAt                     DateTime   @updatedAt @map("updated_at")
+
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, propertyId])
+  @@map("provider_property_links")
 }
 
 model ProviderLegalDocument {

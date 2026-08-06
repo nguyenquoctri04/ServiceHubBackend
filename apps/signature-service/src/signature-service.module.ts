@@ -1,15 +1,17 @@
 import { Module } from '@nestjs/common';
-import { SignatureServiceService } from './signature-service.service';
-import { SignatureServiceAdminController } from './controllers/admin/signature-service-admin.controller';
-import { SignatureServiceCustomerController } from './controllers/customer/signature-service-customer.controller';
-import { SignatureServiceProviderController } from './controllers/provider/signature-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { KeysModule } from './keys/keys.module';
+import { SignaturesModule } from './signatures/signatures.module';
 
 @Module({
-  controllers: [
-    SignatureServiceAdminController,
-    SignatureServiceCustomerController,
-    SignatureServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    KeysModule,
+    SignaturesModule
   ],
-  providers: [SignatureServiceService],
+  controllers: [],
+  providers: [],
 })
 export class SignatureServiceModule {}

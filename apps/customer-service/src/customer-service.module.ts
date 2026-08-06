@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
-import { CustomerServiceService } from './customer-service.service';
-import { CustomerServiceAdminController } from './controllers/admin/customer-service-admin.controller';
-import { CustomerServiceCustomerController } from './controllers/customer/customer-service-customer.controller';
-import { CustomerServiceProviderController } from './controllers/provider/customer-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { ResidentsModule } from './residents/residents.module';
 
 @Module({
-  controllers: [
-    CustomerServiceAdminController,
-    CustomerServiceCustomerController,
-    CustomerServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    ResidentsModule
   ],
-  providers: [CustomerServiceService],
+  controllers: [],
+  providers: [],
 })
 export class CustomerServiceModule {}

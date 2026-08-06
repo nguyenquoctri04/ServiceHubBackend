@@ -1,15 +1,21 @@
 import { Module } from '@nestjs/common';
-import { PropertyServiceService } from './property-service.service';
-import { PropertyServiceAdminController } from './controllers/admin/property-service-admin.controller';
-import { PropertyServiceCustomerController } from './controllers/customer/property-service-customer.controller';
-import { PropertyServiceProviderController } from './controllers/provider/property-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { PropertiesModule } from './properties/properties.module';
+import { RoomsModule } from './rooms/rooms.module';
+import { MeterReadingsModule } from './meter-readings/meter-readings.module';
+import { RepairRequestsModule } from './repair-requests/repair-requests.module';
 
 @Module({
-  controllers: [
-    PropertyServiceAdminController,
-    PropertyServiceCustomerController,
-    PropertyServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '../../.env' }),
+    PrismaModule,
+    PropertiesModule,
+    RoomsModule,
+    MeterReadingsModule,
+    RepairRequestsModule
   ],
-  providers: [PropertyServiceService],
+  controllers: [],
+  providers: [],
 })
 export class PropertyServiceModule {}

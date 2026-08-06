@@ -1,6 +1,6 @@
-// Prisma Schema for Identity & eKYC Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-identity"
 }
 
 datasource db {
@@ -8,12 +8,31 @@ datasource db {
   url      = env("IDENTITY_DATABASE_URL")
 }
 
+model Identity {
+  id               String    @id @default(uuid()) @db.Uuid
+  email            String    @unique @db.VarChar(255)
+  passwordHash     String    @map("password_hash") @db.Text
+  roleId           String    @map("role_id") @db.Uuid
+  status           String    @db.VarChar(50)
+  isEkycVerified   Boolean   @default(false) @map("is_ekyc_verified")
+  lastLoginAt      DateTime? @map("last_login_at") @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamp(6)
+
+  role                    Role                    @relation(fields: [roleId], references: [id])
+  verifications           IdentityVerification[]
+  authenticationHistories AuthenticationHistory[]
+
+  @@map("identities")
+}
+
 model Role {
-  id          String   @id @default(uuid()) @db.Uuid
-  name        String   @unique @db.VarChar(100)
-  description String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @unique @db.VarChar(255)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamp(6)
 
   identities      Identity[]
   rolePermissions RolePermission[]
@@ -22,12 +41,12 @@ model Role {
 }
 
 model Permission {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique @db.VarChar(100)
-  resource    String   @db.VarChar(100)
-  action      String   @db.VarChar(100)
-  description String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
+  id          String    @id @default(uuid()) @db.Uuid
+  code        String    @unique @db.VarChar(100)
+  resource    String    @db.VarChar(100)
+  action      String    @db.VarChar(100)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
 
   rolePermissions RolePermission[]
 
@@ -45,41 +64,22 @@ model RolePermission {
   @@map("role_permissions")
 }
 
-model Identity {
-  id             String    @id @default(uuid()) @db.Uuid
-  email          String    @unique @db.VarChar(255)
-  passwordHash   String    @map("password_hash") @db.Text
-  roleId         String    @map("role_id") @db.Uuid
-  status         String    @db.VarChar(50)
-  isEkycVerified Boolean   @default(false) @map("is_ekyc_verified")
-  lastLoginAt    DateTime? @map("last_login_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-  deletedAt      DateTime? @map("deleted_at")
-
-  role                   Role                    @relation(fields: [roleId], references: [id])
-  identityVerifications IdentityVerification[]
-  authenticationHistories AuthenticationHistory[]
-
-  @@map("identities")
-}
-
 model IdentityVerification {
   id                String    @id @default(uuid()) @db.Uuid
   identityId        String    @map("identity_id") @db.Uuid
   provider          String    @db.VarChar(100)
-  referenceId       String?   @map("reference_id") @db.VarChar(255)
+  referenceId       String?   @map("reference_id") @db.VarChar(100)
   verificationLevel String?   @map("verification_level") @db.VarChar(50)
   faceSimilarity    Decimal?  @map("face_similarity") @db.Decimal(5, 2)
   livenessScore     Decimal?  @map("liveness_score") @db.Decimal(5, 2)
-  providerResponse  Json?     @map("provider_response") @db.JsonB
+  providerResponse  Json?     @map("provider_response")
   failureReason     String?   @map("failure_reason") @db.Text
-  verifiedAt        DateTime? @map("verified_at")
-  expiredAt         DateTime? @map("expired_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamp(6)
+  expiredAt         DateTime? @map("expired_at") @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
 
-  identity          Identity           @relation(fields: [identityId], references: [id], onDelete: Cascade)
-  identityDocuments IdentityDocument[]
+  identity  Identity           @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  documents IdentityDocument[]
 
   @@map("identity_verifications")
 }
@@ -99,8 +99,8 @@ model IdentityDocument {
   frontImageUrl    String?   @map("front_image_url") @db.Text
   backImageUrl     String?   @map("back_image_url") @db.Text
   selfieImageUrl   String?   @map("selfie_image_url") @db.Text
-  ocrRawData       Json?     @map("ocr_raw_data") @db.JsonB
-  createdAt        DateTime  @default(now()) @map("created_at")
+  ocrRawData       Json?     @map("ocr_raw_data")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
 
   verification IdentityVerification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
 
@@ -110,13 +110,13 @@ model IdentityDocument {
 model AuthenticationHistory {
   id            String   @id @default(uuid()) @db.Uuid
   identityId    String   @map("identity_id") @db.Uuid
-  action        String?  @db.VarChar(50)
+  action        String?  @db.VarChar(100)
   status        String?  @db.VarChar(50)
   ipAddress     String?  @map("ip_address") @db.VarChar(45)
   userAgent     String?  @map("user_agent") @db.Text
   deviceName    String?  @map("device_name") @db.VarChar(255)
   failureReason String?  @map("failure_reason") @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
   identity Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 

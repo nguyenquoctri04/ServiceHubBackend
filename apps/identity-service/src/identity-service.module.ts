@@ -1,15 +1,24 @@
 import { Module } from '@nestjs/common';
-import { IdentityServiceService } from './identity-service.service';
-import { IdentityServiceAdminController } from './controllers/admin/identity-service-admin.controller';
-import { IdentityServiceCustomerController } from './controllers/customer/identity-service-customer.controller';
-import { IdentityServiceProviderController } from './controllers/provider/identity-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { IdentitiesModule } from './identities/identities.module';
+import { RolesModule } from './roles/roles.module';
+import { EkycModule } from './ekyc/ekyc.module';
 
 @Module({
-  controllers: [
-    IdentityServiceAdminController,
-    IdentityServiceCustomerController,
-    IdentityServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    PrismaModule,
+    AuthModule,
+    IdentitiesModule,
+    RolesModule,
+    EkycModule,
   ],
-  providers: [IdentityServiceService],
+  controllers: [],
+  providers: [],
 })
 export class IdentityServiceModule {}

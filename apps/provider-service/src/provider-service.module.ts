@@ -1,15 +1,15 @@
 import { Module } from '@nestjs/common';
-import { ProviderServiceService } from './provider-service.service';
-import { ProviderServiceAdminController } from './controllers/admin/provider-service-admin.controller';
-import { ProviderServiceCustomerController } from './controllers/customer/provider-service-customer.controller';
-import { ProviderServiceProviderController } from './controllers/provider/provider-service-provider.controller';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
+import { ProvidersModule } from './providers/providers.module';
 
 @Module({
-  controllers: [
-    ProviderServiceAdminController,
-    ProviderServiceCustomerController,
-    ProviderServiceProviderController,
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    PrismaModule,
+    ProvidersModule
   ],
-  providers: [ProviderServiceService],
+  controllers: [],
+  providers: [],
 })
 export class ProviderServiceModule {}

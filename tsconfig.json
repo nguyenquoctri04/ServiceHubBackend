@@ -24,6 +24,7 @@
       "@app/common/*": [
         "libs/common/src/*"
       ]
-    }
+    },
+    "types": ["node", "jest"]
   }
 }

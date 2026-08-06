@@ -1,6 +1,6 @@
-// Prisma Schema for Customer Service
 generator client {
   provider = "prisma-client-js"
+  output   = "../../../node_modules/@prisma/client-customer"
 }
 
 datasource db {
@@ -47,6 +47,7 @@ model Resident {
   status     ResidentStatus @default(ACTIVE)
   createdAt  DateTime       @default(now()) @map("created_at")
   updatedAt  DateTime       @updatedAt @map("updated_at")
+  deletedAt  DateTime?      @map("deleted_at")
 
   emergencyContacts EmergencyContact[]
 
@@ -54,15 +55,12 @@ model Resident {
 }
 
 model EmergencyContact {
-  id           String        @id @default(uuid()) @db.Uuid
-  identityId   String?       @map("identity_id") @db.Uuid
-  parentId     String        @map("parent_id") @db.Uuid
-  name         String?       @db.VarChar(255)
-  phone        String?       @db.VarChar(50)
-  relationship String?       @db.VarChar(100)
-  relationType RelationType? @map("relation_type")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id           String       @id @default(uuid()) @db.Uuid
+  identityId   String?      @map("identity_id") @db.Uuid
+  parentId     String       @map("parent_id") @db.Uuid
+  relationship RelationType
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
 
   resident Resident @relation(fields: [parentId], references: [identityId], onDelete: Cascade)
 

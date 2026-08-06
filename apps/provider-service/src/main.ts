@@ -1,15 +1,22 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { Transport, MicroserviceOptions } from '@nestjs/microservices';
 import { ProviderServiceModule } from './provider-service.module';
-import * as dotenv from 'dotenv';
-dotenv.config();
-
-process.env.SERVICE_DATABASE_URL = process.env.PROVIDER_DATABASE_URL || process.env.DATABASE_URL;
+import { ValidationPipe } from '@nestjs/common';
+import { GlobalExceptionFilter, ResponseInterceptor, parseRedisUrl } from '@app/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(ProviderServiceModule);
-  const port = process.env.PORT_PROVIDER_SERVICE || 3002;
-  await app.listen(port);
-  console.log(`🚀 Provider Service running on http://localhost:${port}`);
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(ProviderServiceModule, {
+    transport: Transport.REDIS,
+    options: parseRedisUrl(process.env.REDIS_URL),
+  });
+
+  // Apply filters and pipes globally at microservice level
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
+
+  await app.listen();
+  console.log('✅ Provider Service is running and connected to Redis');
 }
 bootstrap();
-

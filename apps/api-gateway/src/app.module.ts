@@ -5,6 +5,8 @@ import { ClientsModule, Transport, ClientsModuleAsyncOptions } from '@nestjs/mic
 import { parseRedisUrl } from '@app/common';
 import { AuthModule } from './auth/auth.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { ProxyModule } from './proxy/proxy.module';
+
 
 const microservices = [
   'IDENTITY_SERVICE',
@@ -37,11 +39,13 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
       envFilePath: '.env', // Monorepo structure, .env is in root
     }),
     ClientsModule.registerAsync(clientProviders),
+    ProxyModule,
     AuthModule,
     DiagnosticsModule,
   ],
   controllers: [],
   providers: [],
-  exports: [ClientsModule],
+  exports: [ClientsModule, ProxyModule],
 })
 export class AppModule {}
+

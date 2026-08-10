@@ -8,33 +8,34 @@ datasource db {
   url      = env("SIGNATURE_DATABASE_URL")
 }
 
-enum SignatureStatus {
-  PENDING
-  SIGNED
-  FAILED
-  REJECTED
-}
-
 model GnupgKey {
   id         String   @id @default(uuid()) @db.Uuid
+
+  // Cross-service reference -> identity-service
   identityId String?  @map("identity_id") @db.Uuid
-  publicKey  String?  @map("public_key") @db.Text
-  privateKey String?  @map("private_key") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
+
+  publicKey  String?  @map("public_key")
+  privateKey String?  @map("private_key")
+
+  createdAt  DateTime @map("create_at")
 
   signatures ContractSignature[]
 
-  @@map("gnupg_keys")
+  @@index([identityId])
+  @@map("gnupg_key")
 }
 
 model ContractSignature {
-  id         String          @id @default(uuid()) @db.Uuid
-  contractId String?         @map("contract_id") @db.Uuid
-  gnupgKeyId String?         @map("gnupg_key_id") @db.Uuid
-  status     SignatureStatus @default(PENDING)
-  createdAt  DateTime        @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
 
-  gnupgKey GnupgKey? @relation(fields: [gnupgKeyId], references: [id])
+  // Cross-service reference -> contract-management-service
+  contractFileId String   @map("contract_file_id") @db.Uuid
 
-  @@map("contract_signatures")
+  gnupgKeyId     String   @map("gnupg_key_id") @db.Uuid
+
+  gnupgKey       GnupgKey @relation(fields: [gnupgKeyId], references: [id])
+
+  @@index([contractFileId])
+  @@index([gnupgKeyId])
+  @@map("contract_signature")
 }

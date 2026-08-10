@@ -15,6 +15,11 @@ enum NotificationChannel {
   IN_APP
 }
 
+enum NotificationTemplateStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum NotificationStatus {
   PENDING
   SENT
@@ -22,38 +27,44 @@ enum NotificationStatus {
   READ
 }
 
-enum TemplateStatus {
-  ACTIVE
-  INACTIVE
-}
-
 model NotificationTemplate {
-  id        String              @id @default(uuid()) @db.Uuid
-  code      String              @unique @db.VarChar(100)
-  title     String?             @db.VarChar(255)
-  content   String?             @db.Text
+  id        String                     @id @default(uuid()) @db.Uuid
+  code      String                     @unique
+
+  title     String
+  content   String
+
   channel   NotificationChannel
-  status    TemplateStatus      @default(ACTIVE)
-  createdAt DateTime            @default(now()) @map("created_at")
-  updatedAt DateTime            @updatedAt @map("updated_at")
+  status    NotificationTemplateStatus
+
+  createdAt DateTime                   @map("created_at")
+  updatedAt DateTime                   @map("updated_at")
 
   notifications Notification[]
 
-  @@map("notification_templates")
+  @@map("notification_template")
 }
 
 model Notification {
-  id         String              @id @default(uuid()) @db.Uuid
-  userId     String?             @map("user_id") @db.Uuid
-  templateId String?             @map("template_id") @db.Uuid
-  title      String?             @db.VarChar(255)
-  content    String?             @db.Text
+  id         String               @id @default(uuid()) @db.Uuid
+
+  // Cross-service reference -> identity-service
+  userId     String               @map("user_id") @db.Uuid
+
+  templateId String?              @map("template_id") @db.Uuid
+
+  title      String?
+  content    String?
+
   channel    NotificationChannel
-  status     NotificationStatus  @default(PENDING)
-  sentAt     DateTime?           @map("sent_at") @db.Timestamp(6)
-  createdAt  DateTime            @default(now()) @map("created_at")
+  status     NotificationStatus
+
+  sendAt     DateTime             @map("send_at")
 
   template NotificationTemplate? @relation(fields: [templateId], references: [id])
 
-  @@map("notifications")
+  @@index([userId])
+  @@index([templateId])
+  @@index([status, sendAt])
+  @@map("notification")
 }

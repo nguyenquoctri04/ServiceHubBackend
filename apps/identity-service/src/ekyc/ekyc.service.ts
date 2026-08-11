@@ -22,15 +22,17 @@ export class EkycService {
     // Example logic to store verification attempt
     const verification = await this.prisma.identityVerification.create({
       data: {
-        identityId: dto.identityId,
+        identity: { connect: { id: dto.identityId } },
         provider: dto.provider,
         verificationLevel: 'LEVEL_1',
+        createdAt: new Date(),
         documents: {
           create: {
             documentType: dto.documents.documentType,
             frontImageUrl: dto.documents.frontImageUrl,
             backImageUrl: dto.documents.backImageUrl,
             selfieImageUrl: dto.documents.selfieImageUrl,
+            createdAt: new Date(),
           }
         }
       },

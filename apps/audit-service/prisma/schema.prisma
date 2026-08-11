@@ -38,17 +38,29 @@ enum AuditAction {
 
 model AuditLog {
   id          String      @id @default(uuid()) @db.Uuid
+
+  // Cross-service reference -> identity-service
   userId      String?     @map("user_id") @db.Uuid
-  serviceName String?     @map("service_name") @db.VarChar(100)
+
+  serviceName String?     @map("service_name")
   action      AuditAction
-  entityType  String?     @map("entity_type") @db.VarChar(100)
+
+  entityType  String      @map("entity_type")
   entityId    String?     @map("entity_id") @db.Uuid
+
   oldData     Json?       @map("old_data")
   newData     Json?       @map("new_data")
-  ipAddress   String?     @map("ip_address") @db.VarChar(45)
-  userAgent   String?     @map("user_agent") @db.Text
-  description String?     @db.Text
-  createdAt   DateTime    @default(now()) @map("created_at")
 
-  @@map("audit_logs")
+  ipAddress   String?     @map("ip_address")
+  userAgent   String?     @map("user_agent")
+
+  description String?
+
+  createdAt   DateTime    @map("created_at")
+
+  @@index([userId])
+  @@index([serviceName])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
 }

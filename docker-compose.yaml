@@ -1,0 +1,13 @@
+services:
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+
+    ports:
+      - "6380:6379"
+    
+    volumes:
+      - redis-data:/data
+
+volumes:
+  redis-data:

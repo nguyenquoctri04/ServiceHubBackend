@@ -25,6 +25,7 @@ ServiceHubBackend/
 │   ├── api-gateway/      # Cổng giao tiếp với Client
 │   ├── identity-service/ # Quản lý user, mã hóa password
 │   ├── audit-service/    # Ghi nhận lịch sử hệ thống
+│   ├── order-service/    # Quản lý đơn dịch vụ ngoài (EXTERNAL_SERVICE)
 │   └── ... (các service khác)
 ├── libs/
 │   └── common/           # Chứa code dùng chung (Guards, Decorators, Filters...)

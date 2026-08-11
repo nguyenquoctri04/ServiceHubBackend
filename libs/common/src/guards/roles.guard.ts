@@ -12,14 +12,21 @@ export class RolesGuard implements CanActivate {
       context.getClass(),
     ]);
     
-    if (!requiredRoles) {
+    if (!requiredRoles || requiredRoles.length === 0) {
       return true; // No roles restricted
     }
     
-    const { user } = context.switchToHttp().getRequest();
+    let user: any = null;
+    if (context.getType() === 'http') {
+      const request = context.switchToHttp().getRequest();
+      user = request.user;
+    } else if (context.getType() === 'rpc') {
+      const rpcData = context.switchToRpc().getData();
+      user = rpcData?.currentUser || rpcData?.user;
+    }
     
     if (!user || !user.role) {
-      throw new ForbiddenException('Access denied. No role found.');
+      throw new ForbiddenException('Access denied. No authenticated user or role found.');
     }
     
     const hasRole = requiredRoles.includes(user.role);
@@ -30,3 +37,4 @@ export class RolesGuard implements CanActivate {
     return true;
   }
 }
+

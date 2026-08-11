@@ -57,20 +57,27 @@ Khi tạo một Contract từ Template, hệ thống sẽ **Deep Copy** không c
 ### State Machine & Workflow Đàm Phán
 
 ```text
-DRAFT -> UNDER_REVIEW -> READY_TO_SIGN -> SIGNING -> ACTIVE -> EXPIRED / TERMINATED / CANCELLED
+DRAFT -> PENDING_SIGNATURE -> ACTIVE -> EXPIRED / TERMINATED / CANCELLED
 ```
 
 **Chi tiết luồng chạy:**
 1. Provider tạo hợp đồng -> **`DRAFT`** (Được sửa thoải mái).
-2. Provider gửi Khách -> **`UNDER_REVIEW`**.
-   - Khách chỉ được: Xem, Comment, Accept, Reject (Không được sửa trực tiếp).
-   - Nếu Khách yêu cầu sửa -> Provider sửa -> `Version++` -> Trở lại `UNDER_REVIEW`.
-3. Tất cả Khách hàng đồng ý -> **`READY_TO_SIGN`**. Hợp đồng bị khóa (Locked). Muốn sửa phải Reopen sinh Version mới.
-4. Ký số (Multiple Signers qua bảng `ContractSigner`):
-   - Khách A ký -> Khách B ký -> Khách C ký.
-   - **Provider ký CUỐI CÙNG** (Xác nhận: "Tôi đồng ý với toàn bộ chữ ký của các bên").
-5. Ký xong -> Sinh bản PDF cuối cùng (Duy nhất 1 bản).
-6. Hash PDF (Chỉ Hash 1 lần duy nhất) -> Digital Signature -> **`ACTIVE`**.
+2. Provider chốt nội dung và gửi Khách -> **`PENDING_SIGNATURE`**.
+   - Khách và Provider đều được xem.
+   - Nếu cần sửa -> Provider **Thu hồi** hợp đồng về lại **`DRAFT`** (Ghi đè trực tiếp, không lưu Version cũ để tránh rườm rà). Các bên đã ký (nếu có) bị reset trạng thái.
+3. Ký số (Multiple Signers qua bảng `ContractSigner`):
+   - Khách hàng ký.
+   - **Provider ký CUỐI CÙNG**.
+4. Ký xong -> Sinh bản PDF cuối cùng.
+5. Hash PDF -> Digital Signature -> **`ACTIVE`**.
+
+---
+
+## 10. Order Management (Dành cho EXTERNAL_SERVICE)
+
+Với các dịch vụ ngoài không cần hợp đồng dài hạn (e.g. Dịch vụ sửa chữa lẻ), hệ thống sử dụng Đơn hàng (Orders).
+- **Luồng trạng thái**: `PENDING -> CONFIRMED -> IN_PROGRESS -> COMPLETED / CANCELLED`.
+- **Phân quyền**: Chỉ nhà cung cấp loại `EXTERNAL_SERVICE` mới sử dụng luồng này. Mọi thao tác xử lý tập trung vào việc cập nhật trạng thái đơn dịch vụ.
 
 ---
 

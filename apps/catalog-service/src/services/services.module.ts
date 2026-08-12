@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ServicesController } from './services.controller';
 import { ServicesService } from './services.service';
+import { CustomerServicesController } from './customer.services.controller';
+import { CustomerServicesService } from './customer.services.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LocationModule } from '../location/location.module';
@@ -23,7 +25,7 @@ import { LocationModule } from '../location/location.module';
       },
     ]),
   ],
-  controllers: [ServicesController],
-  providers: [ServicesService],
+  controllers: [ServicesController, CustomerServicesController],
+  providers: [ServicesService, CustomerServicesService],
 })
 export class ServicesModule {}

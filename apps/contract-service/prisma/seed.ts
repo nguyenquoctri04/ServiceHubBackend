@@ -1,65 +1,100 @@
 import { PrismaClient } from "@prisma/client-contract";
-import { Prisma } from "@prisma/client-contract";
 
 const prisma = new PrismaClient();
 
 const IDS = {
-  customer1: "30000000-0000-0000-0000-000000000002",
-
-  roomA101: "86000000-0000-0000-0000-000000000001",
-
-  prices: {
-    RENT: "88000000-0000-0000-0000-000000000001",
-    ELECTRICITY: "88000000-0000-0000-0000-000000000002",
-    WATER: "88000000-0000-0000-0000-000000000003",
-    INTERNET: "88000000-0000-0000-0000-000000000004",
-  },
-
   contracts: {
-    CONTRACT_1: "90000000-0000-0000-0000-000000000001",
-    CONTRACT_2: "90000000-0000-0000-0000-000000000002",
+    CONTRACT_1: "70000000-0000-0000-0000-000000000001",
+    CONTRACT_2: "70000000-0000-0000-0000-000000000002",
   },
 
-  terms: {
-    RENT: "91000000-0000-0000-0000-000000000001",
-    PAYMENT: "91000000-0000-0000-0000-000000000002",
-    MAINTENANCE: "91000000-0000-0000-0000-000000000003",
+  contractServices: {
+    CS_1: "71000000-0000-0000-0000-000000000001",
+    CS_2: "71000000-0000-0000-0000-000000000002",
+    CS_3: "71000000-0000-0000-0000-000000000003",
   },
 
   periods: {
-    AUGUST_2026: "92000000-0000-0000-0000-000000000001",
-    SEPTEMBER_2026: "92000000-0000-0000-0000-000000000002",
+    PERIOD_1: "72000000-0000-0000-0000-000000000001",
+    PERIOD_2: "72000000-0000-0000-0000-000000000002",
   },
 
-  template: "93000000-0000-0000-0000-000000000001",
+  terms: {
+    TERM_1: "73000000-0000-0000-0000-000000000001",
+    TERM_2: "73000000-0000-0000-0000-000000000002",
+  },
+
+  contractTerms: {
+    CT_1: "74000000-0000-0000-0000-000000000001",
+    CT_2: "74000000-0000-0000-0000-000000000002",
+  },
+
+  templates: {
+    TEMPLATE_1: "75000000-0000-0000-0000-000000000001",
+  },
 
   violationRules: {
-    LATE_PAYMENT: "94000000-0000-0000-0000-000000000001",
-    PROPERTY_DAMAGE: "94000000-0000-0000-0000-000000000002",
-    NOISE: "94000000-0000-0000-0000-000000000003",
-  },
-
-  violationCases: {
-    CASE_1: "95000000-0000-0000-0000-000000000001",
+    RULE_1: "76000000-0000-0000-0000-000000000001",
+    RULE_2: "76000000-0000-0000-0000-000000000002",
   },
 };
 
-const now = new Date();
+const USERS = {
+  ADMIN: "30000000-0000-0000-0000-000000000001",
+  CUSTOMER: "30000000-0000-0000-0000-000000000008",
+  PROVIDER: "30000000-0000-0000-0000-000000000009",
+};
+
+const CATALOG = {
+  ROOM: "63000000-0000-0000-0000-000000000001",
+  CLEANING: "63000000-0000-0000-0000-000000000002",
+};
+
+const ROOMS = {
+  ROOM_101: "66000000-0000-0000-0000-000000000001",
+  ROOM_102: "66000000-0000-0000-0000-000000000002",
+};
 
 async function main() {
   console.log("🌱 Seeding contract service...");
 
-  // =========================
-  // TEMPLATE
-  // =========================
+  const now = new Date();
 
-  await prisma.contractTemplate
-    .create({
-      data: {
-        id: IDS.template,
-        providerId: "40000000-0000-0000-0000-000000000001",
-        name: "Standard Rental Contract",
-        description: "Standard apartment rental contract.",
+  // =========================================================
+  // TERMS
+  // =========================================================
+
+  await prisma.term.createMany({
+    data: [
+      {
+        id: IDS.terms.TERM_1,
+        content:
+          "Khách hàng có trách nhiệm thanh toán đầy đủ và đúng hạn theo thỏa thuận.",
+        status: "ACTIVE",
+        createdAt: now,
+      },
+      {
+        id: IDS.terms.TERM_2,
+        content:
+          "Khách hàng phải bảo quản tài sản và cơ sở vật chất trong thời gian sử dụng.",
+        status: "ACTIVE",
+        createdAt: now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================================================
+  // CONTRACT TEMPLATE
+  // =========================================================
+
+  await prisma.contractTemplate.createMany({
+    data: [
+      {
+        id: IDS.templates.TEMPLATE_1,
+        providerId: USERS.PROVIDER,
+        name: "Hợp đồng thuê phòng",
+        description: "Mẫu hợp đồng thuê phòng tiêu chuẩn",
         content: {
           title: "HỢP ĐỒNG THUÊ PHÒNG",
           sections: [
@@ -67,103 +102,47 @@ async function main() {
             "Thông tin phòng",
             "Giá thuê",
             "Thanh toán",
-            "Chấm dứt hợp đồng",
+            "Quyền và nghĩa vụ",
           ],
         },
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
-    })
-    .catch(() => {});
-
-  // =========================
-  // TEMPLATE VARIABLES
-  // =========================
-
-  await prisma.templateVariable.createMany({
-    data: [
-      {
-        id: "96000000-0000-0000-0000-000000000001",
-        key: "customer_name",
-        label: "Tên khách hàng",
-        groupName: "CUSTOMER",
-      },
-      {
-        id: "96000000-0000-0000-0000-000000000002",
-        key: "room_number",
-        label: "Số phòng",
-        groupName: "ROOM",
-      },
-      {
-        id: "96000000-0000-0000-0000-000000000003",
-        key: "monthly_rent",
-        label: "Tiền thuê hàng tháng",
-        groupName: "BILLING",
-      },
     ],
     skipDuplicates: true,
   });
 
-  // =========================
-  // TERMS
-  // =========================
-
-  await prisma.term.createMany({
-    data: [
-      {
-        id: IDS.terms.RENT,
-        content:
-          "Khách hàng có trách nhiệm thanh toán tiền thuê đúng hạn hàng tháng.",
-        status: "ACTIVE",
-        createdAt: now,
-      },
-      {
-        id: IDS.terms.PAYMENT,
-        content:
-          "Hóa đơn phải được thanh toán trong vòng 5 ngày kể từ ngày phát hành.",
-        status: "ACTIVE",
-        createdAt: now,
-      },
-      {
-        id: IDS.terms.MAINTENANCE,
-        content:
-          "Khách hàng phải giữ gìn tài sản và chịu trách nhiệm đối với thiệt hại do lỗi của mình.",
-        status: "ACTIVE",
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // =========================
+  // =========================================================
   // CONTRACTS
-  // =========================
+  // =========================================================
 
   await prisma.contract.createMany({
     data: [
       {
         id: IDS.contracts.CONTRACT_1,
-        contractNumber: "CTR-2026-0001",
-        roomId: IDS.roomA101,
-        customerId: IDS.customer1,
+        contractNumber: "HD-2026-0001",
+        roomId: ROOMS.ROOM_101,
+        customerId: USERS.CUSTOMER,
         startDate: new Date("2026-08-01"),
-        endDate: new Date("2027-07-31"),
+        endDate: new Date("2027-08-01"),
         status: "ACTIVE",
         requireSignature: true,
-        signedAt: new Date("2026-07-30"),
+        signedAt: new Date("2026-07-31"),
         createdAt: now,
         updatedAt: now,
       },
+
       {
         id: IDS.contracts.CONTRACT_2,
-        contractNumber: "CTR-2026-0002",
-        roomId: "86000000-0000-0000-0000-000000000003",
-        customerId: "30000000-0000-0000-0000-000000000003",
-        startDate: new Date("2026-09-01"),
-        endDate: new Date("2027-08-31"),
-        status: "PENDING_SIGNATURE",
+        contractNumber: "HD-2026-0002",
+        roomId: ROOMS.ROOM_102,
+        customerId: "30000000-0000-0000-0000-000000000002",
+        startDate: new Date("2026-08-01"),
+        endDate: new Date("2027-08-01"),
+        status: "ACTIVE",
         requireSignature: true,
+        signedAt: new Date("2026-07-31"),
         createdAt: now,
         updatedAt: now,
       },
@@ -171,80 +150,45 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // CONTRACT SERVICES
-  // =========================
+  // =========================================================
 
   await prisma.contractService.createMany({
     data: [
       {
-        id: "97000000-0000-0000-0000-000000000001",
+        id: IDS.contractServices.CS_1,
         contractId: IDS.contracts.CONTRACT_1,
-        servicePriceId: IDS.prices.RENT,
-        quantity: new Prisma.Decimal("1"),
+        servicePriceId: CATALOG.ROOM,
+        quantity: 1,
         createdAt: now,
       },
       {
-        id: "97000000-0000-0000-0000-000000000002",
+        id: IDS.contractServices.CS_2,
         contractId: IDS.contracts.CONTRACT_1,
-        servicePriceId: IDS.prices.ELECTRICITY,
-        quantity: new Prisma.Decimal("1"),
+        servicePriceId: CATALOG.CLEANING,
+        quantity: 2,
         createdAt: now,
       },
       {
-        id: "97000000-0000-0000-0000-000000000003",
-        contractId: IDS.contracts.CONTRACT_1,
-        servicePriceId: IDS.prices.WATER,
-        quantity: new Prisma.Decimal("1"),
-        createdAt: now,
-      },
-      {
-        id: "97000000-0000-0000-0000-000000000004",
-        contractId: IDS.contracts.CONTRACT_1,
-        servicePriceId: IDS.prices.INTERNET,
-        quantity: new Prisma.Decimal("1"),
+        id: IDS.contractServices.CS_3,
+        contractId: IDS.contracts.CONTRACT_2,
+        servicePriceId: CATALOG.ROOM,
+        quantity: 1,
         createdAt: now,
       },
     ],
     skipDuplicates: true,
   });
 
-  // =========================
-  // CONTRACT TERMS
-  // =========================
-
-  await prisma.contractTerm.createMany({
-    data: [
-      {
-        id: "98000000-0000-0000-0000-000000000001",
-        contractId: IDS.contracts.CONTRACT_1,
-        termId: IDS.terms.RENT,
-        createdAt: now,
-      },
-      {
-        id: "98000000-0000-0000-0000-000000000002",
-        contractId: IDS.contracts.CONTRACT_1,
-        termId: IDS.terms.PAYMENT,
-        createdAt: now,
-      },
-      {
-        id: "98000000-0000-0000-0000-000000000003",
-        contractId: IDS.contracts.CONTRACT_1,
-        termId: IDS.terms.MAINTENANCE,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // =========================
+  // =========================================================
   // BILLING PERIODS
-  // =========================
+  // =========================================================
 
   await prisma.billingPeriod.createMany({
     data: [
       {
-        id: IDS.periods.AUGUST_2026,
+        id: IDS.periods.PERIOD_1,
         contractId: IDS.contracts.CONTRACT_1,
         periodStart: new Date("2026-08-01"),
         periodEnd: new Date("2026-08-31"),
@@ -252,10 +196,10 @@ async function main() {
         updatedAt: now,
       },
       {
-        id: IDS.periods.SEPTEMBER_2026,
-        contractId: IDS.contracts.CONTRACT_1,
-        periodStart: new Date("2026-09-01"),
-        periodEnd: new Date("2026-09-30"),
+        id: IDS.periods.PERIOD_2,
+        contractId: IDS.contracts.CONTRACT_2,
+        periodStart: new Date("2026-08-01"),
+        periodEnd: new Date("2026-08-31"),
         createdAt: now,
         updatedAt: now,
       },
@@ -263,34 +207,47 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
+  // CONTRACT TERMS
+  // =========================================================
+
+  await prisma.contractTerm.createMany({
+    data: [
+      {
+        id: IDS.contractTerms.CT_1,
+        contractId: IDS.contracts.CONTRACT_1,
+        termId: IDS.terms.TERM_1,
+        createdAt: now,
+      },
+      {
+        id: IDS.contractTerms.CT_2,
+        contractId: IDS.contracts.CONTRACT_1,
+        termId: IDS.terms.TERM_2,
+        createdAt: now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================================================
   // VIOLATION RULES
-  // =========================
+  // =========================================================
 
   await prisma.violationRule.createMany({
     data: [
       {
-        id: IDS.violationRules.LATE_PAYMENT,
-        name: "Late Payment",
-        description: "Customer does not pay invoice on time.",
+        id: IDS.violationRules.RULE_1,
+        name: "Thanh toán trễ hạn",
+        description: "Không thanh toán đúng thời hạn",
         targetType: "CUSTOMER",
         isActive: true,
         createdAt: now,
         updatedAt: now,
       },
       {
-        id: IDS.violationRules.PROPERTY_DAMAGE,
-        name: "Property Damage",
-        description: "Damage to property or room assets.",
-        targetType: "CUSTOMER",
-        isActive: true,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.violationRules.NOISE,
-        name: "Noise Violation",
-        description: "Excessive noise affecting other residents.",
+        id: IDS.violationRules.RULE_2,
+        name: "Gây hư hỏng tài sản",
+        description: "Làm hư hỏng tài sản của nhà cung cấp",
         targetType: "CUSTOMER",
         isActive: true,
         createdAt: now,
@@ -299,50 +256,15 @@ async function main() {
     ],
     skipDuplicates: true,
   });
-
-  // =========================
-  // VIOLATION CASE
-  // =========================
-
-  await prisma.violationCase
-    .create({
-      data: {
-        id: IDS.violationCases.CASE_1,
-        violationRuleId: IDS.violationRules.NOISE,
-        contractId: IDS.contracts.CONTRACT_1,
-        reportedBy: "40000000-0000-0000-0000-000000000001",
-        serviceId: null,
-        status: "RESOLVED",
-        description: "Customer received a warning regarding excessive noise.",
-        occurredAt: new Date("2026-08-05"),
-        createdAt: now,
-        updatedAt: now,
-        evidence: {
-          create: [
-            {
-              id: "99000000-0000-0000-0000-000000000001",
-              fileUrl: "https://example.com/evidence/noise-report.jpg",
-            },
-          ],
-        },
-        actions: {
-          create: [
-            {
-              id: "99000000-0000-0000-0000-000000000002",
-              performedBy: "30000000-0000-0000-0000-000000000001",
-              actionType: "WARNING",
-              reason: "First violation.",
-              createdAt: now,
-            },
-          ],
-        },
-      },
-    })
-    .catch(() => {});
 
   console.log("✅ Contract seed completed.");
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -1,118 +1,116 @@
 import { PrismaClient } from "@prisma/client-catalog";
-import { Prisma } from "@prisma/client-catalog";
 
 const prisma = new PrismaClient();
 
 const IDS = {
-  provider1: "40000000-0000-0000-0000-000000000001",
-  provider2: "40000000-0000-0000-0000-000000000002",
-
   categories: {
-    RENTAL: "80000000-0000-0000-0000-000000000001",
-    ELECTRICITY: "80000000-0000-0000-0000-000000000002",
-    WATER: "80000000-0000-0000-0000-000000000003",
-    INTERNET: "80000000-0000-0000-0000-000000000004",
-    CLEANING: "80000000-0000-0000-0000-000000000005",
+    HOUSING: "60000000-0000-0000-0000-000000000001",
+    CLEANING: "60000000-0000-0000-0000-000000000002",
+    FOOD: "60000000-0000-0000-0000-000000000003",
+    REPAIR: "60000000-0000-0000-0000-000000000004",
+    OTHER: "60000000-0000-0000-0000-000000000005",
   },
 
   billingRules: {
-    MONTHLY_FIXED: "81000000-0000-0000-0000-000000000001",
-    MONTHLY_METERED: "81000000-0000-0000-0000-000000000002",
-    ONE_TIME: "81000000-0000-0000-0000-000000000003",
-  },
-
-  properties: {
-    SUNRISE: "82000000-0000-0000-0000-000000000001",
-  },
-
-  blocks: {
-    A: "83000000-0000-0000-0000-000000000001",
-    B: "83000000-0000-0000-0000-000000000002",
-  },
-
-  floors: {
-    A1: "84000000-0000-0000-0000-000000000001",
-    A2: "84000000-0000-0000-0000-000000000002",
-    B1: "84000000-0000-0000-0000-000000000003",
-  },
-
-  roomTypes: {
-    STUDIO: "85000000-0000-0000-0000-000000000001",
-    ONE_BEDROOM: "85000000-0000-0000-0000-000000000002",
-  },
-
-  rooms: {
-    A101: "86000000-0000-0000-0000-000000000001",
-    A102: "86000000-0000-0000-0000-000000000002",
-    A201: "86000000-0000-0000-0000-000000000003",
-    B101: "86000000-0000-0000-0000-000000000004",
+    ROOM_RENT: "61000000-0000-0000-0000-000000000001",
+    CLEANING: "61000000-0000-0000-0000-000000000002",
+    FOOD: "61000000-0000-0000-0000-000000000003",
+    REPAIR: "61000000-0000-0000-0000-000000000004",
+    OTHER: "61000000-0000-0000-0000-000000000005",
   },
 
   services: {
-    RENT_STUDIO: "87000000-0000-0000-0000-000000000001",
-    ELECTRICITY: "87000000-0000-0000-0000-000000000002",
-    WATER: "87000000-0000-0000-0000-000000000003",
-    INTERNET: "87000000-0000-0000-0000-000000000004",
-    CLEANING: "87000000-0000-0000-0000-000000000005",
+    ROOM_RENT: "62000000-0000-0000-0000-000000000001",
+    CLEANING: "62000000-0000-0000-0000-000000000002",
+    LAUNDRY: "62000000-0000-0000-0000-000000000003",
+    MEAL: "62000000-0000-0000-0000-000000000004",
+    ELECTRIC_REPAIR: "62000000-0000-0000-0000-000000000005",
+    WATER_REPAIR: "62000000-0000-0000-0000-000000000006",
+    DELIVERY: "62000000-0000-0000-0000-000000000007",
   },
 
   prices: {
-    RENT_STUDIO: "88000000-0000-0000-0000-000000000001",
-    ELECTRICITY: "88000000-0000-0000-0000-000000000002",
-    WATER: "88000000-0000-0000-0000-000000000003",
-    INTERNET: "88000000-0000-0000-0000-000000000004",
-    CLEANING: "88000000-0000-0000-0000-000000000005",
+    ROOM_RENT: "63000000-0000-0000-0000-000000000001",
+    CLEANING: "63000000-0000-0000-0000-000000000002",
+    LAUNDRY: "63000000-0000-0000-0000-000000000003",
+    MEAL: "63000000-0000-0000-0000-000000000004",
+    ELECTRIC_REPAIR: "63000000-0000-0000-0000-000000000005",
+    WATER_REPAIR: "63000000-0000-0000-0000-000000000006",
+    DELIVERY: "63000000-0000-0000-0000-000000000007",
+  },
+
+  properties: {
+    PROPERTY_1: "64000000-0000-0000-0000-000000000001",
+    PROPERTY_2: "64000000-0000-0000-0000-000000000002",
+  },
+
+  roomTypes: {
+    STUDIO: "65000000-0000-0000-0000-000000000001",
+    ONE_BEDROOM: "65000000-0000-0000-0000-000000000002",
+  },
+
+  rooms: {
+    ROOM_101: "66000000-0000-0000-0000-000000000001",
+    ROOM_102: "66000000-0000-0000-0000-000000000002",
+    ROOM_201: "66000000-0000-0000-0000-000000000003",
   },
 };
 
-const now = new Date();
+const PROVIDERS = {
+  RESIDENCE: "40000000-0000-0000-0000-000000000001",
+  CLEANPRO: "40000000-0000-0000-0000-000000000002",
+  FIXMASTER: "40000000-0000-0000-0000-000000000003",
+  QUOC_TRI: "40000000-0000-0000-0000-000000000004",
+};
 
 async function main() {
   console.log("🌱 Seeding catalog service...");
 
-  // =========================
-  // CATEGORIES
-  // =========================
+  const now = new Date();
+
+  // =========================================================
+  // CATEGORY - CHỈ 5 LOẠI
+  // =========================================================
 
   await prisma.category.createMany({
     data: [
       {
-        id: IDS.categories.RENTAL,
-        name: "Phòng cho thuê",
-        description: "Dịch vụ phòng và căn hộ cho thuê",
-      },
-      {
-        id: IDS.categories.ELECTRICITY,
-        name: "Điện",
-        description: "Dịch vụ điện theo mức tiêu thụ",
-      },
-      {
-        id: IDS.categories.WATER,
-        name: "Nước",
-        description: "Dịch vụ nước theo mức tiêu thụ",
-      },
-      {
-        id: IDS.categories.INTERNET,
-        name: "Internet",
-        description: "Dịch vụ Internet",
+        id: IDS.categories.HOUSING,
+        name: "Nhà ở",
+        description: "Dịch vụ liên quan đến nhà ở, phòng và căn hộ",
       },
       {
         id: IDS.categories.CLEANING,
-        name: "Vệ sinh",
-        description: "Dịch vụ vệ sinh phòng",
+        name: "Dọn dẹp",
+        description: "Dịch vụ vệ sinh và dọn dẹp",
+      },
+      {
+        id: IDS.categories.FOOD,
+        name: "Ăn uống",
+        description: "Dịch vụ ăn uống và giao đồ ăn",
+      },
+      {
+        id: IDS.categories.REPAIR,
+        name: "Sửa chữa",
+        description: "Dịch vụ sửa chữa và bảo trì",
+      },
+      {
+        id: IDS.categories.OTHER,
+        name: "Khác",
+        description: "Các dịch vụ tiện ích khác",
       },
     ],
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // BILLING RULES
-  // =========================
+  // =========================================================
 
   await prisma.serviceBillingRule.createMany({
     data: [
       {
-        id: IDS.billingRules.MONTHLY_FIXED,
+        id: IDS.billingRules.ROOM_RENT,
         calculationMethod: "FIXED",
         billingFrequency: "RECURRING",
         billingIntervalValue: 1,
@@ -123,22 +121,44 @@ async function main() {
         updatedAt: now,
       },
       {
-        id: IDS.billingRules.MONTHLY_METERED,
-        calculationMethod: "METERED",
-        billingFrequency: "RECURRING",
+        id: IDS.billingRules.CLEANING,
+        calculationMethod: "QUANTITY",
+        billingFrequency: "ONE_TIME",
         billingIntervalValue: 1,
-        billingIntervalUnit: "MONTH",
+        billingIntervalUnit: "DAY",
         prorationMethod: "NONE",
-        usageSource: true,
+        usageSource: false,
         createdAt: now,
         updatedAt: now,
       },
       {
-        id: IDS.billingRules.ONE_TIME,
+        id: IDS.billingRules.FOOD,
+        calculationMethod: "QUANTITY",
+        billingFrequency: "ONE_TIME",
+        billingIntervalValue: 1,
+        billingIntervalUnit: "DAY",
+        prorationMethod: "NONE",
+        usageSource: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: IDS.billingRules.REPAIR,
+        calculationMethod: "QUANTITY",
+        billingFrequency: "ONE_TIME",
+        billingIntervalValue: 1,
+        billingIntervalUnit: "DAY",
+        prorationMethod: "NONE",
+        usageSource: false,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: IDS.billingRules.OTHER,
         calculationMethod: "FIXED",
         billingFrequency: "ONE_TIME",
         billingIntervalValue: 1,
-        billingIntervalUnit: "MONTH",
+        billingIntervalUnit: "DAY",
         prorationMethod: "NONE",
         usageSource: false,
         createdAt: now,
@@ -148,20 +168,32 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // PROPERTY
-  // =========================
+  // =========================================================
 
   await prisma.property.createMany({
     data: [
       {
-        id: IDS.properties.SUNRISE,
-        providerId: IDS.provider1,
-        propertyName: "Sunrise Residence",
-        description: "Modern apartment building in Ho Chi Minh City.",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
+        id: IDS.properties.PROPERTY_1,
+        providerId: PROVIDERS.RESIDENCE,
+        propertyName: "ServiceHub Residence Quận 7",
+        description: "Khu căn hộ cho thuê",
+        address: "123 Nguyễn Văn Linh, Quận 7, TP.HCM",
+        latitude: 10.7298,
+        longitude: 106.7215,
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: IDS.properties.PROPERTY_2,
+        providerId: PROVIDERS.RESIDENCE,
+        propertyName: "ServiceHub Residence Thủ Đức",
+        description: "Khu phòng cho thuê tại Thủ Đức",
+        address: "50 Võ Văn Ngân, TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
@@ -170,90 +202,30 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
-  // BLOCKS
-  // =========================
-
-  await prisma.block.createMany({
-    data: [
-      {
-        id: IDS.blocks.A,
-        propertyId: IDS.properties.SUNRISE,
-        blockName: "Block A",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.blocks.B,
-        propertyId: IDS.properties.SUNRISE,
-        blockName: "Block B",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // =========================
-  // FLOORS
-  // =========================
-
-  await prisma.floor.createMany({
-    data: [
-      {
-        id: IDS.floors.A1,
-        blockId: IDS.blocks.A,
-        floorName: "Floor 1",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.floors.A2,
-        blockId: IDS.blocks.A,
-        floorName: "Floor 2",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.floors.B1,
-        blockId: IDS.blocks.B,
-        floorName: "Floor 1",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
-
-  // =========================
+  // =========================================================
   // ROOM TYPES
-  // =========================
+  // =========================================================
 
   await prisma.roomType.createMany({
     data: [
       {
         id: IDS.roomTypes.STUDIO,
-        propertyId: IDS.properties.SUNRISE,
+        propertyId: IDS.properties.PROPERTY_1,
         typeName: "Studio",
-        area: new Prisma.Decimal("25.00"),
+        area: 30,
         maxOccupancy: 2,
-        description: "Studio room with private bathroom.",
+        description: "Căn hộ studio đầy đủ tiện nghi",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
       {
         id: IDS.roomTypes.ONE_BEDROOM,
-        propertyId: IDS.properties.SUNRISE,
+        propertyId: IDS.properties.PROPERTY_1,
         typeName: "1 Bedroom",
-        area: new Prisma.Decimal("40.00"),
+        area: 45,
         maxOccupancy: 3,
-        description: "One-bedroom apartment.",
+        description: "Căn hộ một phòng ngủ",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
@@ -262,44 +234,79 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
+  // BLOCK
+  // =========================================================
+
+  await prisma.block.createMany({
+    data: [
+      {
+        id: "67000000-0000-0000-0000-000000000001",
+        propertyId: IDS.properties.PROPERTY_1,
+        blockName: "Block A",
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================================================
+  // FLOOR
+  // =========================================================
+
+  await prisma.floor.createMany({
+    data: [
+      {
+        id: "68000000-0000-0000-0000-000000000001",
+        blockId: "67000000-0000-0000-0000-000000000001",
+        floorName: "Tầng 1",
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: "68000000-0000-0000-0000-000000000002",
+        blockId: "67000000-0000-0000-0000-000000000001",
+        floorName: "Tầng 2",
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================================================
   // ROOMS
-  // =========================
+  // =========================================================
 
   await prisma.room.createMany({
     data: [
       {
-        id: IDS.rooms.A101,
+        id: IDS.rooms.ROOM_101,
         roomTypeId: IDS.roomTypes.STUDIO,
-        floorId: IDS.floors.A1,
-        roomNumber: "A101",
+        floorId: "68000000-0000-0000-0000-000000000001",
+        roomNumber: "101",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
       {
-        id: IDS.rooms.A102,
+        id: IDS.rooms.ROOM_102,
         roomTypeId: IDS.roomTypes.STUDIO,
-        floorId: IDS.floors.A1,
-        roomNumber: "A102",
+        floorId: "68000000-0000-0000-0000-000000000001",
+        roomNumber: "102",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
       {
-        id: IDS.rooms.A201,
+        id: IDS.rooms.ROOM_201,
         roomTypeId: IDS.roomTypes.ONE_BEDROOM,
-        floorId: IDS.floors.A2,
-        roomNumber: "A201",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.rooms.B101,
-        roomTypeId: IDS.roomTypes.ONE_BEDROOM,
-        floorId: IDS.floors.B1,
-        roomNumber: "B101",
+        floorId: "68000000-0000-0000-0000-000000000002",
+        roomNumber: "201",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
@@ -308,98 +315,140 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // SERVICES
-  // =========================
+  // =========================================================
 
   await prisma.service.createMany({
     data: [
       {
-        id: IDS.services.RENT_STUDIO,
-        name: "Studio Room Rental",
-        description: "Monthly studio room rental.",
+        id: IDS.services.ROOM_RENT,
+        name: "Cho thuê phòng Studio",
+        description: "Phòng studio đầy đủ tiện nghi",
         status: "ACTIVE",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
-        requiresPrepayment: true,
+        address: "123 Nguyễn Văn Linh, Quận 7, TP.HCM",
+        latitude: 10.7298,
+        longitude: 106.7215,
+        requiresPrepayment: false,
         requiresContract: true,
-        providerId: IDS.provider1,
-        categoryId: IDS.categories.RENTAL,
-        billingRuleId: IDS.billingRules.MONTHLY_FIXED,
+        providerId: PROVIDERS.RESIDENCE,
+        categoryId: IDS.categories.HOUSING,
+        billingRuleId: IDS.billingRules.ROOM_RENT,
         serviceType: "NORMAL",
         roomTypeId: IDS.roomTypes.STUDIO,
         createdAt: now,
         updatedAt: now,
       },
-      {
-        id: IDS.services.ELECTRICITY,
-        name: "Electricity",
-        description: "Electricity usage billing.",
-        status: "ACTIVE",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
-        requiresPrepayment: false,
-        requiresContract: true,
-        providerId: IDS.provider1,
-        categoryId: IDS.categories.ELECTRICITY,
-        billingRuleId: IDS.billingRules.MONTHLY_METERED,
-        serviceType: "ADDITION",
-        roomTypeId: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.services.WATER,
-        name: "Water",
-        description: "Water usage billing.",
-        status: "ACTIVE",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
-        requiresPrepayment: false,
-        requiresContract: true,
-        providerId: IDS.provider1,
-        categoryId: IDS.categories.WATER,
-        billingRuleId: IDS.billingRules.MONTHLY_METERED,
-        serviceType: "ADDITION",
-        roomTypeId: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.services.INTERNET,
-        name: "Internet 300 Mbps",
-        description: "High-speed Internet service.",
-        status: "ACTIVE",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
-        requiresPrepayment: false,
-        requiresContract: true,
-        providerId: IDS.provider2,
-        categoryId: IDS.categories.INTERNET,
-        billingRuleId: IDS.billingRules.MONTHLY_FIXED,
-        serviceType: "ADDITION",
-        roomTypeId: null,
-        createdAt: now,
-        updatedAt: now,
-      },
+
       {
         id: IDS.services.CLEANING,
-        name: "Room Cleaning",
-        description: "One-time room cleaning service.",
+        name: "Dọn dẹp nhà ở",
+        description: "Dịch vụ dọn dẹp nhà ở theo giờ",
         status: "ACTIVE",
-        address: "123 Nguyen Van Linh, District 7, Ho Chi Minh City",
-        latitude: new Prisma.Decimal("10.729800"),
-        longitude: new Prisma.Decimal("106.721500"),
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
         requiresPrepayment: false,
         requiresContract: false,
-        providerId: IDS.provider2,
+        providerId: PROVIDERS.CLEANPRO,
         categoryId: IDS.categories.CLEANING,
-        billingRuleId: IDS.billingRules.ONE_TIME,
+        billingRuleId: IDS.billingRules.CLEANING,
+        serviceType: "NORMAL",
+        roomTypeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.services.LAUNDRY,
+        name: "Giặt sấy quần áo",
+        description: "Giặt và sấy quần áo tại nhà",
+        status: "ACTIVE",
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
+        requiresPrepayment: false,
+        requiresContract: false,
+        providerId: PROVIDERS.CLEANPRO,
+        categoryId: IDS.categories.CLEANING,
+        billingRuleId: IDS.billingRules.CLEANING,
         serviceType: "ADDITION",
+        roomTypeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.services.MEAL,
+        name: "Suất ăn gia đình",
+        description: "Suất ăn gia đình giao tận nơi",
+        status: "ACTIVE",
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
+        requiresPrepayment: true,
+        requiresContract: false,
+        providerId: PROVIDERS.QUOC_TRI,
+        categoryId: IDS.categories.FOOD,
+        billingRuleId: IDS.billingRules.FOOD,
+        serviceType: "NORMAL",
+        roomTypeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.services.ELECTRIC_REPAIR,
+        name: "Sửa chữa điện",
+        description: "Sửa chữa điện dân dụng",
+        status: "ACTIVE",
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
+        requiresPrepayment: false,
+        requiresContract: false,
+        providerId: PROVIDERS.FIXMASTER,
+        categoryId: IDS.categories.REPAIR,
+        billingRuleId: IDS.billingRules.REPAIR,
+        serviceType: "NORMAL",
+        roomTypeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.services.WATER_REPAIR,
+        name: "Sửa chữa nước",
+        description: "Sửa chữa đường ống và thiết bị nước",
+        status: "ACTIVE",
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
+        requiresPrepayment: false,
+        requiresContract: false,
+        providerId: PROVIDERS.FIXMASTER,
+        categoryId: IDS.categories.REPAIR,
+        billingRuleId: IDS.billingRules.REPAIR,
+        serviceType: "NORMAL",
+        roomTypeId: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.services.DELIVERY,
+        name: "Giao hàng tiện ích",
+        description: "Giao hàng và mua hộ các vật dụng cần thiết",
+        status: "ACTIVE",
+        address: "TP. Thủ Đức, TP.HCM",
+        latitude: 10.8505,
+        longitude: 106.7717,
+        requiresPrepayment: true,
+        requiresContract: false,
+        providerId: PROVIDERS.QUOC_TRI,
+        categoryId: IDS.categories.OTHER,
+        billingRuleId: IDS.billingRules.OTHER,
+        serviceType: "NORMAL",
         roomTypeId: null,
         createdAt: now,
         updatedAt: now,
@@ -408,98 +457,144 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
-  // PRICES
-  // =========================
+  // =========================================================
+  // SERVICE PRICES
+  // =========================================================
 
   await prisma.servicePrice.createMany({
     data: [
       {
-        id: IDS.prices.RENT_STUDIO,
-        createdBy: "30000000-0000-0000-0000-000000000005",
-        serviceId: IDS.services.RENT_STUDIO,
-        price: new Prisma.Decimal("5000000"),
+        id: IDS.prices.ROOM_RENT,
+        createdBy: PROVIDERS.RESIDENCE,
+        serviceId: IDS.services.ROOM_RENT,
+        price: 5000000,
         unit: "MONTH",
         effectiveFrom: new Date("2026-01-01"),
-        createdAt: now,
-      },
-      {
-        id: IDS.prices.ELECTRICITY,
-        createdBy: IDS.provider1,
-        serviceId: IDS.services.ELECTRICITY,
-        price: new Prisma.Decimal("3500"),
-        unit: "KWH",
-        effectiveFrom: new Date("2026-01-01"),
-        createdAt: now,
-      },
-      {
-        id: IDS.prices.WATER,
-        createdBy: IDS.provider1,
-        serviceId: IDS.services.WATER,
-        price: new Prisma.Decimal("18000"),
-        unit: "M3",
-        effectiveFrom: new Date("2026-01-01"),
-        createdAt: now,
-      },
-      {
-        id: IDS.prices.INTERNET,
-        createdBy: IDS.provider2,
-        serviceId: IDS.services.INTERNET,
-        price: new Prisma.Decimal("250000"),
-        unit: "MONTH",
-        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
         createdAt: now,
       },
       {
         id: IDS.prices.CLEANING,
-        createdBy: IDS.provider2,
+        createdBy: PROVIDERS.CLEANPRO,
         serviceId: IDS.services.CLEANING,
-        price: new Prisma.Decimal("150000"),
-        unit: "SERVICE",
+        price: 80000,
+        unit: "HOUR",
         effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
+        createdAt: now,
+      },
+      {
+        id: IDS.prices.LAUNDRY,
+        createdBy: PROVIDERS.CLEANPRO,
+        serviceId: IDS.services.LAUNDRY,
+        price: 50000,
+        unit: "KG",
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
+        createdAt: now,
+      },
+      {
+        id: IDS.prices.MEAL,
+        createdBy: PROVIDERS.QUOC_TRI,
+        serviceId: IDS.services.MEAL,
+        price: 50000,
+        unit: "SET",
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
+        createdAt: now,
+      },
+      {
+        id: IDS.prices.ELECTRIC_REPAIR,
+        createdBy: PROVIDERS.FIXMASTER,
+        serviceId: IDS.services.ELECTRIC_REPAIR,
+        price: 200000,
+        unit: "JOB",
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
+        createdAt: now,
+      },
+      {
+        id: IDS.prices.WATER_REPAIR,
+        createdBy: PROVIDERS.FIXMASTER,
+        serviceId: IDS.services.WATER_REPAIR,
+        price: 250000,
+        unit: "JOB",
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
+        createdAt: now,
+      },
+      {
+        id: IDS.prices.DELIVERY,
+        createdBy: PROVIDERS.QUOC_TRI,
+        serviceId: IDS.services.DELIVERY,
+        price: 30000,
+        unit: "ORDER",
+        effectiveFrom: new Date("2026-01-01"),
+        effectiveTo: null,
         createdAt: now,
       },
     ],
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // BILLING SCHEDULE
-  // =========================
+  // =========================================================
 
   await prisma.billingSchedule.createMany({
     data: [
       {
-        id: "89000000-0000-0000-0000-000000000001",
-        serviceId: IDS.services.RENT_STUDIO,
+        id: "69000000-0000-0000-0000-000000000001",
+        serviceId: IDS.services.ROOM_RENT,
         billingDay: 1,
         dueDays: 5,
         createdAt: now,
         updatedAt: now,
       },
+    ],
+    skipDuplicates: true,
+  });
+
+  // =========================================================
+  // SERVICE IMAGES
+  // =========================================================
+
+  await prisma.serviceImage.createMany({
+    data: [
       {
-        id: "89000000-0000-0000-0000-000000000002",
-        serviceId: IDS.services.ELECTRICITY,
-        billingDay: 1,
-        dueDays: 5,
+        id: "6a000000-0000-0000-0000-000000000001",
+        serviceId: IDS.services.ROOM_RENT,
+        imageUrl: "https://placehold.co/1200x800?text=Room",
+        displayOrder: 1,
         createdAt: now,
-        updatedAt: now,
       },
       {
-        id: "89000000-0000-0000-0000-000000000003",
-        serviceId: IDS.services.WATER,
-        billingDay: 1,
-        dueDays: 5,
+        id: "6a000000-0000-0000-0000-000000000002",
+        serviceId: IDS.services.CLEANING,
+        imageUrl: "https://placehold.co/1200x800?text=Cleaning",
+        displayOrder: 1,
         createdAt: now,
-        updatedAt: now,
       },
       {
-        id: "89000000-0000-0000-0000-000000000004",
-        serviceId: IDS.services.INTERNET,
-        billingDay: 1,
-        dueDays: 5,
+        id: "6a000000-0000-0000-0000-000000000003",
+        serviceId: IDS.services.MEAL,
+        imageUrl: "https://placehold.co/1200x800?text=Food",
+        displayOrder: 1,
         createdAt: now,
-        updatedAt: now,
+      },
+      {
+        id: "6a000000-0000-0000-0000-000000000004",
+        serviceId: IDS.services.ELECTRIC_REPAIR,
+        imageUrl: "https://placehold.co/1200x800?text=Repair",
+        displayOrder: 1,
+        createdAt: now,
+      },
+      {
+        id: "6a000000-0000-0000-0000-000000000005",
+        serviceId: IDS.services.DELIVERY,
+        imageUrl: "https://placehold.co/1200x800?text=Delivery",
+        displayOrder: 1,
+        createdAt: now,
       },
     ],
     skipDuplicates: true,
@@ -509,5 +604,10 @@ async function main() {
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

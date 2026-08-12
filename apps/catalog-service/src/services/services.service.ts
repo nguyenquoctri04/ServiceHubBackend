@@ -31,7 +31,7 @@ export class ServicesService {
       if (providerInfo && providerInfo.providerType === 'EXTERNAL_SERVICE') {
         isExternalService = true;
       }
-    } catch (error) {
+    } catch (error: any) {
       this.logger.warn(`Failed to fetch provider type (fail-open): ${error.message}`);
       // Fail-open: treat as normal service to not block
     }

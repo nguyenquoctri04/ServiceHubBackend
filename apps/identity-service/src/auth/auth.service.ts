@@ -11,11 +11,11 @@ export class AuthService {
 
   constructor(
     private readonly prisma: PrismaService
-  ) {}
+  ) { }
 
   async register(dto: RegisterDto & { ipAddress?: string }) {
     this.logger.log(`Registering new identity for email: ${dto.email}, role: ${dto.role}`);
-    
+
     // 1. Check if email exists
     const existingUser = await this.prisma.identity.findUnique({
       where: { email: dto.email },
@@ -70,7 +70,7 @@ export class AuthService {
 
   async login(dto: LoginDto & { ipAddress?: string }) {
     this.logger.log(`Attempting login for email: ${dto.email}`);
-    
+
     // 1. Find User
     const identity = await this.prisma.identity.findUnique({
       where: { email: dto.email },
@@ -87,8 +87,6 @@ export class AuthService {
       throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
     }
 
-    // 3. Record Authentication History (Note: AuthenticationHistory model removed from schema)
-    this.logger.log(`User ${identity.id} logged in successfully from IP ${dto.ipAddress || 'Unknown'}`);
     return {
       user: {
         id: identity.id,

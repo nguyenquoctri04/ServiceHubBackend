@@ -1,14 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { ProviderRpcSummary } from './dto/provider-rpc-summary.dto';
+import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 
 @Injectable()
 export class ProvidersService {
   private readonly logger = new Logger(ProvidersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * Lấy toàn bộ hồ sơ Provider kèm giấy tờ pháp lý.
@@ -19,7 +24,22 @@ export class ProvidersService {
 
     const provider = await this.prisma.provider.findFirst({
       where: { identityId },
-      include: { legalDocuments: true },
+      include: { 
+        legalDocuments: true,
+        identity: {
+          select: {
+            email: true,
+            phone: true,
+            status: true,
+            isEkycVerified: true,
+            role: {
+              select: {
+                name: true,
+              }
+            }
+          }
+        }
+      },
     });
 
     if (!provider) {
@@ -29,7 +49,14 @@ export class ProvidersService {
       });
     }
 
-    return provider;
+    const systemSettings = {
+      distanceWarningKm: parseInt(this.configService.get<string>('EXTERNAL_SERVICE_DISTANCE_WARNING_KM') || '5', 10),
+    };
+
+    return {
+      ...provider,
+      systemSettings,
+    };
   }
 
   /**
@@ -110,5 +137,75 @@ export class ProvidersService {
       providerType: provider.providerType as ProviderRpcSummary['providerType'],
       status: provider.status as ProviderRpcSummary['status'],
     };
+  }
+
+  /**
+   * Thêm mới một giấy tờ pháp lý cho Provider.
+   */
+  async addLegalDocument(identityId: string, dto: CreateLegalDocumentDto) {
+    this.logger.log(`Adding legal document for identityId: ${identityId}`);
+
+    const provider = await this.prisma.provider.findFirst({
+      where: { identityId },
+    });
+
+    if (!provider) {
+      throw new RpcException({
+        status: 404,
+        message: 'Provider profile not found',
+      });
+    }
+
+    return this.prisma.providerLegalDocument.create({
+      data: {
+        providerId: provider.id,
+        documentType: dto.documentType,
+        documentName: dto.documentName,
+        documentNumber: dto.documentNumber,
+        fileUrl: dto.fileUrl,
+        issueDate: dto.issueDate ? new Date(dto.issueDate) : null,
+        expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : null,
+        verificationStatus: 'PENDING',
+        createdAt: new Date(),
+      },
+    });
+  }
+
+  /**
+   * Xóa một giấy tờ pháp lý của Provider.
+   */
+  async removeLegalDocument(identityId: string, documentId: string) {
+    this.logger.log(`Removing legal document ${documentId} for identityId: ${identityId}`);
+
+    const provider = await this.prisma.provider.findFirst({
+      where: { identityId },
+    });
+
+    if (!provider) {
+      throw new RpcException({
+        status: 404,
+        message: 'Provider profile not found',
+      });
+    }
+
+    const document = await this.prisma.providerLegalDocument.findFirst({
+      where: {
+        id: documentId,
+        providerId: provider.id,
+      },
+    });
+
+    if (!document) {
+      throw new RpcException({
+        status: 404,
+        message: 'Legal document not found or you do not have permission',
+      });
+    }
+
+    await this.prisma.providerLegalDocument.delete({
+      where: { id: documentId },
+    });
+
+    return { success: true, message: 'Legal document removed' };
   }
 }

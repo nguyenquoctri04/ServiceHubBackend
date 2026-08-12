@@ -7,3 +7,4 @@ export * from './guards/roles.guard';
 export * from './observability/structured-logger.service';
 export * from './utils/redis.config';
 export * from './dto/pagination.dto';
+export * from './utils/redis.service';

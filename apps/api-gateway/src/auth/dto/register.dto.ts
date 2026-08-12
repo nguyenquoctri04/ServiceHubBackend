@@ -15,8 +15,8 @@ export class RegisterDto {
   password!: string;
 
   @IsString()
-  @IsNotEmpty()
-  fullName!: string;
+  @IsOptional()
+  fullName?: string;
 
   @IsString()
   @IsOptional()

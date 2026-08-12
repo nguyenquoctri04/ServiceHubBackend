@@ -6,12 +6,15 @@ import { firstValueFrom, catchError, throwError } from 'rxjs';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
+import { RedisService } from '@app/common';
+
 @Injectable()
 export class AuthService {
   constructor(
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
   async register(registerDto: RegisterDto, ipAddress?: string) {
@@ -40,22 +43,48 @@ export class AuthService {
       )
     );
 
-    // If valid, sign Access & Refresh Tokens using the actual user payload
-    return this.generateTokens(response.user || response);
+    // If valid, sign Access & Refresh Tokens and store in Redis
+    const userPayload = response.user || response;
+    return await this.generateTokens(userPayload);
   }
 
-  async refreshToken(userId: string, role: string) {
-    // Optionally check if user still exists/is active in IdentityService
-    // For simplicity, we just issue a new token based on the refresh token payload
-    const user = { id: userId, role };
-    return this.generateTokens(user);
+  async refreshToken(refreshToken: string) {
+    let payload: any;
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch (e) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const userId = payload.sub;
+    // Check if refresh token exists in Redis
+    const storedToken = await this.redisService.get(`refresh_token:${userId}`);
+    if (!storedToken || storedToken !== refreshToken) {
+      throw new UnauthorizedException('Refresh token is invalid or revoked');
+    }
+
+    const user = { id: userId, email: payload.email, role: payload.role };
+    return await this.generateTokens(user);
   }
 
-  private generateTokens(user: any) {
+  async logout(userId?: string) {
+    if (userId) {
+      await this.redisService.del(`access_token:${userId}`);
+      await this.redisService.del(`refresh_token:${userId}`);
+    }
+  }
+
+  private async generateTokens(user: any) {
     const payload = { sub: user.id, role: user.role, email: user.email };
     
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+
+    // Save Access Token in Redis (15m TTL)
+    await this.redisService.set(`access_token:${user.id}`, accessToken, 15 * 60);
+
+    // Save Refresh Token in Redis (7d TTL)
+    await this.redisService.set(`refresh_token:${user.id}`, refreshToken, 7 * 24 * 60 * 60);
 
     return {
       accessToken,
@@ -64,3 +93,4 @@ export class AuthService {
     };
   }
 }
+

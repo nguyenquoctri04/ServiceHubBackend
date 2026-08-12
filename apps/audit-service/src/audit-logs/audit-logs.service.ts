@@ -17,6 +17,7 @@ export class AuditLogsService {
         entityType: 'SYSTEM',
         userId: data.userId || null, // Must be UUID or null
         description: data.description, // Replaced details with description
+        createdAt: new Date(),
       }
     });
 

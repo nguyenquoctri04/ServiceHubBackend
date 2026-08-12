@@ -11,11 +11,11 @@ export class AuthService {
 
   constructor(
     private readonly prisma: PrismaService
-  ) {}
+  ) { }
 
   async register(dto: RegisterDto & { ipAddress?: string }) {
-    this.logger.log(`Registering new identity for email: ${dto.email}`);
-    
+    this.logger.log(`Registering new identity for email: ${dto.email}, role: ${dto.role}`);
+
     // 1. Check if email exists
     const existingUser = await this.prisma.identity.findUnique({
       where: { email: dto.email },
@@ -24,18 +24,28 @@ export class AuthService {
       throw new RpcException({ message: 'Email is already registered', statusCode: 400 });
     }
 
-    // 2. Find Role
-    const role = await this.prisma.role.findUnique({
-      where: { name: dto.role },
+    // 2. Find or Create Role (ensure CUSTOMER / PROVIDER roles exist)
+    const targetRoleName = dto.role || 'CUSTOMER';
+    let role = await this.prisma.role.findUnique({
+      where: { name: targetRoleName },
     });
+
     if (!role) {
-      throw new RpcException({ message: `Role ${dto.role} not found`, statusCode: 400 });
+      this.logger.log(`Role ${targetRoleName} not found in DB. Auto-seeding role...`);
+      role = await this.prisma.role.create({
+        data: {
+          name: targetRoleName,
+          description: `Default ${targetRoleName} role`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
     }
 
     // 3. Hash Password
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // 4. Create Identity
+    // 4. Create Identity matching exact Prisma schema
     const newIdentity = await this.prisma.identity.create({
       data: {
         email: dto.email,
@@ -54,12 +64,13 @@ export class AuthService {
       email: newIdentity.email,
       role: role.name,
       status: newIdentity.status,
+      isEkycVerified: newIdentity.isEkycVerified,
     };
   }
 
   async login(dto: LoginDto & { ipAddress?: string }) {
     this.logger.log(`Attempting login for email: ${dto.email}`);
-    
+
     // 1. Find User
     const identity = await this.prisma.identity.findUnique({
       where: { email: dto.email },
@@ -76,9 +87,6 @@ export class AuthService {
       throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
     }
 
-    // 3. Record Authentication History (Note: AuthenticationHistory model removed from schema)
-    this.logger.log(`User ${identity.id} logged in successfully from IP ${dto.ipAddress || 'Unknown'}`);
-
     return {
       user: {
         id: identity.id,
@@ -88,4 +96,5 @@ export class AuthService {
       },
     };
   }
+
 }

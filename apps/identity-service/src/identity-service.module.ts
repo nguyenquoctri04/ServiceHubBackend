@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { IdentitiesModule } from './identities/identities.module';
 import { RolesModule } from './roles/roles.module';
 import { EkycModule } from './ekyc/ekyc.module';
+import { ProvidersModule } from './providers/providers.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { EkycModule } from './ekyc/ekyc.module';
     IdentitiesModule,
     RolesModule,
     EkycModule,
+    ProvidersModule,
   ],
   controllers: [],
   providers: [],

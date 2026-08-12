@@ -10,7 +10,6 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
-
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
@@ -26,6 +25,8 @@
         "libs/common/src/*"
       ]
     },
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   }
 }

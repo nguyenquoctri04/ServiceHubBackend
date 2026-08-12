@@ -7,11 +7,11 @@ import { IdentityStatus } from '@prisma/client-identity';
 export class IdentitiesService {
   private readonly logger = new Logger(IdentitiesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async getProfile(id: string) {
     this.logger.log(`Fetching profile for identity: ${id}`);
-    
+
     const identity = await this.prisma.identity.findUnique({
       where: { id },
       include: {
@@ -36,7 +36,7 @@ export class IdentitiesService {
 
   async updateProfile(id: string, dto: UpdateProfileDto) {
     this.logger.log(`Updating profile for identity: ${id}`);
-    
+
     // Ensure exists
     await this.getProfile(id);
 

@@ -4,69 +4,76 @@ const prisma = new PrismaClient();
 
 const IDS = {
   templates: {
-    INVOICE_CREATED: "b0000000-0000-0000-0000-000000000001",
-    PAYMENT_SUCCESS: "b0000000-0000-0000-0000-000000000002",
-    CONTRACT_SIGNED: "b0000000-0000-0000-0000-000000000003",
-    METER_READING_REMINDER: "b0000000-0000-0000-0000-000000000004",
+    WELCOME: "90000000-0000-0000-0000-000000000001",
+    PAYMENT: "90000000-0000-0000-0000-000000000002",
+    CONTRACT: "90000000-0000-0000-0000-000000000003",
+    SERVICE: "90000000-0000-0000-0000-000000000004",
   },
 
   notifications: {
-    INVOICE_CREATED: "b1000000-0000-0000-0000-000000000001",
-    METER_REMINDER: "b1000000-0000-0000-0000-000000000002",
-    CONTRACT_SIGNED: "b1000000-0000-0000-0000-000000000003",
+    NOTIFICATION_1: "91000000-0000-0000-0000-000000000001",
+    NOTIFICATION_2: "91000000-0000-0000-0000-000000000002",
+    NOTIFICATION_3: "91000000-0000-0000-0000-000000000003",
+    NOTIFICATION_4: "91000000-0000-0000-0000-000000000004",
   },
-
-  customer1: "30000000-0000-0000-0000-000000000002",
 };
 
-const now = new Date();
+const USERS = {
+  CUSTOMER: "30000000-0000-0000-0000-000000000008",
+  PROVIDER: "30000000-0000-0000-0000-000000000009",
+  ADMIN: "30000000-0000-0000-0000-000000000001",
+};
 
 async function main() {
   console.log("🌱 Seeding notification service...");
 
-  // =========================
-  // TEMPLATES
-  // =========================
+  const now = new Date();
+
+  // =========================================================
+  // NOTIFICATION TEMPLATES
+  // =========================================================
 
   await prisma.notificationTemplate.createMany({
     data: [
       {
-        id: IDS.templates.INVOICE_CREATED,
-        code: "INVOICE_CREATED",
-        title: "Hóa đơn mới",
+        id: IDS.templates.WELCOME,
+        code: "WELCOME_USER",
+        title: "Chào mừng đến với ServiceHub",
         content:
-          "Hóa đơn {{invoiceNumber}} đã được tạo. Tổng tiền: {{amount}} VNĐ.",
+          "Chào mừng bạn đến với ServiceHub. Chúc bạn có trải nghiệm tốt!",
         channel: "IN_APP",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
+
       {
-        id: IDS.templates.PAYMENT_SUCCESS,
+        id: IDS.templates.PAYMENT,
         code: "PAYMENT_SUCCESS",
         title: "Thanh toán thành công",
-        content:
-          "Thanh toán cho hóa đơn {{invoiceNumber}} đã được thực hiện thành công.",
+        content: "Thanh toán hóa đơn của bạn đã được thực hiện thành công.",
+        channel: "IN_APP",
+        status: "ACTIVE",
+        createdAt: now,
+        updatedAt: now,
+      },
+
+      {
+        id: IDS.templates.CONTRACT,
+        code: "CONTRACT_CREATED",
+        title: "Hợp đồng mới",
+        content: "Hợp đồng của bạn đã được tạo thành công.",
         channel: "EMAIL",
         status: "ACTIVE",
         createdAt: now,
         updatedAt: now,
       },
+
       {
-        id: IDS.templates.CONTRACT_SIGNED,
-        code: "CONTRACT_SIGNED",
-        title: "Hợp đồng đã ký",
-        content: "Hợp đồng {{contractNumber}} đã được ký và kích hoạt.",
-        channel: "IN_APP",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.templates.METER_READING_REMINDER,
-        code: "METER_READING_REMINDER",
-        title: "Nhắc ghi chỉ số",
-        content: "Vui lòng ghi chỉ số điện/nước cho kỳ thanh toán hiện tại.",
+        id: IDS.templates.SERVICE,
+        code: "SERVICE_REQUEST",
+        title: "Có yêu cầu dịch vụ mới",
+        content: "Bạn vừa nhận được một yêu cầu dịch vụ mới.",
         channel: "PUSH",
         status: "ACTIVE",
         createdAt: now,
@@ -76,43 +83,54 @@ async function main() {
     skipDuplicates: true,
   });
 
-  // =========================
+  // =========================================================
   // NOTIFICATIONS
-  // =========================
+  // =========================================================
 
   await prisma.notification.createMany({
     data: [
       {
-        id: IDS.notifications.INVOICE_CREATED,
-        userId: IDS.customer1,
-        templateId: IDS.templates.INVOICE_CREATED,
-        title: "Hóa đơn mới",
-        content:
-          "Hóa đơn INV-2026-0001 đã được tạo với tổng tiền 5,991,000 VNĐ.",
-        channel: "IN_APP",
-        status: "SENT",
-        sendAt: new Date("2026-08-01T08:00:00"),
-      },
-      {
-        id: IDS.notifications.METER_REMINDER,
-        userId: IDS.customer1,
-        templateId: IDS.templates.METER_READING_REMINDER,
-        title: "Nhắc ghi chỉ số",
-        content:
-          "Vui lòng ghi chỉ số điện/nước cho kỳ thanh toán tháng 08/2026.",
-        channel: "PUSH",
-        status: "SENT",
-        sendAt: new Date("2026-08-31T08:00:00"),
-      },
-      {
-        id: IDS.notifications.CONTRACT_SIGNED,
-        userId: IDS.customer1,
-        templateId: IDS.templates.CONTRACT_SIGNED,
-        title: "Hợp đồng đã ký",
-        content: "Hợp đồng CTR-2026-0001 đã được ký và đang có hiệu lực.",
+        id: IDS.notifications.NOTIFICATION_1,
+        userId: USERS.CUSTOMER,
+        templateId: IDS.templates.WELCOME,
+        title: "Chào mừng đến với ServiceHub",
+        content: "Chào mừng Nguyễn Quốc Trí đến với ServiceHub.",
         channel: "IN_APP",
         status: "READ",
-        sendAt: new Date("2026-07-30T10:00:00"),
+        sendAt: now,
+      },
+
+      {
+        id: IDS.notifications.NOTIFICATION_2,
+        userId: USERS.CUSTOMER,
+        templateId: IDS.templates.PAYMENT,
+        title: "Thanh toán thành công",
+        content: "Hóa đơn INV-2026-0002 đã được thanh toán thành công.",
+        channel: "IN_APP",
+        status: "SENT",
+        sendAt: now,
+      },
+
+      {
+        id: IDS.notifications.NOTIFICATION_3,
+        userId: USERS.PROVIDER,
+        templateId: IDS.templates.SERVICE,
+        title: "Có yêu cầu dịch vụ mới",
+        content: "Bạn có một yêu cầu dịch vụ mới từ khách hàng.",
+        channel: "PUSH",
+        status: "PENDING",
+        sendAt: now,
+      },
+
+      {
+        id: IDS.notifications.NOTIFICATION_4,
+        userId: USERS.ADMIN,
+        templateId: IDS.templates.CONTRACT,
+        title: "Hợp đồng mới được tạo",
+        content: "Một hợp đồng mới đã được tạo trên hệ thống.",
+        channel: "EMAIL",
+        status: "SENT",
+        sendAt: now,
       },
     ],
     skipDuplicates: true,
@@ -122,5 +140,10 @@ async function main() {
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

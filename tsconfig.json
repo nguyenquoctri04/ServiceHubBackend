@@ -26,6 +26,6 @@
         "libs/common/src/*"
       ]
     },
-    "types": ["node", "jest"]
+    "types": ["node"]
   }
 }

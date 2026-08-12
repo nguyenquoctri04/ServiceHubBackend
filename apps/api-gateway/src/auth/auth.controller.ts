@@ -42,30 +42,33 @@ export class AuthController {
       throw new UnauthorizedException('Refresh token is missing');
     }
 
-    try {
-      // Verify refresh token
-      const payload = this.jwtService.verify(refreshToken);
-      
-      // Issue new tokens
-      const tokens = await this.authService.refreshToken(payload.sub, payload.role);
-      
-      this.setRefreshTokenCookie(res, tokens.refreshToken);
-      
-      return {
-        accessToken: tokens.accessToken
-      };
-    } catch (e) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
+    const tokens = await this.authService.refreshToken(refreshToken);
+    this.setRefreshTokenCookie(res, tokens.refreshToken);
+    
+    return {
+      accessToken: tokens.accessToken,
+      user: tokens.user
+    };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies['refresh_token'];
+    if (refreshToken) {
+      try {
+        const payload = this.jwtService.decode(refreshToken) as any;
+        if (payload?.sub) {
+          await this.authService.logout(payload.sub);
+        }
+      } catch (e) {
+        // Ignore decode error
+      }
+    }
     res.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
     });
     return { message: 'Logout successful' };
   }
@@ -74,8 +77,6 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getProfile(@CurrentUser() user: any) {
-    // The JwtStrategy validates the token and injects the payload here.
-    // To get FULL profile details, we would send a message to IdentityService via Redis.
     return {
       message: 'Token is valid',
       user
@@ -85,9 +86,10 @@ export class AuthController {
   private setRefreshTokenCookie(res: Response, token: string) {
     res.cookie('refresh_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // True if HTTPS
-      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
   }
+
 }

@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { IdentityStatus } from '@prisma/client-identity';
 
 @Injectable()
 export class IdentitiesService {
@@ -42,7 +43,7 @@ export class IdentitiesService {
     const updated = await this.prisma.identity.update({
       where: { id },
       data: {
-        status: dto.status as any,
+        status: dto.status ? (dto.status as IdentityStatus) : undefined,
       },
     });
 

@@ -8,7 +8,7 @@ Dựa trên bản thiết kế cơ sở dữ liệu (`db.txt`), tài liệu ng�
 
 Giữ nguyên thiết kế 2 loại Provider, việc mở rộng loại hình dịch vụ sẽ được giải quyết qua `ServiceCategory` (Internet, Điện, Nước...) chứ không phải phình to enum `ProviderType`.
 
-| Feature / Quyền | `LANDLORD` (Chủ trọ / BQL / Chủ tòa nhà) | `EXTERNAL_SERVICE` (Dịch vụ ngoài) |
+| Feature / Quyền | `PROPERTY_MANAGER` (Chủ trọ / BQL / Chủ tòa nhà) | `EXTERNAL_SERVICE` (Dịch vụ ngoài) |
 | --- | --- | --- |
 | Property / Block / Floor | ✅ Được phép | ❌ Không |
 | Room | ✅ Được phép | ❌ Không |
@@ -20,12 +20,19 @@ Giữ nguyên thiết kế 2 loại Provider, việc mở rộng loại hình d�
 
 ---
 
-## 2. Geocoding & Recommendation
+## 2. Geocoding & Distance Warning (Dành riêng cho EXTERNAL_SERVICE)
 
-- **Geocoding**: Khi Provider đăng ký, dùng Mapbox API chuyển đổi Địa chỉ -> Vĩ độ/Kinh độ (Lat/Lng) và lưu vào DB. Không gọi API tính khoảng cách liên tục.
-- **Tính khoảng cách**: Backend dùng công thức Haversine.
-- **Distance Threshold**: Lưu trong `SystemSetting` (`distance_threshold = 5km`) để Admin có thể thay đổi, không hardcode.
-- **Cơ chế**: Vẫn Auto-Approval và liên kết bình thường nếu quá Threshold, nhưng bật cảnh báo cho Provider và giáng cấp (không ưu tiên hiển thị) bởi Recommendation Engine.
+- **Nguyên tắc**: Distance Warning **không** áp dụng khi tạo Provider (Company). Nó **chỉ áp dụng khi tạo Service** mới thuộc loại `EXTERNAL_SERVICE`.
+- **Tìm kiếm toàn hệ thống**: Khi tạo dịch vụ ngoài, hệ thống sẽ tìm Property (Bất động sản) gần nhất trong **TOÀN BỘ HỆ THỐNG** (bất kể thuộc Provider nào), có trạng thái `ACTIVE`.
+- **Luồng xử lý tạo Service**:
+  1. Kiểm tra `provider_type` (từ Identity Service).
+  2. Nếu là `PROPERTY_MANAGER`: Bỏ qua tính khoảng cách.
+  3. Nếu là `EXTERNAL_SERVICE`:
+     - Gọi `DistanceMatrix.ai Geocoding Fast` chuyển địa chỉ Service ra Lat/Lng.
+     - Tìm Nearest ACTIVE Property (truy vấn toàn hệ thống).
+     - Gọi `DistanceMatrix.ai Distance Matrix Fast` để tính khoảng cách đường đi (route distance) thay vì Haversine.
+     - Nếu khoảng cách > 5km: Trả về Warning trong API response (`warning: true, distance_km: 6.2`).
+- **Không lưu Warning vào DB**: API chỉ trả về object chứa cảnh báo để Frontend hiển thị popup. Không bổ sung các cột `distance_warning`, `nearest_property_id` vào bảng `Service`. Dữ liệu khoảng cách chỉ được tính ở thời điểm tạo để tư vấn/cảnh báo.
 
 ---
 
@@ -44,76 +51,61 @@ Giữ nguyên nguyên tắc Database-per-Service. Tuyệt đối không Join DB 
 Hợp đồng không chỉ là một file tài liệu, nó là một **Agreement Workflow**.
 
 ### Hệ Thống Template Dựng Sẵn (Pre-built Templates)
-- Hệ thống cung cấp sẵn các mẫu hợp đồng (Templates) cho các dịch vụ phổ biến (thuê phòng, điện, nước, internet...).
-- Cung cấp sẵn các điều khoản chuẩn theo quy định của pháp luật và các trường hợp thường gặp.
-- **Lưu ý quan trọng**: Hiện tại hệ thống *chưa hỗ trợ* chức năng cho phép Provider tự tạo hay quản lý các template hợp đồng riêng. Provider chỉ có thể sử dụng các template do hệ thống cung cấp.
+- **Data Seed 100%**: Hệ thống cung cấp sẵn các mẫu hợp đồng (Templates) và điều khoản chuẩn theo quy định của pháp luật thông qua Seed Data.
+- **Lưu ý quan trọng**: Provider **không thể tự tạo hay custom template** riêng. Provider chỉ có thể sử dụng các template do hệ thống cung cấp sẵn.
 
 ### Snapshot Pattern Toàn Diện
 Khi tạo một Contract từ Template, hệ thống sẽ **Deep Copy** không chỉ Template mà còn Snapshot luôn thông tin tại thời điểm đó của:
-- `Template` (`templateId`, `templateVersion`, nội dung JSON).
-- `Provider`, `Customer`, `Room`, `Service`, `Price`.
-(Đảm bảo nếu sau này CCCD khách đổi, hợp đồng cũ vẫn giữ CCCD cũ).
+- `Template` (`templateId`, nội dung JSON).
+- `Provider`, `Customer`, `Service` (bao gồm `Room` nếu là dịch vụ thuê phòng), `Price`.
 
 ### State Machine & Workflow Đàm Phán
+Do luồng Ký Hợp Đồng (Signature) được **tạm hoãn (out of scope ở giai đoạn này)**, State Machine của Hợp đồng sẽ tập trung vào việc tạo nháp và chốt nội dung:
 
-```text
-DRAFT -> PENDING_SIGNATURE -> ACTIVE -> EXPIRED / TERMINATED / CANCELLED
-```
+**Bảng State-Transition:**
+| Từ Trạng thái | Hành động (Trigger) | Sang Trạng thái | Role được phép |
+| ------------- | -------------------- | ---------------- | -------------- |
+| `DRAFT` | `submit` (Chốt nội dung) | `PENDING_SIGNATURE` | Provider |
+| `PENDING_SIGNATURE` | `revoke` (Thu hồi để sửa) | `DRAFT` | Provider |
+| `PENDING_SIGNATURE` | `cancel` (Hủy bỏ) | `CANCELLED` | Provider |
+| `ACTIVE` | `terminate` (Chấm dứt) | `TERMINATED` | Provider |
 
-**Chi tiết luồng chạy:**
-1. Provider tạo hợp đồng -> **`DRAFT`** (Được sửa thoải mái).
-2. Provider chốt nội dung và gửi Khách -> **`PENDING_SIGNATURE`**.
-   - Khách và Provider đều được xem.
-   - Nếu cần sửa -> Provider **Thu hồi** hợp đồng về lại **`DRAFT`** (Ghi đè trực tiếp, không lưu Version cũ để tránh rườm rà). Các bên đã ký (nếu có) bị reset trạng thái.
-3. Ký số (Multiple Signers qua bảng `ContractSigner`):
-   - Khách hàng ký.
-   - **Provider ký CUỐI CÙNG**.
-4. Ký xong -> Sinh bản PDF cuối cùng.
-5. Hash PDF -> Digital Signature -> **`ACTIVE`**.
-
----
-
-## 10. Order Management (Dành cho EXTERNAL_SERVICE)
-
-Với các dịch vụ ngoài không cần hợp đồng dài hạn (e.g. Dịch vụ sửa chữa lẻ), hệ thống sử dụng Đơn hàng (Orders).
-- **Luồng trạng thái**: `PENDING -> CONFIRMED -> IN_PROGRESS -> COMPLETED / CANCELLED`.
-- **Phân quyền**: Chỉ nhà cung cấp loại `EXTERNAL_SERVICE` mới sử dụng luồng này. Mọi thao tác xử lý tập trung vào việc cập nhật trạng thái đơn dịch vụ.
+*Ghi chú: Việc chuyển từ `PENDING_SIGNATURE` sang `ACTIVE` sẽ do API ký kết (tạm hoãn) đảm nhận trong tương lai.*
 
 ---
 
 ## 5. Signature Service Integration
 
-`contract-service` quản lý Business Workflow, KHÔNG tự thực hiện ký số.
-
-**Luồng giao tiếp:**
-1. Khi Contract đủ điều kiện, `contract-service` sinh bản PDF cuối.
-2. Bắn sang `signature-service`.
-3. `signature-service` xử lý: Generate OTP -> Verify OTP -> Hash PDF -> Create Digital Signature -> Store Evidence (S3/IPFS).
-4. Xong việc, `signature-service` publish Event lên Redis (VD: `SignatureCreated`).
-5. `contract-service` nhận Event, đổi trạng thái hợp đồng thành `ACTIVE` (Event `ContractActivated`).
+> **Tạm hoãn (Out of Scope)**: Luồng ký hợp đồng số (Digital Signature) và các API gọi sang Signature Service sẽ không được triển khai ở giai đoạn này. Sẽ có API ký hợp đồng bổ sung ở các phase sau.
 
 ---
 
 ## 6. API Design (Business Oriented)
 
-Thiết kế API hướng nghiệp vụ, thay vì chỉ CRUD:
-- `POST /provider/contracts/{id}/submit` (Gửi cho khách)
-- `POST /provider/contracts/{id}/cancel`
-- `POST /provider/contracts/{id}/reopen`
+> **Source of Truth**: Chi tiết toàn bộ API của phân hệ Provider được quy định chuẩn thức tại tài liệu `provider_backend_plan_v2.md`. Vui lòng tham khảo tài liệu đó, phần này không lưu thông tin thừa để tránh mâu thuẫn.
 
 ---
 
-## 7. OCR Flow (Màn hình Review)
+## 7. OCR Flow (Đề xuất & Xác nhận Chỉ số)
 
-Chỉ số không được lưu vào DB ngay lập tức.
-**Luồng xử lý:** Upload Image -> Google Vision -> Trả về `Detected Value` -> Frontend Preview cạnh ảnh gốc -> Provider Review (Sửa tay nếu cần) -> **Confirm** -> Lưu Database.
+OCR chỉ là công cụ đề xuất, quyết định cuối cùng và xác nhận nằm ở người dùng. **Không tạo bảng trung gian riêng cho kết quả OCR**.
+**Luồng xử lý (2 bước độc lập):** 
+1. **Phân tích ảnh**: Provider Upload Image -> Backend gọi **OCR.Space** (Engine 2, eng) qua abstraction layer (`OcrService` -> `OcrProvider`) -> Trả kết quả (`Detected Value`) về Frontend. Mọi cấu hình API key chỉ lưu tại backend (ẩn hoàn toàn với FE).
+2. **Review & Lưu**: Frontend hiển thị ảnh gốc cạnh kết quả OCR (kèm cảnh báo kiểm tra). Provider sửa tay nếu cần -> Bấm **Confirm**.
+3. **Lưu Database**: Backend nhận kết quả chốt, tạo ngay bản ghi `MeterReading` với:
+   - `source = IMAGE`
+   - `value = [giá trị user xác nhận]`
+   - `img_url = [link ảnh]`
+   - `status = VALID`
+   - `recorded_by = provider`
 
 ---
 
-## 8. Property Hierarchy Đồng Nhất
+## 8. Bất động sản (Property) là một Dịch vụ
 
-Bảo đảm cấu trúc đồng nhất từ Backend ra Frontend:
-`Property` -> `Block` (Tòa nhà) -> `Floor` (Tầng) -> `Room` (Phòng)
+Bất động sản (Cho thuê nhà/phòng) được xem là một loại **Service đặc thù**. Mọi thông tin liên quan đến quản lý bất động sản chỉ là dữ liệu đi kèm để phục vụ cho Service đó. 
+- Dữ liệu này thuộc quản lý của `catalog-service`.
+- Cấu trúc đồng nhất: `Property` -> `Block` (Tòa nhà) -> `Floor` (Tầng) -> `Room` (Phòng).
 
 ---
 

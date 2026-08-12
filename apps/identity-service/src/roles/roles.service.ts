@@ -24,6 +24,8 @@ export class RolesService {
       data: {
         name: dto.name,
         description: dto.description,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     });
   }
@@ -31,7 +33,7 @@ export class RolesService {
   async getAllRoles() {
     return await this.prisma.role.findMany({
       include: {
-        rolePermissions: {
+        permissions: {
           include: { permission: true }
         }
       }

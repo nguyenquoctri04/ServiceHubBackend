@@ -10,8 +10,10 @@ Dự án này là một **Hệ thống Microservices** được xây dựng trê
 
 Các thành phần cốt lõi:
 1. **API Gateway (`apps/api-gateway`)**: Chốt chặn duy nhất giao tiếp với Client (Frontend/Mobile). Nó chịu trách nhiệm nhận HTTP Request, xác thực bảo mật (Stateless JWT Auth), kiểm tra quyền (RBAC), sau đó chuyển tiếp yêu cầu xuống các Microservice qua mạng Redis.
-2. **Microservices (`apps/*-service`)**: Các dịch vụ nhỏ gọn, độc lập. Ví dụ: `Identity Service` lo tài khoản, `Provider Service` lo nhà cung cấp, `Audit Service` lo ghi log...
-3. **Redis Message Broker**: Xương sống của hệ thống. Thay vì gọi API trực tiếp giữa các service (dễ chết dây chuyền), Gateway và các Service "nhắn tin" cho nhau thông qua Redis Pub/Sub.
+2. **Microservices (`apps/*-service`)**: Các dịch vụ nhỏ gọn, độc lập. Hệ thống hiện có 7 services: `identity`, `catalog`, `contract`, `signature`, `billing`, `notification`, và `audit`.
+3. **Redis**: Sử dụng 2 luồng riêng biệt:
+   - `REDIS_BROKER_URL` (Local Docker): Giao tiếp nội bộ (Message Broker / Transport). Không dùng khái niệm Service Discovery/Registry ở đây. Docker DNS sẽ đảm nhiệm network discovery.
+   - `REDIS_CACHE_URL` (Upstash): Lưu trữ Cache, Rate Limiting, Event data.
 4. **Database-per-service**: Mỗi Microservice có 1 Prisma Schema riêng và 1 Database riêng. Tuyệt đối không có chuyện Service A chọc thẳng vào Database của Service B.
 
 ---
@@ -24,8 +26,8 @@ ServiceHubBackend/
 ├── apps/                 # Chứa API Gateway và toàn bộ Microservices
 │   ├── api-gateway/      # Cổng giao tiếp với Client
 │   ├── identity-service/ # Quản lý user, mã hóa password
+│   ├── catalog-service/  # Quản lý dịch vụ, giá cả, bất động sản
 │   ├── audit-service/    # Ghi nhận lịch sử hệ thống
-│   ├── order-service/    # Quản lý đơn dịch vụ ngoài (EXTERNAL_SERVICE)
 │   └── ... (các service khác)
 ├── libs/
 │   └── common/           # Chứa code dùng chung (Guards, Decorators, Filters...)
@@ -95,18 +97,18 @@ apps/api-gateway/
 - Cuối cùng, Gateway trả Access Token ra màn hình (JSON body), và nhét ngầm Refresh Token vào **HttpOnly Cookie** rồi phản hồi về cho Client. Đóng lại một vòng đời API hoàn hảo!
 
 ### Hướng dẫn Code: Khi một Service phụ thuộc dữ liệu của Service khác
-Vì kiến trúc "Mỗi Service 1 Database riêng", tuyệt đối **KHÔNG** dùng lệnh `JOIN` SQL chéo DB. Khi Service A (VD: `Contract Service`) cần lấy dữ liệu từ Service B (VD: `Provider Service`) để xử lý logic nội bộ:
+Vì kiến trúc "Mỗi Service 1 Database riêng", tuyệt đối **KHÔNG** dùng lệnh `JOIN` SQL chéo DB. Khi Service A (VD: `Contract Service`) cần lấy dữ liệu từ Service B (VD: `Identity Service`, nơi chứa thông tin Provider) để xử lý logic nội bộ:
 
 **1. Cấu hình kết nối ở Module (Service A)**
 Tại file `*.module.ts` của bạn, khai báo `ClientsModule` trỏ về Service B:
 ```typescript
 ClientsModule.registerAsync([
   {
-    name: 'PROVIDER_SERVICE', // Tên hằng số dùng để Inject
+    name: 'IDENTITY_SERVICE', // Tên hằng số dùng để Inject
     imports: [ConfigModule],
     useFactory: (configService: ConfigService) => ({
       transport: Transport.REDIS,
-      options: parseRedisUrl(configService.get<string>('REDIS_URL')),
+      options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
     }),
     inject: [ConfigService],
   }
@@ -115,22 +117,22 @@ ClientsModule.registerAsync([
 
 **2. Viết Code gọi dữ liệu đồng bộ ở Service A (Kèm Cơ Chế Retry & Fallback)**
 Trong file `*.service.ts` của bạn, Inject `ClientProxy` đó vào và dùng `firstValueFrom` để gọi sang Service B. 
-**Bắt buộc:** Phải kèm theo cơ chế phòng vệ `timeout` (ngắt sau vài giây) và `retry` (thử lại) đề phòng Service B đang bị sập hoặc nghẽn mạng!
+**Bắt buộc:** Phải kèm theo cơ chế phòng vệ `timeout` (ngắt sau vài giây) và `retry` (thử lại) đề phòng Service B đang bị sập hoặc nghẽn mạng! Thêm Exponential Backoff để tránh thundering herd.
 ```typescript
-import { timeout, retry, catchError } from 'rxjs/operators';
+import { timeout, retryWhen, delay, take, catchError } from 'rxjs/operators';
 import { firstValueFrom, throwError } from 'rxjs';
 
 constructor(
-  @Inject('PROVIDER_SERVICE') private readonly providerClient: ClientProxy,
+  @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
 ) {}
 
 async createContract(data: any) {
-  // 1. Gọi sang Provider Service lấy thông tin (Có phòng vệ chống sập)
+  // 1. Gọi sang Identity Service lấy thông tin (Có phòng vệ chống sập và Exponential Backoff)
   const provider = await firstValueFrom(
-    this.providerClient.send({ cmd: 'get.provider.by.id' }, data.providerId).pipe(
+    this.identityClient.send({ cmd: 'get.provider.by.id' }, data.providerId).pipe(
       timeout(5000), // Đợi tối đa 5 giây
-      retry(3),      // Nếu rớt mạng, tự động thử lại tối đa 3 lần
-      catchError(err => throwError(() => new RequestTimeoutException('Provider Service không phản hồi')))
+      retry({ count: 3, delay: 500 }), // Thử lại tối đa 3 lần, mỗi lần cách nhau 500ms
+      catchError(err => throwError(() => new RequestTimeoutException('Identity Service không phản hồi')))
     )
   );
 
@@ -144,8 +146,8 @@ async createContract(data: any) {
 }
 ```
 
-**3. Xử lý và Trả dữ liệu ở Service B**
-Ở đầu nhận (Service B), trong file `*.controller.ts`, bạn dùng `@MessagePattern` để hứng lệnh. Dữ liệu mà hàm này `return` sẽ tự động lội ngược dòng Redis về cho Service A. Nếu có lỗi, phải ném ra `RpcException` (không dùng `HttpException` vì đây là giao thức nội bộ).
+**3. Xử lý và Trả dữ liệu ở Service B (Identity Service)**
+Ở đầu nhận (Identity Service), trong file `*.controller.ts`, bạn dùng `@MessagePattern` để hứng lệnh. Dữ liệu mà hàm này `return` sẽ tự động lội ngược dòng Redis về cho Service A. Nếu có lỗi, phải ném ra `RpcException` (không dùng `HttpException` vì đây là giao thức nội bộ).
 ```typescript
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
@@ -168,9 +170,12 @@ export class ProvidersController {
 }
 ```
 
-> **QUY TẮC BẮT BUỘC:** 
-> - Mọi giao tiếp chéo đều phải dùng `ClientProxy.send()`. Tuyệt đối không hardcode gọi API qua Axios.
-> - BẮT BUỘC phải pipe thêm `timeout()` và `catchError()` ở đầu gọi (Service A) để tránh tình trạng "Chết chùm" (Cascading Failure) nếu Service B bị sập.
+> **QUY TẮC BẮT BUỘC (RPC & Data Integrity):** 
+> - **Validate ID chéo**: Mọi API ghi dữ liệu có tham chiếu ngoại (VD: `provider_id`) BẮT BUỘC phải gọi RPC sang service sở hữu (VD: `identity-service`) để xác minh ID đó tồn tại và hợp lệ trước khi lưu.
+> - **send() vs emit()**: 
+>   - Dùng `ClientProxy.send()` (gọi đồng bộ có đợi response) cho các luồng bắt buộc phải kiểm tra/lấy dữ liệu ngay (như bước Validate ID ở trên).
+>   - Dùng `ClientProxy.emit()` (gọi bất đồng bộ fire-and-forget) cho các Domain Events thông báo trạng thái (VD: `ContractActivated`, `InvoicePaid`) khi không cần chờ Service khác trả lời.
+> - BẮT BUỘC phải pipe thêm `timeout()` và `catchError()` ở đầu gọi `send()` (Service A) để tránh tình trạng "Chết chùm" (Cascading Failure). Tuyệt đối không hardcode gọi API qua Axios.
 
 ---
 
@@ -191,16 +196,21 @@ Tạo file `.env` từ file mẫu:
 ```bash
 cp .env.example .env
 ```
-👉 Mở file `.env` lên và điền các thông tin quan trọng: `JWT_SECRET`, `REDIS_URL` (Redis Cloud) và 10 chuỗi kết nối Database `*_DATABASE_URL`.
+👉 Mở file `.env` lên và điền các thông tin quan trọng: 
+- `JWT_SECRET`, `REDIS_BROKER_URL` (Local Docker), `REDIS_CACHE_URL` (Upstash).
+- 7 chuỗi kết nối Database `*_DATABASE_URL`.
+- Các API Key tích hợp: `OCR_SPACE_API_KEY`, `GEOCODING_FAST_API_KEY`, `DISTANCE_MATRIX_FAST_API_KEY`.
+- Business Rules: `EXTERNAL_SERVICE_DISTANCE_WARNING_KM=5`.
+*(Lưu ý tuyệt đối không đưa các key này lên Git, cũng như không được rò rỉ xuống Frontend).*
 
 ### Bước 3: Build Prisma Clients
-Vì chúng ta có 10 Database độc lập, Prisma cần phải sinh code cho cả 10 cái:
+Vì chúng ta có 7 Database độc lập, Prisma cần phải sinh code cho cả 7 cái:
 ```bash
 npm run prisma:generate
 ```
 
 ### Bước 4: Khởi động toàn bộ Hệ thống
-Chạy lệnh ma thuật sau để khởi động cùng lúc API Gateway và 9 Microservices:
+Chạy lệnh ma thuật sau để khởi động cùng lúc API Gateway và 7 Microservices:
 ```bash
 npm run start:all
 ```

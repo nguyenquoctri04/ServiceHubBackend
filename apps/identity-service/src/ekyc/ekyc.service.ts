@@ -25,12 +25,14 @@ export class EkycService {
         identityId: dto.identityId,
         provider: dto.provider,
         verificationLevel: 'LEVEL_1',
+        createdAt: new Date(),
         documents: {
           create: {
             documentType: dto.documents.documentType,
             frontImageUrl: dto.documents.frontImageUrl,
             backImageUrl: dto.documents.backImageUrl,
             selfieImageUrl: dto.documents.selfieImageUrl,
+            createdAt: new Date(),
           }
         }
       },

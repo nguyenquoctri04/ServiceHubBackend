@@ -39,10 +39,13 @@ export class AuthService {
     const newIdentity = await this.prisma.identity.create({
       data: {
         email: dto.email,
+        phone: dto.phoneNumber || '',
         passwordHash,
         roleId: role.id,
         status: 'ACTIVE',
         isEkycVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     });
 
@@ -73,15 +76,8 @@ export class AuthService {
       throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
     }
 
-    // 3. Record Authentication History
-    await this.prisma.authenticationHistory.create({
-      data: {
-        identityId: identity.id,
-        action: 'LOGIN',
-        status: 'SUCCESS',
-        ipAddress: dto.ipAddress || 'Unknown',
-      },
-    });
+    // 3. Record Authentication History (Note: AuthenticationHistory model removed from schema)
+    this.logger.log(`User ${identity.id} logged in successfully from IP ${dto.ipAddress || 'Unknown'}`);
 
     return {
       user: {

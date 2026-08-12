@@ -16,7 +16,7 @@ export class IdentitiesService {
       include: {
         role: {
           include: {
-            rolePermissions: {
+            permissions: {
               include: { permission: true }
             }
           }
@@ -42,7 +42,7 @@ export class IdentitiesService {
     const updated = await this.prisma.identity.update({
       where: { id },
       data: {
-        status: dto.status,
+        status: dto.status as any,
       },
     });
 

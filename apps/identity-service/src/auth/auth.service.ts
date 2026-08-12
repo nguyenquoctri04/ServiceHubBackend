@@ -1,3 +1,4 @@
+import { IdentityStatus } from '@prisma/client-identity';
 import { Injectable, Logger } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
@@ -97,4 +98,18 @@ export class AuthService {
     };
   }
 
+  async checkUserActive(userId: string) {
+    const user = await this.prisma.identity.findUnique({
+      where: {id: userId},
+      select: {
+        status: true
+      }
+    });
+
+    if (user && user.status == IdentityStatus.ACTIVE) {
+      return true;
+    }
+
+    return false;
+  }
 }

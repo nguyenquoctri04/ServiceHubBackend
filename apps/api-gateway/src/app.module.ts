@@ -4,17 +4,13 @@ import { ClientsModule, Transport, ClientsModuleAsyncOptions } from '@nestjs/mic
 
 import { parseRedisUrl } from '@app/common';
 import { AuthModule } from './auth/auth.module';
-import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { ProxyModule } from './proxy/proxy.module';
 import { ProviderModule } from './provider/provider.module';
 
 
 const microservices = [
   'IDENTITY_SERVICE',
-  'PROVIDER_SERVICE',
   'CATALOG_SERVICE',
-  'CUSTOMER_SERVICE',
-  'PROPERTY_SERVICE',
   'CONTRACT_SERVICE',
   'SIGNATURE_SERVICE',
   'BILLING_SERVICE',
@@ -42,8 +38,11 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
     ClientsModule.registerAsync(clientProviders),
     ProxyModule,
     AuthModule,
+<<<<<<< HEAD
     DiagnosticsModule,
     ProviderModule,
+=======
+>>>>>>> f211815dc34c3cccc8dd527f52bf6271bd4b247d
   ],
   controllers: [],
   providers: [],

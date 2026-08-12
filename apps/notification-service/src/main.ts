@@ -8,7 +8,7 @@ import { NotificationServiceModule } from './notification-service.module';
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(NotificationServiceModule, {
     transport: Transport.REDIS,
-    options: parseRedisUrl(process.env.REDIS_URL),
+    options: parseRedisUrl(process.env.REDIS_BROKER_URL),
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

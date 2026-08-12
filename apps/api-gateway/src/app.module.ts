@@ -5,6 +5,7 @@ import { ClientsModule, Transport, ClientsModuleAsyncOptions } from '@nestjs/mic
 import { parseRedisUrl } from '@app/common';
 import { AuthModule } from './auth/auth.module';
 import { ProxyModule } from './proxy/proxy.module';
+import { ProviderModule } from './provider/provider.module';
 import { CustomerModule } from './customer/customer.module';
 
 
@@ -23,7 +24,7 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
   imports: [ConfigModule],
   useFactory: (configService: ConfigService) => ({
     transport: Transport.REDIS,
-    options: parseRedisUrl(configService.get<string>('REDIS_URL')),
+    options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
   }),
   inject: [ConfigService],
 }));
@@ -38,6 +39,7 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
     ClientsModule.registerAsync(clientProviders),
     ProxyModule,
     AuthModule,
+    ProviderModule,
     CustomerModule
   ],
   controllers: [],

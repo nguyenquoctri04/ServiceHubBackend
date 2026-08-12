@@ -9,7 +9,8 @@ export class RedisService implements OnModuleDestroy {
   private client: Redis;
 
   constructor(private readonly configService: ConfigService) {
-    const redisUrl = this.configService.get<string>('REDIS_URL');
+    // Sử dụng REDIS_CACHE_URL (Upstash) chuyên dụng cho việc lưu trữ cache
+    const redisUrl = this.configService.get<string>('REDIS_CACHE_URL');
     const options = parseRedisUrl(redisUrl);
     this.client = new Redis(options);
 

@@ -8,7 +8,7 @@ import { ContractServiceModule } from './contract-service.module';
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(ContractServiceModule, {
     transport: Transport.REDIS,
-    options: parseRedisUrl(process.env.REDIS_URL),
+    options: parseRedisUrl(process.env.REDIS_BROKER_URL),
   });
 
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { ProvidersService } from './providers.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
+import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 
 @Controller()
 export class ProvidersController {
@@ -40,5 +41,25 @@ export class ProvidersController {
       throw new RpcException({ status: 404, message: 'Provider not found' });
     }
     return provider;
+  }
+
+  /**
+   * Thêm giấy tờ pháp lý.
+   */
+  @MessagePattern({ cmd: 'providers.addLegalDocument' })
+  async addLegalDocument(
+    @Payload() payload: { identityId: string; dto: CreateLegalDocumentDto },
+  ) {
+    return this.providersService.addLegalDocument(payload.identityId, payload.dto);
+  }
+
+  /**
+   * Xóa giấy tờ pháp lý.
+   */
+  @MessagePattern({ cmd: 'providers.removeLegalDocument' })
+  async removeLegalDocument(
+    @Payload() payload: { identityId: string; documentId: string },
+  ) {
+    return this.providersService.removeLegalDocument(payload.identityId, payload.documentId);
   }
 }

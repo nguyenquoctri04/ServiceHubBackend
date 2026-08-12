@@ -7,6 +7,7 @@ import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
 import { RedisService } from '@app/common';
+import { AuthenticatedUser, JwtPayload } from '@app/common/types/authenticated-user.type';
 
 @Injectable()
 export class AuthService {
@@ -49,7 +50,7 @@ export class AuthService {
   }
 
   async refreshToken(refreshToken: string) {
-    let payload: any;
+    let payload: JwtPayload;
     try {
       payload = this.jwtService.verify(refreshToken);
     } catch (e) {
@@ -74,7 +75,7 @@ export class AuthService {
     }
   }
 
-  private async generateTokens(user: any) {
+  private async generateTokens(user: AuthenticatedUser) {
     const payload = { sub: user.id, role: user.role, email: user.email };
     
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });

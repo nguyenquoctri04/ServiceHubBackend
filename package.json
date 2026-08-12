@@ -27,7 +27,14 @@
     "prisma:reset:notification": "prisma migrate reset --schema=apps/notification-service/prisma/schema.prisma --force",
     "prisma:reset:audit": "prisma migrate reset --schema=apps/audit-service/prisma/schema.prisma --force",
     "prisma:pull": "prisma db pull --schema=apps/identity-service/prisma/schema.prisma && prisma db pull --schema=apps/catalog-service/prisma/schema.prisma && prisma db pull --schema=apps/contract-service/prisma/schema.prisma && prisma db pull --schema=apps/signature-service/prisma/schema.prisma && prisma db pull --schema=apps/billing-service/prisma/schema.prisma && prisma db pull --schema=apps/notification-service/prisma/schema.prisma && prisma db pull --schema=apps/audit-service/prisma/schema.prisma",
-    "prisma:push": "prisma db push --schema=apps/identity-service/prisma/schema.prisma && prisma db push --schema=apps/catalog-service/prisma/schema.prisma && prisma db push --schema=apps/contract-service/prisma/schema.prisma && prisma db push --schema=apps/signature-service/prisma/schema.prisma && prisma db push --schema=apps/billing-service/prisma/schema.prisma && prisma db push --schema=apps/notification-service/prisma/schema.prisma && prisma db push --schema=apps/audit-service/prisma/schema.prisma"
+    "prisma:push": "prisma db push --schema=apps/identity-service/prisma/schema.prisma && prisma db push --schema=apps/catalog-service/prisma/schema.prisma && prisma db push --schema=apps/contract-service/prisma/schema.prisma && prisma db push --schema=apps/signature-service/prisma/schema.prisma && prisma db push --schema=apps/billing-service/prisma/schema.prisma && prisma db push --schema=apps/notification-service/prisma/schema.prisma && prisma db push --schema=apps/audit-service/prisma/schema.prisma",
+    
+    "seed:identity": "npx tsx apps/identity-service/prisma/seed.ts",
+    "seed:catalog": "npx tsx apps/catalog-service/prisma/seed.ts",
+    "seed:contract": "npx tsx apps/contract-service/prisma/seed.ts",
+    "seed:billing": "npx tsx apps/billing-service/prisma/seed.ts",
+    "seed:notification": "npx tsx apps/notification-service/prisma/seed.ts",
+    "seed": "npm run seed:identity && npm run seed:catalog && npm run seed:contract && npm run seed:billing && npm run seed:notification"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
@@ -57,11 +64,11 @@
     "@nestjs/testing": "^10.3.0",
     "@swc/cli": "^0.3.9",
     "@swc/core": "^1.4.2",
+    "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.11.16",
-    "@types/bcrypt": "^5.0.2",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.2.1",
     "concurrently": "^8.2.2",
@@ -73,6 +80,7 @@
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.3.3"
   }
 }

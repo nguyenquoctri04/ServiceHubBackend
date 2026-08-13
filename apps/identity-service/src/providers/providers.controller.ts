@@ -35,12 +35,7 @@ export class ProvidersController {
    */
   @MessagePattern({ cmd: 'get.provider.by.id' })
   async getProviderById(@Payload() id: string) {
-    const provider = await this.providersService.getProviderById(id);
-    if (!provider) {
-      // ProvidersService đã throw RpcException trước, nhánh này là safeguard
-      throw new RpcException({ status: 404, message: 'Provider not found' });
-    }
-    return provider;
+    return this.providersService.getProviderById(id);
   }
 
   /**
@@ -53,13 +48,5 @@ export class ProvidersController {
     return this.providersService.addLegalDocument(payload.identityId, payload.dto);
   }
 
-  /**
-   * Xóa giấy tờ pháp lý.
-   */
-  @MessagePattern({ cmd: 'providers.removeLegalDocument' })
-  async removeLegalDocument(
-    @Payload() payload: { identityId: string; documentId: string },
-  ) {
-    return this.providersService.removeLegalDocument(payload.identityId, payload.documentId);
-  }
+
 }

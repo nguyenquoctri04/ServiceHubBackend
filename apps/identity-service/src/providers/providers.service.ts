@@ -120,6 +120,7 @@ export class ProvidersService {
         providerName: true,
         providerType: true,
         status: true,
+        address: true,
       },
     });
 
@@ -136,6 +137,7 @@ export class ProvidersService {
       providerName: provider.providerName,
       providerType: provider.providerType as ProviderRpcSummary['providerType'],
       status: provider.status as ProviderRpcSummary['status'],
+      address: provider.address,
     };
   }
 
@@ -171,41 +173,5 @@ export class ProvidersService {
     });
   }
 
-  /**
-   * Xóa một giấy tờ pháp lý của Provider.
-   */
-  async removeLegalDocument(identityId: string, documentId: string) {
-    this.logger.log(`Removing legal document ${documentId} for identityId: ${identityId}`);
 
-    const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
-    });
-
-    if (!provider) {
-      throw new RpcException({
-        status: 404,
-        message: 'Provider profile not found',
-      });
-    }
-
-    const document = await this.prisma.providerLegalDocument.findFirst({
-      where: {
-        id: documentId,
-        providerId: provider.id,
-      },
-    });
-
-    if (!document) {
-      throw new RpcException({
-        status: 404,
-        message: 'Legal document not found or you do not have permission',
-      });
-    }
-
-    await this.prisma.providerLegalDocument.delete({
-      where: { id: documentId },
-    });
-
-    return { success: true, message: 'Legal document removed' };
-  }
 }

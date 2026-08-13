@@ -1,6 +1,6 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom, catchError, throwError } from 'rxjs';
+import { firstValueFrom, catchError, throwError, timeout, retry } from 'rxjs';
 
 @Injectable()
 export class GatewayProxyService {
@@ -17,6 +17,8 @@ export class GatewayProxyService {
 
     return firstValueFrom(
       client.send(pattern, payload).pipe(
+        timeout(3000),
+        retry({ count: 3, delay: 1000 }),
         catchError((err) => {
           console.error(`RPC Exception [Pattern: ${JSON.stringify(pattern)}]:`, err);
           const statusCode =

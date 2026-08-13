@@ -6,7 +6,6 @@ import { parseRedisUrl } from '@app/common';
 import { AuthModule } from './auth/auth.module';
 import { ProxyModule } from './proxy/proxy.module';
 import { ProviderModule } from './provider/provider.module';
-import { CustomerModule } from './customer/customer.module';
 
 
 const microservices = [
@@ -40,11 +39,10 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map((name) => (
     ProxyModule,
     AuthModule,
     ProviderModule,
-    CustomerModule
   ],
   controllers: [],
   providers: [],
   exports: [ClientsModule, ProxyModule],
 })
-export class AppModule {}
+export class AppModule { }
 

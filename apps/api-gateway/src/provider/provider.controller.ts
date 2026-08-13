@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -20,6 +21,7 @@ import { GatewayProxyService } from '../proxy/gateway-proxy.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { ServiceQueryDto } from './dto/service-query.dto';
 
 @Controller('api/provider')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -76,32 +78,35 @@ export class ProviderController {
     );
   }
 
-  /**
-   * Xóa một Giấy tờ pháp lý.
-   */
-  @Delete('legal-documents/:id')
-  removeLegalDocument(
-    @CurrentUser() user: { id: string; email: string; role: string },
-    @Param('id') documentId: string,
-  ) {
-    return this.proxy.send(
-      this.identityClient,
-      { cmd: 'providers.removeLegalDocument' },
-      { identityId: user.id, documentId },
-    );
-  }
-
   // --- CATALOG MODULE ---
 
   /**
    * Lấy danh sách dịch vụ của Provider
    */
   @Get('catalog/services')
-  getServices(@CurrentUser() user: { id: string; email: string; role: string }) {
+  getServices(
+    @CurrentUser() user: { id: string; email: string; role: string },
+    @Query() query: ServiceQueryDto,
+  ) {
     return this.proxy.send(
       this.catalogClient,
       { cmd: 'services.find' },
-      { providerId: user.id },
+      { providerId: user.id, ...query },
+    );
+  }
+
+  /**
+   * Xem chi tiết một dịch vụ
+   */
+  @Get('catalog/services/:id')
+  getServiceDetail(
+    @CurrentUser() user: { id: string; email: string; role: string },
+    @Param('id') serviceId: string,
+  ) {
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: 'services.findOne' },
+      { providerId: user.id, serviceId },
     );
   }
 

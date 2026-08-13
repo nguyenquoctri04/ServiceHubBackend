@@ -15,14 +15,18 @@ export class ServicesController {
   }
 
   @MessagePattern({ cmd: 'services.find' })
-  async findServices() {
-    // Pagination logic can be implemented here later
-    return [];
+  async findServices(@Payload() payload: any) {
+    return this.servicesService.findServices(payload.providerId, payload);
   }
 
-  @MessagePattern({ cmd: 'services.getById' })
+  @MessagePattern({ cmd: 'services.findOne' })
+  async getServiceDetail(@Payload() payload: { providerId: string; serviceId: string }) {
+    return this.servicesService.findOneService(payload.providerId, payload.serviceId);
+  }
+
+  @MessagePattern({ cmd: 'get.service.by.id' })
   async getServiceById(@Payload() id: string) {
     // RPC for cross-service validation
-    return null;
+    return this.servicesService.getServiceById(id);
   }
 }

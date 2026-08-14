@@ -29,4 +29,9 @@ export class ServicesController {
     // RPC for cross-service validation
     return this.servicesService.getServiceById(id);
   }
+
+  @MessagePattern({ cmd: 'get.service.price.by.id' })
+  async getServicePriceById(@Payload() payload: { servicePriceId: string }) {
+    return this.servicesService.getServicePriceById(payload.servicePriceId);
+  }
 }

@@ -5,6 +5,7 @@ import { CategoriesModule } from './categories/categories.module';
 import { UnitsModule } from './units/units.module';
 import { ServicesModule } from './services/services.module';
 import { LocationModule } from './location/location.module';
+import { RoomsController } from './rooms.controller';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { LocationModule } from './location/location.module';
     ServicesModule,
     LocationModule
   ],
-  controllers: [],
+  controllers: [RoomsController],
   providers: [],
 })
 export class CatalogServiceModule {}

@@ -242,6 +242,11 @@ export class ServicesService {
         images: {
           orderBy: { displayOrder: 'asc' },
         },
+        requirements: {
+          include: {
+            additionalService: true
+          }
+        },
       },
     });
 
@@ -257,6 +262,14 @@ export class ServicesService {
       where: { id },
     });
     return service;
+  }
+
+  async getServicePriceById(id: string) {
+    const price = await this.prisma.servicePrice.findUnique({
+      where: { id },
+      include: { service: true }
+    });
+    return price;
   }
 
   // Find nearest ACTIVE Property across entire system using Haversine

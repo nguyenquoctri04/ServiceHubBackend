@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
-import { firstValueFrom } from "rxjs";
+import { SecureRpcService } from "@app/common";
 
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { PrismaService } from "../prisma/prisma.service";
@@ -22,6 +22,8 @@ export class CustomerCategoriesService {
 
         @Inject("IDENTITY_SERVICE")
         private readonly identityClient: ClientProxy,
+
+        private readonly secureRpc: SecureRpcService,
     ) {}
 
     async getHomeCategories() {
@@ -120,22 +122,15 @@ export class CustomerCategoriesService {
             (item) => item.servicePriceId,
         );
 
-        const popular = await firstValueFrom(
-            this.contractClient.send<
-                PopularServicePrice[],
-                {
-                    servicePriceIds: string[];
-                    limit: number;
-                }
-            >(
-                {
-                    cmd: CustomerPatterns.GET_POPULAR_SERVICES,
-                },
-                {
-                    servicePriceIds,
-                    limit: 20,
-                },
-            ),
+        const popular = await this.secureRpc.send<PopularServicePrice[]>(
+            this.contractClient,
+            {
+                cmd: CustomerPatterns.GET_POPULAR_SERVICES,
+            },
+            {
+                servicePriceIds,
+                limit: 20,
+            },
         );
 
         if (!popular || popular.length === 0) {
@@ -305,20 +300,14 @@ export class CustomerCategoriesService {
 
         const providers =
             providerIds.length > 0
-                ? await firstValueFrom(
-                      this.identityClient.send<
-                          Provider[],
-                          {
-                              providerIds: string[];
-                          }
-                      >(
-                          {
-                              cmd: CustomerPatterns.GET_PROVIDER_IN_POPULAR,
-                          },
-                          {
-                              providerIds,
-                          },
-                      ),
+                ? await this.secureRpc.send<Provider[]>(
+                      this.identityClient,
+                      {
+                          cmd: CustomerPatterns.GET_PROVIDER_IN_POPULAR,
+                      },
+                      {
+                          providerIds,
+                      },
                   )
                 : [];
 

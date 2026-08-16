@@ -1,0 +1,265 @@
+services:
+  redis:
+    image: redis:8-alpine
+    container_name: servicehub-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_BROKER_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - servicehub-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_BROKER_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: api-gateway
+    container_name: servicehub-api-gateway
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - 3000:3000   # DUY NHẤT service expose ra ngoài
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/api-gateway/src
+          target: /usr/src/app/apps/api-gateway/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  identity-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: identity-service
+    container_name: servicehub-identity-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/identity-service/src
+          target: /usr/src/app/apps/identity-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+    # KHÔNG có "ports:" — chỉ gọi được từ trong servicehub-net
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: catalog-service
+    container_name: servicehub-catalog-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/catalog-service/src
+          target: /usr/src/app/apps/catalog-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  contract-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: contract-service
+    container_name: servicehub-contract-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/contract-service/src
+          target: /usr/src/app/apps/contract-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  signature-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: signature-service
+    container_name: servicehub-signature-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/signature-service/src
+          target: /usr/src/app/apps/signature-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  billing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: billing-service
+    container_name: servicehub-billing-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/billing-service/src
+          target: /usr/src/app/apps/billing-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: notification-service
+    container_name: servicehub-notification-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/notification-service/src
+          target: /usr/src/app/apps/notification-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+  audit-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_NAME: audit-service
+    container_name: servicehub-audit-service
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - servicehub-net
+    develop:
+      watch:
+        - action: sync+restart
+          path: ./apps/audit-service/src
+          target: /usr/src/app/apps/audit-service/src
+
+        - action: sync+restart
+          path: ./libs/common/src
+          target: /app/libs/common/src
+
+        - action: rebuild
+          path: package.json
+
+        - action: rebuild
+          path: package-lock.json
+
+volumes:
+  redis-data:
+
+networks:
+  servicehub-net:
+    driver: bridge

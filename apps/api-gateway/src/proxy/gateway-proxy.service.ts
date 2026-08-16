@@ -1,9 +1,11 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { firstValueFrom, catchError, throwError, timeout, retry } from 'rxjs';
+import { SecureRpcService } from '@app/common';
 
 @Injectable()
 export class GatewayProxyService {
+  constructor(private readonly secureRpc: SecureRpcService) {}
+
   async send<T = any>(
     client: ClientProxy,
     pattern: string | object,
@@ -15,19 +17,15 @@ export class GatewayProxyService {
         ? { ...data, currentUser }
         : { data, currentUser };
 
-    return firstValueFrom(
-      client.send(pattern, payload).pipe(
-        timeout(3000),
-        retry({ count: 3, delay: 1000 }),
-        catchError((err) => {
-          console.error(`RPC Exception [Pattern: ${JSON.stringify(pattern)}]:`, err);
-          const statusCode =
-            err?.status || err?.statusCode || HttpStatus.INTERNAL_SERVER_ERROR;
-          const message =
-            err?.message || err?.response?.message || (typeof err === 'string' ? err : 'Microservice RPC Error');
-          return throwError(() => new HttpException(message, statusCode));
-        }),
-      ),
-    );
+    try {
+      return await this.secureRpc.send<T>(client, pattern, payload);
+    } catch (err: any) {
+      console.error(`RPC Exception [Pattern: ${JSON.stringify(pattern)}]:`, err);
+      const statusCode =
+        err?.status || err?.statusCode || HttpStatus.INTERNAL_SERVER_ERROR;
+      const message =
+        err?.message || err?.response?.message || (typeof err === 'string' ? err : 'Microservice RPC Error');
+      throw new HttpException(message, statusCode);
+    }
   }
 }

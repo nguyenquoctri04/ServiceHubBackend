@@ -2,8 +2,8 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ContractStatus, Contract } from '@prisma/client-contract';
-import { lastValueFrom, timeout, retry } from 'rxjs';
-import { ProviderBillingPatterns } from '@app/common';
+import { lastValueFrom } from 'rxjs';
+import { ProviderBillingPatterns, SecureRpcService } from '@app/common';
 /**
  * Payload interface for creating a contract.
  */
@@ -40,6 +40,7 @@ export class ProviderContractsService {
     private readonly prisma: PrismaService,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   /**
@@ -47,9 +48,10 @@ export class ProviderContractsService {
    */
   private async checkCustomer(customerId: string): Promise<any> {
     try {
-      const response = await lastValueFrom(
-        this.identityClient.send({ cmd: 'get.customer.by.id' }, { customerId })
-        .pipe(timeout(5000), retry({ count: 3, delay: 500 }))
+      const response = await this.secureRpc.send<any>(
+        this.identityClient,
+        { cmd: 'get.customer.by.id' },
+        { customerId }
       );
       if (!response) {
         throw new RpcException({ statusCode: 404, message: 'Customer not found' });
@@ -79,9 +81,10 @@ export class ProviderContractsService {
 
     if (dto.roomId) {
       try {
-        const rooms = await lastValueFrom(
-          this.catalogClient.send({ cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, [dto.roomId])
-          .pipe(timeout(3000), retry({ count: 1 }))
+        const rooms = await this.secureRpc.send<any>(
+          this.catalogClient,
+          { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS },
+          [dto.roomId]
         );
         if (!rooms || rooms.length === 0 || rooms[0].id !== dto.roomId) {
           throw new RpcException({ statusCode: 404, message: 'Room not found' });
@@ -94,9 +97,10 @@ export class ProviderContractsService {
     if (dto.services && dto.services.length > 0) {
       for (const s of dto.services) {
         try {
-          const servicePrice = await lastValueFrom(
-            this.catalogClient.send({ cmd: 'get.service.price.by.id' }, { servicePriceId: s.servicePriceId })
-            .pipe(timeout(3000), retry({ count: 1 }))
+          const servicePrice = await this.secureRpc.send<any>(
+            this.catalogClient,
+            { cmd: 'get.service.price.by.id' },
+            { servicePriceId: s.servicePriceId }
           );
           if (!servicePrice) throw new Error();
         } catch (error) {
@@ -238,18 +242,20 @@ export class ProviderContractsService {
    */
   private async enrichContractData(contract: any): Promise<any> {
     try {
-      const customer = await lastValueFrom(
-        this.identityClient.send({ cmd: 'get.customer.by.id' }, { customerId: contract.customerId })
-        .pipe(timeout(3000), retry({ count: 1 }))
+      const customer = await this.secureRpc.send<any>(
+        this.identityClient,
+        { cmd: 'get.customer.by.id' },
+        { customerId: contract.customerId }
       ).catch(() => null);
 
       const customerName = customer?.email || customer?.phone || contract.customerId;
       const customerPhone = customer?.phone || '';
 
       const enrichedServices = await Promise.all((contract.services || []).map(async (s: any) => {
-        const priceDetail = await lastValueFrom(
-          this.catalogClient.send({ cmd: 'get.service.price.by.id' }, { servicePriceId: s.servicePriceId })
-          .pipe(timeout(3000), retry({ count: 1 }))
+        const priceDetail = await this.secureRpc.send<any>(
+          this.catalogClient,
+          { cmd: 'get.service.price.by.id' },
+          { servicePriceId: s.servicePriceId }
         ).catch(() => null);
 
         return {

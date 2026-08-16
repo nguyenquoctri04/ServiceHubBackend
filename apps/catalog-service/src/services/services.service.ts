@@ -4,8 +4,9 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { CreateServiceDto } from './dto/create-service.dto';
-import { firstValueFrom, timeout, retry, catchError, throwError } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { Prisma } from '@prisma/client-catalog';
+import { SecureRpcService } from '@app/common';
 
 @Injectable()
 export class ServicesService {
@@ -16,6 +17,7 @@ export class ServicesService {
     private readonly locationService: LocationService,
     private readonly configService: ConfigService,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   async createService(providerId: string, dto: CreateServiceDto) {
@@ -49,17 +51,17 @@ export class ServicesService {
   // --- Private Helper Methods for Clean Code ---
 
   private async validateAndGetProviderInfo(providerId: string) {
-    const providerInfo = await firstValueFrom(
-      this.identityClient.send({ cmd: 'get.provider.by.id' }, providerId).pipe(
-        timeout(3000),
-        retry({ count: 3, delay: 1000 }),
-        catchError((err) => {
-          this.logger.error(`Failed to fetch provider info: ${err.message}`);
-          return throwError(() => new RpcException({ status: 400, message: 'Provider not found or Identity Service unavailable' }));
-        })
-      )
-    );
-    return providerInfo;
+    try {
+      const providerInfo = await this.secureRpc.send<any>(
+        this.identityClient,
+        { cmd: 'get.provider.by.id' },
+        providerId
+      );
+      return providerInfo;
+    } catch (err: any) {
+      this.logger.error(`Failed to fetch provider info: ${err.message}`);
+      throw new RpcException({ status: 400, message: 'Provider not found or Identity Service unavailable' });
+    }
   }
 
   private async validateServiceLocation(address: string, confirmWarning: boolean) {

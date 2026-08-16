@@ -3,8 +3,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
-import { firstValueFrom, throwError } from 'rxjs';
-import { timeout, catchError } from 'rxjs/operators';
+import { Prisma } from '@prisma/client-billing';
+import { SecureRpcService } from '@app/common';
 import { Prisma } from '@prisma/client-billing';
 
 @Injectable()
@@ -14,6 +14,7 @@ export class MetersService {
     private readonly ocrService: OcrService,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   async findMeters(payload: { providerId: string; page?: string; limit?: string }) {
@@ -40,21 +41,29 @@ export class MetersService {
     let contract = null;
 
     if (data.roomId) {
-      const roomsMap = await firstValueFrom(
-        this.catalogClient.send({ cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, [data.roomId]).pipe(
-          timeout(5000), catchError(err => throwError(() => new RpcException('Catalog Service failed')))
-        )
-      );
-      room = roomsMap[data.roomId];
-      if (!room) throw new RpcException(new NotFoundException('Room not found'));
+      try {
+        const roomsMap = await this.secureRpc.send<any>(
+          this.catalogClient,
+          { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS },
+          [data.roomId]
+        );
+        room = roomsMap[data.roomId];
+        if (!room) throw new RpcException(new NotFoundException('Room not found'));
+      } catch (err) {
+        throw new RpcException('Catalog Service failed');
+      }
     } else if (data.contractId) {
-      const contractsMap = await firstValueFrom(
-        this.contractClient.send({ cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, [data.contractId]).pipe(
-          timeout(5000), catchError(err => throwError(() => new RpcException('Contract Service failed')))
-        )
-      );
-      contract = contractsMap[data.contractId];
-      if (!contract) throw new RpcException(new NotFoundException('Contract not found'));
+      try {
+        const contractsMap = await this.secureRpc.send<any>(
+          this.contractClient,
+          { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS },
+          [data.contractId]
+        );
+        contract = contractsMap[data.contractId];
+        if (!contract) throw new RpcException(new NotFoundException('Contract not found'));
+      } catch (err) {
+        throw new RpcException('Contract Service failed');
+      }
     }
 
     const meter = await this.prisma.meter.findUnique({ where: { id: data.meterId } });
@@ -96,8 +105,8 @@ export class MetersService {
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
     const [roomsMap, contractsMap] = await Promise.all([
-      firstValueFrom(this.catalogClient.send({ cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds)),
-      firstValueFrom(this.contractClient.send({ cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds))
+      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
+      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
     ]);
 
     const results = rows.map(row => {
@@ -121,8 +130,8 @@ export class MetersService {
 
     // 1. Batch fetch external data
     const [roomsMap, contractsMap] = await Promise.all([
-      firstValueFrom(this.catalogClient.send({ cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds)),
-      firstValueFrom(this.contractClient.send({ cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds))
+      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
+      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
     ]);
 
     // 2. Fetch all meters internally

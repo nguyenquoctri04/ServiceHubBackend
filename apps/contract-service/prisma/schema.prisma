@@ -68,6 +68,7 @@ model Contract {
   contractNumber   String         @unique @map("contract_number")
 
   // Cross-service references
+  providerId       String         @map("provider_id") @db.Uuid
   roomId           String?        @map("room_id") @db.Uuid
   customerId       String         @map("customer_id") @db.Uuid
 
@@ -88,6 +89,7 @@ model Contract {
   billingPeriods   BillingPeriod[]
   violationCases   ViolationCase[]
 
+  @@index([providerId])
   @@index([customerId])
   @@index([roomId])
   @@index([status])

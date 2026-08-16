@@ -66,6 +66,7 @@ model Meter {
   id        String       @id @default(uuid()) @db.Uuid
 
   // Cross-service reference -> service-catalog-service
+  providerId String       @map("provider_id") @db.Uuid
   serviceId String       @map("service") @db.Uuid
 
   name      String
@@ -77,6 +78,7 @@ model Meter {
 
   readings MeterReading[]
 
+  @@index([providerId])
   @@index([serviceId])
   @@map("meter")
 }

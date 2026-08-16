@@ -3,9 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
-import { Prisma } from '@prisma/client-billing';
+import { Prisma, Meter } from '@prisma/client-billing';
 import { SecureRpcService } from '@app/common';
-import { Prisma } from '@prisma/client-billing';
+import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
+
+export interface MeterContext {
+  meter: Meter;
+  room: Record<string, unknown> | null;
+  contract: Record<string, unknown> | null;
+}
 
 @Injectable()
 export class MetersService {
@@ -18,14 +24,14 @@ export class MetersService {
   ) {}
 
   async findMeters(payload: { providerId: string; page?: string; limit?: string }) {
-    // Basic implementation for finding meters
+    const { providerId } = payload;
     const page = payload.page ? Number(payload.page) : 1;
     const limit = payload.limit ? Number(payload.limit) : 10;
     const skip = (page - 1) * limit;
 
     const [total, data] = await Promise.all([
-      this.prisma.meter.count(),
-      this.prisma.meter.findMany({ skip, take: limit })
+      this.prisma.meter.count({ where: { providerId } }),
+      this.prisma.meter.findMany({ where: { providerId }, skip, take: limit })
     ]);
     return { data, total, page, limit };
   }
@@ -72,7 +78,7 @@ export class MetersService {
     return { room, contract, meter };
   }
 
-  async createMeterReadingCore(data: any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT', context: any) {
+  async createMeterReadingCore(providerId: string, data: ExcelRowDto | any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT', context: MeterContext) {
     const { meter, room, contract } = context;
     if (!meter) throw new RpcException(new NotFoundException('Meter missing in context'));
 
@@ -95,12 +101,12 @@ export class MetersService {
     return reading;
   }
 
-  async createMeterReading(data: any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT') {
+  async createMeterReading(providerId: string, data: ExcelRowDto | any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT') {
     const context = await this.fetchValidationContext(data);
-    return this.createMeterReadingCore(data, recordedBy, source, context);
+    return this.createMeterReadingCore(providerId, data, recordedBy, source, context);
   }
 
-  async previewImport(rows: any[]) {
+  async previewImport(rows: ExcelRowDto[]) {
     const roomIds = [...new Set(rows.map(r => r.roomId).filter(Boolean))];
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
@@ -124,7 +130,7 @@ export class MetersService {
     return { preview: results };
   }
 
-  async confirmImport(rows: any[], recordedBy: string) {
+  async confirmImport(providerId: string, rows: ExcelRowDto[], recordedBy: string) {
     const roomIds = [...new Set(rows.map(r => r.roomId).filter(Boolean))];
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
@@ -151,7 +157,7 @@ export class MetersService {
         contract: row.contractId ? contractsMap[row.contractId] : null
       };
 
-      return this.createMeterReadingCore(row, recordedBy, 'EXCEL_IMPORT', context);
+      return this.createMeterReadingCore(providerId, row, recordedBy, 'EXCEL_IMPORT', context);
     });
 
     const results = await Promise.allSettled(promises);
@@ -164,11 +170,12 @@ export class MetersService {
     return { success: successCount, failed };
   }
 
-  async handleServiceCreated(payload: any) {
+  async handleServiceCreated(payload: ServiceCreatedPayload) {
     // If service calculation_method is METERED, create a Meter for it
     if (payload.calculation_method === 'METERED') {
       await this.prisma.meter.create({
         data: {
+          providerId: payload.providerId || '00000000-0000-0000-0000-000000000000', // Provide fallback or make sure payload has providerId
           name: `${payload.name} Meter`,
           serviceId: payload.id, // we might need serviceId in Meter if it's there. 
           unit: 'N/A', // Default unit, as the payload might not have it

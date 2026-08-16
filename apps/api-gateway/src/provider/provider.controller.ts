@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Inject,
   Param,
@@ -33,6 +32,13 @@ import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-read
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
+import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
+
+export interface CurrentUserPayload {
+  id: string;
+  email: string;
+  role: string;
+}
 
 @Controller('api/provider')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -47,12 +53,12 @@ export class ProviderController {
   ) {}
 
   /**
-   * Lấy hồ sơ Provider đầy đủ kèm giấy tờ pháp lý.
-   * Dùng send() (đồng bộ) – cần chờ response từ Identity Service.
-   * Gateway chỉ proxy, không chứa business logic.
+   * Get full Provider profile including legal documents.
+   * Uses send() (synchronous) - needs to wait for response from Identity Service.
+   * Gateway only acts as a proxy, containing no business logic.
    */
   @Get('profile')
-  getProfile(@CurrentUser() user: { id: string; email: string; role: string }) {
+  getProfile(@CurrentUser() user: CurrentUserPayload) {
     return this.proxy.send(
       this.identityClient,
       { cmd: 'providers.getProfile' },
@@ -61,12 +67,12 @@ export class ProviderController {
   }
 
   /**
-   * Cập nhật hồ sơ Provider.
-   * DTO được validate tại Gateway trước khi proxy sang Identity Service.
+   * Update Provider profile.
+   * DTO is validated at Gateway before proxying to Identity Service.
    */
   @Put('profile')
   updateProfile(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: UpdateProviderProfileDto,
   ) {
     return this.proxy.send(
@@ -77,11 +83,11 @@ export class ProviderController {
   }
 
   /**
-   * Tải lên/Thêm mới Giấy tờ pháp lý.
+   * Upload/Add new Legal Document.
    */
   @Post('legal-documents')
   addLegalDocument(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateLegalDocumentDto,
   ) {
     return this.proxy.send(
@@ -94,11 +100,11 @@ export class ProviderController {
   // --- CATALOG MODULE ---
 
   /**
-   * Lấy danh sách dịch vụ của Provider
+   * Get list of services for Provider
    */
   @Get('catalog/services')
   getServices(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Query() query: ServiceQueryDto,
   ) {
     return this.proxy.send(
@@ -109,11 +115,11 @@ export class ProviderController {
   }
 
   /**
-   * Xem chi tiết một dịch vụ
+   * Get details of a specific service
    */
   @Get('catalog/services/:id')
   getServiceDetail(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Param('id') serviceId: string,
   ) {
     return this.proxy.send(
@@ -124,11 +130,11 @@ export class ProviderController {
   }
 
   /**
-   * Tạo mới dịch vụ kèm giá
+   * Create new service with pricing
    */
   @Post('catalog/services')
   createService(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateServiceDto,
   ) {
     return this.proxy.send(
@@ -141,71 +147,71 @@ export class ProviderController {
   // --- CONTRACT MODULE ---
 
   @Get('contract-templates')
-  getContractTemplates(@CurrentUser() user: { id: string; email: string; role: string }) {
+  getContractTemplates(@CurrentUser() user: CurrentUserPayload) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TEMPLATES_FIND }, { providerId: user.id });
   }
 
   @Get('contract-templates/:id')
-  getContractTemplateDetail(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') templateId: string) {
+  getContractTemplateDetail(@CurrentUser() user: CurrentUserPayload, @Param('id') templateId: string) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TEMPLATES_FIND_ONE }, { providerId: user.id, templateId });
   }
 
   @Get('contract-terms')
-  getContractTerms(@CurrentUser() user: { id: string; email: string; role: string }) {
+  getContractTerms(@CurrentUser() user: CurrentUserPayload) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMS_FIND }, { providerId: user.id });
   }
 
   @Get('contracts')
-  getContracts(@CurrentUser() user: { id: string; email: string; role: string }, @Query() query: ContractQueryDto) {
+  getContracts(@CurrentUser() user: CurrentUserPayload, @Query() query: ContractQueryDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId: user.id, ...query });
   }
 
   @Get('contracts/:id')
-  getContractById(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string) {
+  getContractById(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId: user.id, contractId });
   }
 
   @Post('contracts')
-  createContract(@CurrentUser() user: { id: string; email: string; role: string }, @Body() dto: CreateContractDto) {
+  createContract(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateContractDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CREATE }, { providerId: user.id, dto });
   }
 
   @Put('contracts/:id')
-  updateContract(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string, @Body() dto: UpdateContractDto) {
+  updateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: UpdateContractDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.UPDATE }, { providerId: user.id, contractId, dto });
   }
 
   @Post('contracts/:id/send')
-  sendContract(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string) {
+  sendContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SEND }, { providerId: user.id, contractId });
   }
 
   @Post('contracts/:id/revoke')
-  revokeContract(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
+  revokeContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.REVOKE }, { providerId: user.id, contractId, dto });
   }
 
   @Post('contracts/:id/cancel')
-  cancelContract(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
+  cancelContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId: user.id, contractId, dto });
   }
 
   @Post('contracts/:id/terminate')
-  terminateContract(@CurrentUser() user: { id: string; email: string; role: string }, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
+  terminateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMINATE }, { providerId: user.id, contractId, dto });
   }
 
   // --- BILLING MODULE ---
 
   @Get('billing/invoices')
-  getInvoices(@CurrentUser() user: { id: string; email: string; role: string }, @Query() query: InvoiceQueryDto) {
+  getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId: user.id, query });
   }
 
   @Post('billing/invoices/:id/pay')
   @UseGuards(IdempotencyGuard)
   payInvoice(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Param('id') invoiceId: string,
     @Body() dto: PayInvoiceDto,
     @Headers('idempotency-key') idempotencyKey: string
@@ -218,13 +224,13 @@ export class ProviderController {
   }
 
   @Get('billing/meters')
-  getMeters(@CurrentUser() user: { id: string; email: string; role: string }, @Query() query: any) {
+  getMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: MeterQueryDto) {
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_FIND }, { providerId: user.id, ...query });
   }
 
   @Post('billing/meters/readings')
   createManualReading(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateMeterReadingDto
   ) {
     return this.proxy.send(
@@ -236,7 +242,7 @@ export class ProviderController {
 
   @Post('billing/meters/ocr')
   processOcr(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: OcrMeterDto
   ) {
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_OCR }, { providerId: user.id, dto });
@@ -244,7 +250,7 @@ export class ProviderController {
 
   @Post('billing/meters/ocr-confirm')
   confirmOcr(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: OcrConfirmDto
   ) {
     return this.proxy.send(
@@ -256,8 +262,8 @@ export class ProviderController {
 
   @Post('billing/meters/import/preview')
   previewImport(
-    @CurrentUser() user: { id: string; email: string; role: string },
-    @Body() dto: { rows: any[] }
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: ExcelImportPreviewDto
   ) {
     return this.proxy.send(
       this.billingClient, 
@@ -268,7 +274,7 @@ export class ProviderController {
 
   @Post('billing/meters/import/confirm')
   confirmImport(
-    @CurrentUser() user: { id: string; email: string; role: string },
+    @CurrentUser() user: CurrentUserPayload,
     @Body() dto: ExcelImportConfirmDto
   ) {
     return this.proxy.send(

@@ -1,6 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
-import { ProviderContractsService } from './provider.contracts.service';
+import { ProviderContractsService, CreateContractPayload, UpdateContractPayload } from './provider.contracts.service';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 
@@ -9,12 +9,12 @@ export class ProviderContractsController {
   constructor(private readonly providerContractsService: ProviderContractsService) { }
 
   @MessagePattern({ cmd: ProviderContractPatterns.CREATE })
-  async createContract(@Payload() payload: { providerId: string; dto: any }) {
+  async createContract(@Payload() payload: { providerId: string; dto: CreateContractPayload }) {
     return this.providerContractsService.createContract(payload.providerId, payload.dto);
   }
 
   @MessagePattern({ cmd: ProviderContractPatterns.UPDATE })
-  async updateContract(@Payload() payload: { providerId: string; contractId: string; dto: any }) {
+  async updateContract(@Payload() payload: { providerId: string; contractId: string; dto: UpdateContractPayload }) {
     return this.providerContractsService.updateContract(payload.providerId, payload.contractId, payload.dto);
   }
 

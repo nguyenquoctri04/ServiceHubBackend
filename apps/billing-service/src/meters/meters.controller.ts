@@ -6,6 +6,7 @@ import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-read
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
+import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
 
 @Controller()
 export class MetersController {
@@ -18,7 +19,7 @@ export class MetersController {
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_READING_CREATE })
   async createManualReading(@Payload() payload: { providerId: string; recordedBy: string; dto: CreateMeterReadingDto }) {
-    return this.service.createMeterReading(payload.dto, payload.recordedBy, 'MANUAL');
+    return this.service.createMeterReading(payload.providerId, payload.dto, payload.recordedBy, 'MANUAL');
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_OCR })
@@ -28,21 +29,21 @@ export class MetersController {
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_OCR_CONFIRM })
   async confirmOcr(@Payload() payload: { providerId: string; recordedBy: string; dto: OcrConfirmDto }) {
-    return this.service.createMeterReading(payload.dto, payload.recordedBy, 'IMAGE');
+    return this.service.createMeterReading(payload.providerId, payload.dto, payload.recordedBy, 'IMAGE');
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW })
-  async previewImport(@Payload() payload: { providerId: string; rows: any[] }) {
+  async previewImport(@Payload() payload: { providerId: string; rows: ExcelRowDto[] }) {
     return this.service.previewImport(payload.rows);
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM })
   async confirmImport(@Payload() payload: { providerId: string; recordedBy: string; dto: ExcelImportConfirmDto }) {
-    return this.service.confirmImport(payload.dto.rows, payload.recordedBy);
+    return this.service.confirmImport(payload.providerId, payload.dto.rows, payload.recordedBy);
   }
 
   @EventPattern(ProviderBillingPatterns.EVENT_SERVICE_CREATED)
-  async handleServiceCreated(@Payload() payload: any) {
+  async handleServiceCreated(@Payload() payload: ServiceCreatedPayload) {
     return this.service.handleServiceCreated(payload);
   }
 }

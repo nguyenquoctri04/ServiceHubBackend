@@ -9,7 +9,7 @@ export class ProvidersController {
   constructor(private readonly providersService: ProvidersService) {}
 
   /**
-   * Lấy hồ sơ Provider đầy đủ kèm legalDocuments.
+   * Get full Provider profile including legalDocuments.
    * Caller: API Gateway (provider.controller.ts) → GET /api/provider/profile
    */
   @MessagePattern({ cmd: 'providers.getProfile' })
@@ -18,7 +18,7 @@ export class ProvidersController {
   }
 
   /**
-   * Cập nhật hồ sơ Provider.
+   * Update Provider profile.
    * Caller: API Gateway (provider.controller.ts) → PUT /api/provider/profile
    */
   @MessagePattern({ cmd: 'providers.updateProfile' })
@@ -29,9 +29,9 @@ export class ProvidersController {
   }
 
   /**
-   * RPC endpoint chuẩn cho cross-service validation.
+   * Standard RPC endpoint for cross-service validation.
    * Caller: Catalog Service (Phase 3), Contract Service (Phase 4)
-   * Pattern: 'get.provider.by.id' – theo project_documentation.md
+   * Pattern: 'get.provider.by.id' - according to project_documentation.md
    */
   @MessagePattern({ cmd: 'get.provider.by.id' })
   async getProviderById(@Payload() id: string) {
@@ -39,7 +39,7 @@ export class ProvidersController {
   }
 
   /**
-   * Thêm giấy tờ pháp lý.
+   * Add legal document.
    */
   @MessagePattern({ cmd: 'providers.addLegalDocument' })
   async addLegalDocument(

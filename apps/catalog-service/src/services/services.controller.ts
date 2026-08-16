@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { ServiceQueryDto } from './dto/service-query.dto';
 
 @Controller()
 export class ServicesController {
@@ -15,7 +16,7 @@ export class ServicesController {
   }
 
   @MessagePattern({ cmd: 'services.find' })
-  async findServices(@Payload() payload: any) {
+  async findServices(@Payload() payload: { providerId: string } & ServiceQueryDto) {
     return this.servicesService.findServices(payload.providerId, payload);
   }
 

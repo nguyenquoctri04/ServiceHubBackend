@@ -4,9 +4,31 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { CreateServiceDto } from './dto/create-service.dto';
-import { firstValueFrom } from 'rxjs';
 import { Prisma } from '@prisma/client-catalog';
 import { SecureRpcService } from '@app/common';
+import { ServiceQueryDto } from './dto/service-query.dto';
+
+export interface ProviderInfo {
+  id: string;
+  providerType: string;
+  address?: string;
+}
+
+export interface NearestPropertyResult {
+  id: string;
+  propertyName: string;
+  latitude: number;
+  longitude: number;
+  distance: number;
+}
+
+export interface NearestServiceResult {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  distance: number;
+}
 
 @Injectable()
 export class ServicesService {
@@ -23,7 +45,7 @@ export class ServicesService {
   async createService(providerId: string, dto: CreateServiceDto) {
     this.logger.log(`Creating service for provider ${providerId}`);
     
-    // 1. Lấy thông tin Provider và kiểm tra Address
+    // 1. Get Provider info and check Address
     const providerInfo = await this.validateAndGetProviderInfo(providerId);
     const isExternalService = providerInfo.providerType === 'EXTERNAL_SERVICE';
     
@@ -32,7 +54,7 @@ export class ServicesService {
       throw new RpcException({ status: 400, message: 'Address is required to create a service' });
     }
 
-    // 2. Validate khoảng cách (chỉ dành cho EXTERNAL_SERVICE)
+    // 2. Validate distance (only for EXTERNAL_SERVICE)
     let finalLat = 0;
     let finalLng = 0;
     
@@ -44,15 +66,15 @@ export class ServicesService {
       }
     }
 
-    // 3. Lưu vào Database (Prisma Transaction)
+    // 3. Save to Database (Prisma Transaction)
     return this.executeCreateServiceTransaction(providerId, dto, finalAddress, finalLat, finalLng);
   }
 
   // --- Private Helper Methods for Clean Code ---
 
-  private async validateAndGetProviderInfo(providerId: string) {
+  private async validateAndGetProviderInfo(providerId: string): Promise<ProviderInfo> {
     try {
-      const providerInfo = await this.secureRpc.send<any>(
+      const providerInfo = await this.secureRpc.send<ProviderInfo>(
         this.identityClient,
         { cmd: 'get.provider.by.id' },
         providerId
@@ -68,7 +90,7 @@ export class ServicesService {
     const location = await this.locationService.geocode(address);
     if (!location) return null;
 
-    // Tìm điểm tham chiếu gần nhất (Property hoặc Service khác)
+    // Find the nearest reference point (Property or another Service)
     const nearestProperty = await this.getNearestProperty(location.lat, location.lng);
     let targetLat: number | null = null;
     let targetLng: number | null = null;
@@ -90,7 +112,7 @@ export class ServicesService {
       }
     }
 
-    // Tính khoảng cách thực tế và cảnh báo nếu vượt ngưỡng
+    // Calculate actual distance and warn if it exceeds the threshold
     if (targetLat !== null && targetLng !== null) {
       const distanceKm = await this.locationService.getDistanceKm(
         { lat: location.lat, lng: location.lng },
@@ -109,7 +131,7 @@ export class ServicesService {
                 distanceKm: Math.round(distanceKm * 10) / 10,
                 referenceType,
                 referenceName,
-                reason: `Dịch vụ của bạn cách ${referenceType === 'PROPERTY' ? 'khu dân cư' : 'khu dịch vụ'} gần nhất ${Math.round(distanceKm * 10) / 10} km. Xác nhận để tiếp tục.`
+                reason: `Your service is ${Math.round(distanceKm * 10) / 10} km away from the nearest ${referenceType === 'PROPERTY' ? 'residential area' : 'service area'}. Confirm to continue.`
               }
             }
           });
@@ -192,23 +214,24 @@ export class ServicesService {
     });
   }
 
-  async findServices(providerId: string, query: any) {
-    const { page = 1, limit = 10, search, categoryId, status } = query;
-    const skip = (page - 1) * limit;
+  async findServices(providerId: string, query: ServiceQueryDto) {
+    const pageNum = Number(query.page || 1);
+    const limitNum = Number(query.limit || 10);
+    const skip = (pageNum - 1) * limitNum;
 
     const where: Prisma.ServiceWhereInput = {
       providerId,
-      ...(search && { name: { contains: search, mode: 'insensitive' } }),
-      ...(categoryId && { categoryId }),
-      ...(status && { status }),
+      ...(query.search && { name: { contains: query.search, mode: 'insensitive' } }),
+      ...(query.categoryId && { categoryId: query.categoryId }),
+      ...(query.status && { status: query.status as import('@prisma/client-catalog').ServiceStatus }),
     };
 
     const [total, data] = await Promise.all([
       this.prisma.service.count({ where }),
       this.prisma.service.findMany({
         where,
-        skip: Number(skip),
-        take: Number(limit),
+        skip: skip,
+        take: limitNum,
         orderBy: { createdAt: 'desc' },
         include: {
           category: { select: { id: true, name: true } },
@@ -226,8 +249,8 @@ export class ServicesService {
 
     return {
       total,
-      page: Number(page),
-      limit: Number(limit),
+      page: pageNum,
+      limit: limitNum,
       data,
     };
   }
@@ -275,8 +298,8 @@ export class ServicesService {
   }
 
   // Find nearest ACTIVE Property across entire system using Haversine
-  private async getNearestProperty(lat: number, lng: number) {
-    const properties = await this.prisma.$queryRaw<any[]>`
+  private async getNearestProperty(lat: number, lng: number): Promise<NearestPropertyResult | null> {
+    const properties = await this.prisma.$queryRaw<NearestPropertyResult[]>`
       SELECT id, property_name as "propertyName", latitude, longtitude as "longitude",
       (6371 * acos(cos(radians(${lat}::float)) * cos(radians(latitude::float)) * cos(radians(longtitude::float) - radians(${lng}::float)) + sin(radians(${lat}::float)) * sin(radians(latitude::float)))) AS distance
       FROM property
@@ -288,8 +311,8 @@ export class ServicesService {
   }
 
   // Find nearest ACTIVE Service across entire system
-  private async getNearestService(lat: number, lng: number) {
-    const services = await this.prisma.$queryRaw<any[]>`
+  private async getNearestService(lat: number, lng: number): Promise<NearestServiceResult | null> {
+    const services = await this.prisma.$queryRaw<NearestServiceResult[]>`
       SELECT id, name, latitude, longtitude as "longitude",
       (6371 * acos(cos(radians(${lat}::float)) * cos(radians(latitude::float)) * cos(radians(longtitude::float) - radians(${lng}::float)) + sin(radians(${lat}::float)) * sin(radians(latitude::float)))) AS distance
       FROM service

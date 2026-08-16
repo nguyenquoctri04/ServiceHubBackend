@@ -67,6 +67,7 @@ async function main() {
     data: [
       {
         id: IDS.meters.ELECTRIC,
+        providerId: USERS.PROVIDER,
         serviceId: CATALOG.ELECTRIC,
         name: "Điện",
         unit: "kWh",
@@ -76,6 +77,7 @@ async function main() {
       },
       {
         id: IDS.meters.WATER,
+        providerId: USERS.PROVIDER,
         serviceId: CATALOG.WATER,
         name: "Nước",
         unit: "m3",

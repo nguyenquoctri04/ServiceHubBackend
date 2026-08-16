@@ -4,6 +4,7 @@ import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ContractStatus, Contract } from '@prisma/client-contract';
 import { lastValueFrom } from 'rxjs';
 import { ProviderBillingPatterns, SecureRpcService } from '@app/common';
+import { ContractTemplate, Term } from '@prisma/client-contract';
 /**
  * Payload interface for creating a contract.
  */
@@ -27,9 +28,24 @@ export interface UpdateContractPayload extends CreateContractPayload {}
  * Payload interface for querying contracts.
  */
 export interface ContractQueryPayload {
+  providerId: string;
   status?: string;
   page?: string | number;
   limit?: string | number;
+}
+
+export interface CustomerIdentity {
+  id: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface EnrichedContract extends Contract {
+  customerName: string;
+  customerPhone: string;
+  roomName: string;
+  services: any[];
+  terms?: any[];
 }
 
 @Injectable()
@@ -46,9 +62,9 @@ export class ProviderContractsService {
   /**
    * Validates if a customer exists by calling Identity Service via RPC.
    */
-  private async checkCustomer(customerId: string): Promise<any> {
+  private async checkCustomer(customerId: string): Promise<CustomerIdentity> {
     try {
-      const response = await this.secureRpc.send<any>(
+      const response = await this.secureRpc.send<CustomerIdentity>(
         this.identityClient,
         { cmd: 'get.customer.by.id' },
         { customerId }
@@ -116,6 +132,7 @@ export class ProviderContractsService {
       const contract = await tx.contract.create({
         data: {
           contractNumber,
+          providerId,
           customerId: dto.customerId,
           roomId: dto.roomId,
           status: ContractStatus.DRAFT,
@@ -147,7 +164,7 @@ export class ProviderContractsService {
    */
   async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<Contract> {
     this.logger.log(`Updating contract: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId } });
+    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
     
     if (!existing) {
       throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -174,7 +191,7 @@ export class ProviderContractsService {
    */
   async sendContract(providerId: string, contractId: string): Promise<Contract> {
     this.logger.log(`Sending contract for signature: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId } });
+    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.DRAFT) {
@@ -192,7 +209,7 @@ export class ProviderContractsService {
    */
   async revokeContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Revoking contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId } });
+    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.PENDING_SIGNATURE) {
@@ -210,7 +227,7 @@ export class ProviderContractsService {
    */
   async cancelContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Cancelling contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId } });
+    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
 
     return this.prisma.contract.update({
@@ -224,7 +241,7 @@ export class ProviderContractsService {
    */
   async terminateContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Terminating contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId } });
+    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.ACTIVE) {
@@ -240,9 +257,9 @@ export class ProviderContractsService {
   /**
    * Enriches contract data by fetching external references (Customer, Services).
    */
-  private async enrichContractData(contract: any): Promise<any> {
+  private async enrichContractData(contract: Contract & { services?: any[], terms?: any[] }): Promise<EnrichedContract> {
     try {
-      const customer = await this.secureRpc.send<any>(
+      const customer = await this.secureRpc.send<CustomerIdentity>(
         this.identityClient,
         { cmd: 'get.customer.by.id' },
         { customerId: contract.customerId }
@@ -274,18 +291,27 @@ export class ProviderContractsService {
       };
     } catch (error) {
       this.logger.warn(`Failed to enrich contract data for ID: ${contract.id}`, error.stack);
-      return contract;
+      return {
+        ...contract,
+        customerName: 'Unknown',
+        customerPhone: 'Unknown',
+        roomName: 'Unknown',
+        services: contract.services || []
+      };
     }
   }
 
   /**
    * Finds contracts based on query parameters.
    */
-  async findContracts(query: ContractQueryPayload): Promise<any[]> {
+  async findContracts(query: ContractQueryPayload): Promise<EnrichedContract[]> {
     this.logger.log(`Fetching contracts with query: ${JSON.stringify(query)}`);
-    const { status, page = 1, limit = 10 } = query;
+    const { providerId, status, page = 1, limit = 10 } = query;
     const contracts = await this.prisma.contract.findMany({
-      where: status ? { status: status as ContractStatus } : undefined,
+      where: {
+        providerId,
+        ...(status ? { status: status as ContractStatus } : {})
+      },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
       include: { services: true, terms: true }
@@ -297,10 +323,10 @@ export class ProviderContractsService {
   /**
    * Retrieves a specific contract and enriches it.
    */
-  async findOneContract(providerId: string, contractId: string): Promise<any> {
+  async findOneContract(providerId: string, contractId: string): Promise<EnrichedContract> {
     this.logger.log(`Fetching contract details for ID: ${contractId}`);
     const contract = await this.prisma.contract.findUnique({
-      where: { id: contractId },
+      where: { id: contractId, providerId },
       include: { services: true, terms: true }
     });
     
@@ -312,7 +338,7 @@ export class ProviderContractsService {
   /**
    * Retrieves all templates for a provider.
    */
-  async findTemplates(providerId: string): Promise<any[]> {
+  async findTemplates(providerId: string): Promise<ContractTemplate[]> {
     return this.prisma.contractTemplate.findMany({
       where: { providerId }
     });
@@ -321,7 +347,7 @@ export class ProviderContractsService {
   /**
    * Retrieves a specific template.
    */
-  async findTemplate(providerId: string, templateId: string): Promise<any> {
+  async findTemplate(providerId: string, templateId: string): Promise<ContractTemplate> {
     const template = await this.prisma.contractTemplate.findFirst({
       where: { id: templateId, providerId }
     });
@@ -332,7 +358,7 @@ export class ProviderContractsService {
   /**
    * Retrieves all terms (globally available).
    */
-  async findTerms(providerId: string): Promise<any[]> {
+  async findTerms(providerId: string): Promise<Term[]> {
     return this.prisma.term.findMany();
   }
 

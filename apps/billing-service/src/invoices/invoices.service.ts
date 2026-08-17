@@ -13,17 +13,20 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   async findInvoices(providerId: string, query: InvoiceQueryDto) {
     // 1. Fetch contracts for provider
-    const contractsRes = await firstValueFrom(
-      this.contractClient.send({ cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 }).pipe(
-        timeout(5000),
-        retryWhen(errors => errors.pipe(delay(500), take(3))),
-        catchError(err => throwError(() => new RpcException('Contract Service timeout or failed')))
-      )
-    );
+    let contractsRes;
+    try {
+      contractsRes = await Promise.race([
+        this.secureRpc.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]);
+    } catch (err) {
+      throw new RpcException('Contract Service timeout or failed');
+    }
 
     const contractIds = contractsRes?.data?.map((c: any) => c.id) || [];
     if (contractIds.length === 0) {
@@ -74,12 +77,15 @@ export class InvoicesService {
 
     // Provider check via contract is skipped here for brevity, but could be added.
     // For now we assume Gateway checked or we trust it. Let's check contract.
-    const contractRes = await firstValueFrom(
-      this.contractClient.send({ cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId: invoice.contractId }).pipe(
-        timeout(5000),
-        catchError(err => throwError(() => new RpcException('Contract Service failed')))
-      )
-    );
+    let contractRes;
+    try {
+      contractRes = await Promise.race([
+        this.secureRpc.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId: invoice.contractId }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+      ]);
+    } catch (err) {
+      throw new RpcException('Contract Service timeout or failed');
+    }
     if (!contractRes) {
       throw new RpcException(new NotFoundException('Invoice contract not found or unauthorized'));
     }

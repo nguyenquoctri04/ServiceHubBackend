@@ -66,6 +66,21 @@ export class ProviderController {
     );
   }
 
+  @Get('statistics')
+  async getStatistics(@CurrentUser() user: CurrentUserPayload) {
+    const [properties, contracts, invoices] = await Promise.allSettled([
+      this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId: user.id }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId: user.id, limit: 100 }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId: user.id, query: { limit: 100 } }),
+    ]);
+
+    return {
+      properties: properties.status === 'fulfilled' ? properties.value : [],
+      contracts: contracts.status === 'fulfilled' ? contracts.value : [],
+      invoices: invoices.status === 'fulfilled' ? invoices.value : []
+    };
+  }
+
   /**
    * Update Provider profile.
    * DTO is validated at Gateway before proxying to Identity Service.
@@ -144,6 +159,26 @@ export class ProviderController {
     );
   }
 
+  @Get('catalog/properties')
+  getProperties(@CurrentUser() user: CurrentUserPayload) {
+    return this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId: user.id });
+  }
+
+  @Get('catalog/properties/:id/blocks')
+  getBlocksByProperty(@Param('id') propertyId: string) {
+    return this.proxy.send(this.catalogClient, { cmd: 'catalog.blocks.find' }, { propertyId });
+  }
+
+  @Get('catalog/blocks/:id/floors')
+  getFloorsByBlock(@Param('id') blockId: string) {
+    return this.proxy.send(this.catalogClient, { cmd: 'catalog.floors.find' }, { blockId });
+  }
+
+  @Get('catalog/floors/:id/rooms')
+  getRoomsByFloor(@Param('id') floorId: string) {
+    return this.proxy.send(this.catalogClient, { cmd: 'catalog.rooms.find' }, { floorId });
+  }
+
   // --- CONTRACT MODULE ---
 
   @Get('contract-templates')
@@ -199,6 +234,46 @@ export class ProviderController {
   @Post('contracts/:id/terminate')
   terminateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMINATE }, { providerId: user.id, contractId, dto });
+  }
+
+  // --- VIOLATIONS MODULE ---
+
+  @Get('violations')
+  getViolations(@CurrentUser() user: CurrentUserPayload, @Query('status') status?: string) {
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId: user.id, status });
+  }
+
+  @Post('violations/:id/appeals')
+  createAppeal(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') violationCaseId: string,
+    @Body() dto: { reason: string }
+  ) {
+    return this.proxy.send(
+      this.contractClient,
+      { cmd: 'provider.violations.appeals.create' },
+      { providerId: user.id, violationCaseId, reason: dto.reason, appellantId: user.id }
+    );
+  }
+
+  // --- CUSTOMERS MODULE ---
+
+  @Get('customers')
+  getCustomers(@CurrentUser() user: CurrentUserPayload) {
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId: user.id });
+  }
+
+  @Post('customers/:id/block')
+  blockCustomer(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') customerId: string,
+    @Body() dto: { reason: string }
+  ) {
+    return this.proxy.send(
+      this.contractClient, 
+      { cmd: 'provider.customers.block' }, 
+      { providerId: user.id, customerId, reason: dto.reason, blockBy: user.id }
+    );
   }
 
   // --- BILLING MODULE ---

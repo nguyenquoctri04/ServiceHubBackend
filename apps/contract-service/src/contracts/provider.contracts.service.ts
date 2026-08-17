@@ -372,4 +372,88 @@ export class ProviderContractsService {
     }
     return map;
   }
+
+  async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+    this.logger.log(`Provider ${payload.providerId} blocking customer ${payload.customerId} with reason: ${payload.reason}`);
+
+    return this.prisma.$transaction(async (tx) => {
+      // Find latest contract to link the violation (with lock to prevent race conditions during block)
+      const latestContract = await tx.contract.findFirst({
+        where: { providerId: payload.providerId, customerId: payload.customerId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!latestContract) {
+        throw new RpcException({ statusCode: 400, message: 'Customer has no contracts with this provider' });
+      }
+
+      // Check if already restricted
+      const existingRestriction = await tx.restriction.findFirst({
+        where: { 
+          providerId: payload.providerId, 
+          customerId: payload.customerId,
+          scopeType: 'PROVIDER',
+          isDeleted: false,
+          OR: [
+            { endAt: null },
+            { endAt: { gt: new Date() } }
+          ]
+        }
+      });
+
+      if (existingRestriction) {
+        throw new RpcException({ statusCode: 400, message: 'Customer is already blocked' });
+      }
+
+      let rule = await tx.violationRule.findFirst({
+        where: { name: 'Không còn hợp đồng hiệu lực - Provider tự chặn' }
+      });
+      
+      if (!rule) {
+        rule = await tx.violationRule.create({
+          data: {
+            name: 'Không còn hợp đồng hiệu lực - Provider tự chặn',
+            targetType: 'CUSTOMER',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+        });
+      }
+
+      const violationCase = await tx.violationCase.create({
+        data: {
+          violationRuleId: rule.id,
+          contractId: latestContract.id,
+          providerId: payload.providerId,
+          reportedBy: payload.blockBy,
+          status: 'RESOLVED',
+          description: payload.reason,
+          occurredAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          actions: {
+            create: {
+              performedBy: payload.blockBy,
+              actionType: 'RESTRICT',
+              reason: payload.reason,
+              createdAt: new Date(),
+              restrictions: {
+                create: {
+                  providerId: payload.providerId,
+                  customerId: payload.customerId,
+                  scopeType: 'PROVIDER',
+                  reason: payload.reason,
+                  startAt: new Date(),
+                  createdBy: payload.blockBy,
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                }
+              }
+            }
+          }
+        }
+      });
+      return { success: true, violationCase };
+    }, { isolationLevel: 'Serializable' });
+  }
 }

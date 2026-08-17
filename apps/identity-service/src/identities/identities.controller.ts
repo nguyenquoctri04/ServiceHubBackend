@@ -21,4 +21,9 @@ export class IdentitiesController {
   async getCustomerById(@Payload() payload: { customerId: string }) {
     return await this.identitiesService.getProfile(payload.customerId);
   }
+
+  @MessagePattern({ cmd: 'provider.identities.batch' })
+  async getIdentitiesBatch(@Payload() payload: { identityIds: string[] }) {
+    return await this.identitiesService.getIdentitiesBatch(payload.identityIds);
+  }
 }

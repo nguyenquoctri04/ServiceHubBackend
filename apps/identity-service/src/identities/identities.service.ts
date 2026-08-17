@@ -50,4 +50,21 @@ export class IdentitiesService {
     const { passwordHash, ...safeIdentity } = updated;
     return safeIdentity;
   }
+
+  async getIdentitiesBatch(identityIds: string[]) {
+    this.logger.log(`Fetching batch identities for ids: ${identityIds.length}`);
+    const identities = await this.prisma.identity.findMany({
+      where: {
+        id: { in: identityIds }
+      },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        status: true,
+        isEkycVerified: true
+      }
+    });
+    return identities;
+  }
 }

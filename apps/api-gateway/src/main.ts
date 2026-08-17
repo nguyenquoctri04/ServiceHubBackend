@@ -22,6 +22,10 @@ async function bootstrap() {
 
   app.use(cookieParser());
 
+  // Security headers
+  const helmet = require('helmet');
+  app.use(helmet());
+
   // Global pipes, filters, interceptors
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalFilters(new GlobalExceptionFilter());

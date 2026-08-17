@@ -20,6 +20,7 @@ export class GatewayProxyService {
     try {
       return await this.secureRpc.send<T>(client, pattern, payload);
     } catch (err: any) {
+      require('fs').appendFileSync('/tmp/rpc_errors.log', `Pattern: ${JSON.stringify(pattern)}\nError: ${err?.message || err}\nStack: ${err?.stack || ''}\n\n`);
       console.error(`RPC Exception [Pattern: ${JSON.stringify(pattern)}]:`, err);
       const statusCode =
         err?.status || err?.statusCode || HttpStatus.INTERNAL_SERVER_ERROR;

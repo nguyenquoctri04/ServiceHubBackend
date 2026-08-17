@@ -43,6 +43,11 @@ export class ProviderContractsController {
     return this.providerContractsService.findContracts(payload);
   }
 
+  @MessagePattern({ cmd: 'provider.customers.block' })
+  async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+    return this.providerContractsService.blockCustomer(payload);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.FIND_ONE })
   async findOneContract(@Payload() payload: { providerId: string; contractId: string }) {
     // Calling the service method to find one contract

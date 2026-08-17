@@ -25,3 +25,5 @@ export * from "./dto/billing/ocr-meter.dto";
 export * from "./dto/billing/ocr-confirm.dto";
 export * from "./dto/billing/excel-import-confirm.dto";
 export * from "./guards/idempotency.guard";
+export * from "./utils/distance.util";
+export * from "./constants/violation.constants";

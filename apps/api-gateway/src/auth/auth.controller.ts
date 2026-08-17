@@ -56,6 +56,22 @@ export class AuthController {
     };
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Post('switch-profile')
+  @HttpCode(HttpStatus.OK)
+  async switchProfile(@Body() body: { providerId: string }, @CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
+    if (!body.providerId) {
+      throw new UnauthorizedException('providerId is required');
+    }
+    const tokens = await this.authService.switchProfile(user, body.providerId);
+    this.setRefreshTokenCookie(res, tokens.refreshToken);
+    
+    return {
+      accessToken: tokens.accessToken,
+      user: tokens.user
+    };
+  }
+
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

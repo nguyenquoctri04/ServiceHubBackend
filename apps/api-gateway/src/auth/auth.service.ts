@@ -12,6 +12,7 @@ import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 
 import { RedisService, SecureRpcService } from "@app/common";
+import { Patterns } from "@app/common/constants/patterns";
 import {
   AuthenticatedUser,
   JwtPayload,
@@ -31,7 +32,7 @@ export class AuthService {
     try {
       return await this.secureRpc.send(
         this.identityClient,
-        { cmd: "auth.register" },
+        { cmd: Patterns.AUTH_REGISTER },
         { ...registerDto, ipAddress },
       );
     } catch (err: any) {
@@ -47,7 +48,7 @@ export class AuthService {
     try {
       response = await this.secureRpc.send(
         this.identityClient,
-        { cmd: "auth.login" },
+        { cmd: Patterns.AUTH_LOGIN },
         { ...loginDto, ipAddress },
       );
     } catch (err: any) {
@@ -76,8 +77,30 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token is invalid or revoked");
     }
 
-    const user = { id: userId, email: payload.email, role: payload.role };
+    const user = { id: userId, email: payload.email, role: payload.role, providerId: payload.providerId };
     return await this.generateTokens(user);
+  }
+
+  async switchProfile(currentUser: AuthenticatedUser, providerId: string) {
+    let response: any;
+    try {
+      response = await this.secureRpc.send(
+        this.identityClient,
+        { cmd: Patterns.AUTH_SWITCH_PROFILE },
+        { userId: currentUser.id, providerId },
+      );
+    } catch (err: any) {
+      console.error("RPC Error in switchProfile:", err);
+      const errMsg = err?.message || err?.response?.message || err || "Failed to switch profile";
+      throw new HttpException(errMsg, err?.status || err?.statusCode || 403);
+    }
+
+    if (!response || !response.success) {
+        throw new HttpException("You do not have access to this profile", 403);
+    }
+
+    const updatedUser = { ...currentUser, providerId };
+    return await this.generateTokens(updatedUser);
   }
 
   async logout(userId?: string) {
@@ -88,7 +111,7 @@ export class AuthService {
   }
 
   private async generateTokens(user: AuthenticatedUser) {
-    const payload = { sub: user.id, role: user.role, email: user.email };
+    const payload = { sub: user.id, role: user.role, email: user.email, providerId: user.providerId };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: "15m" });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });

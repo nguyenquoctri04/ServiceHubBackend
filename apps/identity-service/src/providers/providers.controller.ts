@@ -6,10 +6,10 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 
 @Controller()
 export class ProvidersController {
-  constructor(private readonly providersService: ProvidersService) {}
+  constructor(private readonly providersService: ProvidersService) { }
 
   /**
-   * Get full Provider profile including legalDocuments.
+   * Lấy hồ sơ Provider đầy đủ kèm legalDocuments.
    * Caller: API Gateway (provider.controller.ts) → GET /api/provider/profile
    */
   @MessagePattern({ cmd: 'providers.getProfile' })
@@ -18,7 +18,7 @@ export class ProvidersController {
   }
 
   /**
-   * Update Provider profile.
+   * Cập nhật hồ sơ Provider.
    * Caller: API Gateway (provider.controller.ts) → PUT /api/provider/profile
    */
   @MessagePattern({ cmd: 'providers.updateProfile' })
@@ -29,17 +29,22 @@ export class ProvidersController {
   }
 
   /**
-   * Standard RPC endpoint for cross-service validation.
-   * Caller: Catalog Service (Phase 3), Contract Service (Phase 4)
-   * Pattern: 'get.provider.by.id' - according to project_documentation.md
+   * RPC endpoint chuẩn cho cross-service validation.
+   * Caller: Catalog Service, Contract Service
+   * Pattern: 'get.provider.by.id'
    */
   @MessagePattern({ cmd: 'get.provider.by.id' })
   async getProviderById(@Payload() id: string) {
-    return this.providersService.getProviderById(id);
+    const provider = await this.providersService.getProviderById(id);
+    if (!provider) {
+      // ProvidersService đã throw RpcException trước, nhánh này là safeguard
+      throw new RpcException({ status: 404, message: 'Provider not found' });
+    }
+    return provider;
   }
 
   /**
-   * Add legal document.
+   * Thêm giấy tờ pháp lý.
    */
   @MessagePattern({ cmd: 'providers.addLegalDocument' })
   async addLegalDocument(

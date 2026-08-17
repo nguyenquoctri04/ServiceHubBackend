@@ -46,4 +46,9 @@ export class MetersController {
   async handleServiceCreated(@Payload() payload: ServiceCreatedPayload) {
     return this.service.handleServiceCreated(payload);
   }
+
+  @MessagePattern({ cmd: 'billing.meters.dashboardStats' })
+  async getMeterStats(@Payload() payload: { providerId: string }) {
+    return this.service.getMeterDashboardStats(payload.providerId);
+  }
 }

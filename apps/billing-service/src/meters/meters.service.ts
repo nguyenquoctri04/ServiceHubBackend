@@ -186,4 +186,31 @@ export class MetersService {
       });
     }
   }
+
+  async getMeterDashboardStats(providerId: string) {
+    const totalMeters = await this.prisma.meter.count({
+      where: { providerId }
+    });
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const recordedMeters = await this.prisma.meter.count({
+      where: {
+        providerId,
+        readings: {
+          some: {
+            createdAt: {
+              gte: startOfMonth,
+              lte: endOfMonth
+            },
+            status: 'VALID'
+          }
+        }
+      }
+    });
+
+    return { totalMeters, recordedMeters };
+  }
 }

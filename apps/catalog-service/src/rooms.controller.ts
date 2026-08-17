@@ -60,4 +60,36 @@ export class RoomsController {
       include: { roomType: true }
     });
   }
+
+  @MessagePattern({ cmd: 'catalog.properties.findAllRooms' })
+  async getAllRooms(@Payload() data: { propertyId: string }) {
+    return this.prisma.room.findMany({
+      where: {
+        floor: {
+          block: {
+            propertyId: data.propertyId
+          }
+        }
+      },
+      include: {
+        floor: true,
+        roomType: true
+      }
+    });
+  }
+
+  @MessagePattern({ cmd: 'catalog.rooms.count' })
+  async countRooms(@Payload() data: { providerId: string }) {
+    return this.prisma.room.count({
+      where: {
+        floor: {
+          block: {
+            property: {
+              providerId: data.providerId
+            }
+          }
+        }
+      }
+    });
+  }
 }

@@ -13,4 +13,11 @@ export class CustomerCategoriesController {
     async getHomeCategories() {
         return this.service.getHomeCategories();
     }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.GET_CATEGORIES,
+    })
+    getCategories() {
+        return this.service.getCategories();
+    }
 }

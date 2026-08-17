@@ -29,6 +29,7 @@ export interface PopularService {
 export interface Provider {
     id: string;
     providerName: string;
+    logoUrl: string;
 }
 
 export interface GetHomeCategoriesResponse {

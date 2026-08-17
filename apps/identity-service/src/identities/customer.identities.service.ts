@@ -16,6 +16,7 @@ export class CustomerIdentitiesService {
             select: {
                 id: true,
                 providerName: true,
+                logoUrl: true
             },
         });
 

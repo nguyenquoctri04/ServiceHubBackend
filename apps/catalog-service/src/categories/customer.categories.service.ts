@@ -11,6 +11,7 @@ import {
     Provider,
     ServicePriceMapping,
 } from "./types/customer.categories.type";
+import { MarketplaceCategoryDto } from "@app/common/dto/customer/catalog";
 
 @Injectable()
 export class CustomerCategoriesService {
@@ -393,5 +394,25 @@ export class CustomerCategoriesService {
             categories: categoryResult,
             popularServices,
         };
+    }
+
+    async getCategories(): Promise<MarketplaceCategoryDto[]> {
+        const categories = await this.prisma.category.findMany({
+            select: {
+                id: true,
+                name: true,
+            },
+            orderBy: {
+                name: "asc",
+            },
+        });
+
+        return [
+            {
+                id: "all",
+                name: "Tất cả",
+            },
+            ...categories,
+        ];
     }
 }

@@ -31,6 +31,8 @@ export class CustomerPatterns {
         this.SERVICES + "get-popular-services";
     public static readonly GET_SERVICE_PRICE_MAPPINGS =
         this.SERVICES + "get-service-price-mappings";
+    public static readonly GET_SERVICES = this.SERVICES + "get-services";
+    public static readonly GET_CATEGORIES = this.CATEGORIES + "get-categories";
 
     /*
         ===============================

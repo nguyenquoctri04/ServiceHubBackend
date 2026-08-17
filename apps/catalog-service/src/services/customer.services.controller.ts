@@ -2,6 +2,7 @@ import { Controller } from "@nestjs/common";
 import { CustomerServicesService } from "./customer.services.service";
 import { MessagePattern, Payload } from "@nestjs/microservices";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
+import { MarketplaceServicesQueryDto } from "@app/common/dto/customer/catalog";
 
 @Controller()
 export class CustomerServicesController {
@@ -24,5 +25,12 @@ export class CustomerServicesController {
     })
     async getServicePriceMappings() {
         return this.service.getServicePriceMappings();
+    }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.GET_SERVICES,
+    })
+    getServices(query: MarketplaceServicesQueryDto) {
+        return this.service.getMarketplaceServices(query);
     }
 }

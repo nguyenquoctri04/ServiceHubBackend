@@ -16,4 +16,14 @@ export class IdentitiesController {
   async updateProfile(@Payload() payload: { id: string, dto: UpdateProfileDto }) {
     return await this.identitiesService.updateProfile(payload.id, payload.dto);
   }
+
+  @MessagePattern({ cmd: 'get.customer.by.id' })
+  async getCustomerById(@Payload() payload: { customerId: string }) {
+    return await this.identitiesService.getProfile(payload.customerId);
+  }
+
+  @MessagePattern({ cmd: 'provider.identities.batch' })
+  async getIdentitiesBatch(@Payload() payload: { identityIds: string[] }) {
+    return await this.identitiesService.getIdentitiesBatch(payload.identityIds);
+  }
 }

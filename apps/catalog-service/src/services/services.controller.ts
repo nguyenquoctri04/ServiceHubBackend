@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { ServiceQueryDto } from './dto/service-query.dto';
 
 @Controller()
 export class ServicesController {
@@ -15,14 +16,23 @@ export class ServicesController {
   }
 
   @MessagePattern({ cmd: 'services.find' })
-  async findServices() {
-    // Pagination logic can be implemented here later
-    return [];
+  async findServices(@Payload() payload: { providerId: string } & ServiceQueryDto) {
+    return this.servicesService.findServices(payload.providerId, payload);
   }
 
-  @MessagePattern({ cmd: 'services.getById' })
+  @MessagePattern({ cmd: 'services.findOne' })
+  async getServiceDetail(@Payload() payload: { providerId: string; serviceId: string }) {
+    return this.servicesService.findOneService(payload.providerId, payload.serviceId);
+  }
+
+  @MessagePattern({ cmd: 'get.service.by.id' })
   async getServiceById(@Payload() id: string) {
     // RPC for cross-service validation
-    return null;
+    return this.servicesService.getServiceById(id);
+  }
+
+  @MessagePattern({ cmd: 'get.service.price.by.id' })
+  async getServicePriceById(@Payload() payload: { servicePriceId: string }) {
+    return this.servicesService.getServicePriceById(payload.servicePriceId);
   }
 }

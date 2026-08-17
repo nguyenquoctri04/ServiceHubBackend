@@ -4,4 +4,5 @@ export interface ProviderRpcSummary {
   providerName: string;
   providerType: 'PROPERTY_MANAGER' | 'EXTERNAL_SERVICE';
   status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'DISABLE';
+  address?: string;
 }

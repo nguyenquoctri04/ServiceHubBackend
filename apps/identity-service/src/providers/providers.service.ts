@@ -16,8 +16,8 @@ export class ProvidersService {
   ) {}
 
   /**
-   * Lấy toàn bộ hồ sơ Provider kèm giấy tờ pháp lý.
-   * Tìm kiếm theo identityId (foreign key từ bảng Identity).
+   * Get the entire Provider profile along with legal documents.
+   * Search by identityId (foreign key from Identity table).
    */
   async getProviderProfile(identityId: string) {
     this.logger.log(`Fetching provider profile for identityId: ${identityId}`);
@@ -60,13 +60,13 @@ export class ProvidersService {
   }
 
   /**
-   * Cập nhật thông tin hồ sơ Provider.
-   * Chỉ cho phép sửa các field nullable – không cho sửa providerType, status, identityId.
+   * Update Provider profile information.
+   * Only nullable fields are allowed to be updated - cannot update providerType, status, identityId.
    */
   async updateProviderProfile(identityId: string, dto: UpdateProviderProfileDto) {
     this.logger.log(`Updating provider profile for identityId: ${identityId}`);
 
-    // Đảm bảo Provider tồn tại trước khi update
+    // Ensure Provider exists before update
     const existing = await this.prisma.provider.findFirst({
       where: { identityId },
     });
@@ -105,9 +105,9 @@ export class ProvidersService {
   }
 
   /**
-   * Tìm Provider theo provider.id (PK).
-   * Dùng cho RPC cross-service validation từ Catalog và Contract Service.
-   * Trả về ProviderRpcSummary – payload nhỏ gọn, đủ để validate.
+   * Find Provider by provider.id (PK).
+   * Used for cross-service validation RPC from Catalog and Contract Service.
+   * Returns ProviderRpcSummary - a compact payload, sufficient for validation.
    */
   async getProviderById(providerId: string): Promise<ProviderRpcSummary> {
     this.logger.log(`[RPC] get.provider.by.id: ${providerId}`);
@@ -120,6 +120,7 @@ export class ProvidersService {
         providerName: true,
         providerType: true,
         status: true,
+        address: true,
       },
     });
 
@@ -136,11 +137,12 @@ export class ProvidersService {
       providerName: provider.providerName,
       providerType: provider.providerType as ProviderRpcSummary['providerType'],
       status: provider.status as ProviderRpcSummary['status'],
+      address: provider.address,
     };
   }
 
   /**
-   * Thêm mới một giấy tờ pháp lý cho Provider.
+   * Add a new legal document for Provider.
    */
   async addLegalDocument(identityId: string, dto: CreateLegalDocumentDto) {
     this.logger.log(`Adding legal document for identityId: ${identityId}`);
@@ -171,41 +173,5 @@ export class ProvidersService {
     });
   }
 
-  /**
-   * Xóa một giấy tờ pháp lý của Provider.
-   */
-  async removeLegalDocument(identityId: string, documentId: string) {
-    this.logger.log(`Removing legal document ${documentId} for identityId: ${identityId}`);
 
-    const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
-    });
-
-    if (!provider) {
-      throw new RpcException({
-        status: 404,
-        message: 'Provider profile not found',
-      });
-    }
-
-    const document = await this.prisma.providerLegalDocument.findFirst({
-      where: {
-        id: documentId,
-        providerId: provider.id,
-      },
-    });
-
-    if (!document) {
-      throw new RpcException({
-        status: 404,
-        message: 'Legal document not found or you do not have permission',
-      });
-    }
-
-    await this.prisma.providerLegalDocument.delete({
-      where: { id: documentId },
-    });
-
-    return { success: true, message: 'Legal document removed' };
-  }
 }

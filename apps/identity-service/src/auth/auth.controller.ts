@@ -9,12 +9,12 @@ import { Patterns } from '@app/common/constants/patterns';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @MessagePattern({ cmd: 'auth.register' })
+  @MessagePattern({ cmd: Patterns.AUTH_REGISTER })
   async register(@Payload() payload: RegisterDto & { ipAddress?: string }) {
     return await this.authService.register(payload);
   }
 
-  @MessagePattern({ cmd: 'auth.login' })
+  @MessagePattern({ cmd: Patterns.AUTH_LOGIN })
   async login(@Payload() payload: LoginDto & { ipAddress?: string }) {
     return await this.authService.login(payload);
   }
@@ -22,5 +22,10 @@ export class AuthController {
   @MessagePattern({cmd: Patterns.CHECK_USER_ACTIVE})
   async checkUserActive(@Payload() data: {userId: string}) {
     return await this.authService.checkUserActive(data.userId);
+  }
+
+  @MessagePattern({ cmd: Patterns.AUTH_SWITCH_PROFILE })
+  async switchProfile(@Payload() data: { userId: string, providerId: string }) {
+    return await this.authService.switchProfile(data.userId, data.providerId);
   }
 }

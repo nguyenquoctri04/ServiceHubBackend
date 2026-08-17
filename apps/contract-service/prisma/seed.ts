@@ -243,8 +243,8 @@ async function main() {
   // VIOLATION CASES
   await prisma.violationCase.createMany({
     data: [
-      { id: IDS.violationCases.CASE_1, violationRuleId: IDS.violationRules.RULE_LATE_PAYMENT, contractId: IDS.contracts.CONTRACT_1, reportedBy: USERS.PROVIDER_RESIDENCE, serviceId: null, status: "REPORTED", description: "Khách hàng chậm đóng tiền nhà tháng 8", occurredAt: new Date("2026-08-06"), createdAt: now, updatedAt: now },
-      { id: IDS.violationCases.CASE_2, violationRuleId: IDS.violationRules.RULE_DAMAGE, contractId: IDS.contracts.CONTRACT_1, reportedBy: USERS.PROVIDER_RESIDENCE, serviceId: null, status: "RESOLVED", description: "Làm vỡ kính cửa sổ", occurredAt: new Date("2026-08-10"), createdAt: now, updatedAt: now },
+      { id: IDS.violationCases.CASE_1, violationRuleId: IDS.violationRules.RULE_LATE_PAYMENT, contractId: IDS.contracts.CONTRACT_1, providerId: USERS.PROVIDER_RESIDENCE, reportedBy: USERS.PROVIDER_RESIDENCE, serviceId: null, status: "REPORTED", description: "Khách hàng chậm đóng tiền nhà tháng 8", occurredAt: new Date("2026-08-06"), createdAt: now, updatedAt: now },
+      { id: IDS.violationCases.CASE_2, violationRuleId: IDS.violationRules.RULE_DAMAGE, contractId: IDS.contracts.CONTRACT_1, providerId: USERS.PROVIDER_RESIDENCE, reportedBy: USERS.PROVIDER_RESIDENCE, serviceId: null, status: "RESOLVED", description: "Làm vỡ kính cửa sổ", occurredAt: new Date("2026-08-10"), createdAt: now, updatedAt: now },
     ],
     skipDuplicates: true,
   });

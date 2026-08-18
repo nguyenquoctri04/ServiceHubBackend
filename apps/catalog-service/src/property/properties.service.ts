@@ -170,6 +170,27 @@ export class PropertiesService {
     return { success: true };
   }
 
+  async updateFloor(
+    providerId: string,
+    floorId: string,
+    dto: { floorName?: string; status?: 'ACTIVE' | 'INACTIVE' },
+  ) {
+    const result = await this.prisma.floor.updateMany({
+      where: { id: floorId, block: { property: { providerId } } },
+      data: {
+        ...(dto.floorName !== undefined && { floorName: dto.floorName.trim() }),
+        ...(dto.status !== undefined && { status: dto.status }),
+        updatedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy tầng.' });
+    }
+    return this.prisma.floor.findFirst({
+      where: { id: floorId, block: { property: { providerId } } },
+    });
+  }
+
   async createRoomType(
     providerId: string,
     propertyId: string,

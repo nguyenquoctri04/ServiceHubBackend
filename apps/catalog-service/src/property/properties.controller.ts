@@ -76,6 +76,11 @@ export class PropertiesController {
     return this.propertiesService.createFloor(data.providerId, data.blockId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.FLOOR_UPDATE })
+  async updateFloor(@Payload() data: { providerId: string; floorId: string; dto: { floorName?: string; status?: 'ACTIVE' | 'INACTIVE' } }) {
+    return this.propertiesService.updateFloor(data.providerId, data.floorId, data.dto);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.FLOOR_DELETE })
   async deleteFloor(@Payload() data: { providerId: string; floorId: string }) {
     return this.propertiesService.deleteFloor(data.providerId, data.floorId);

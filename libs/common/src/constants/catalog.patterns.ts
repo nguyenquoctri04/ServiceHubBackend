@@ -11,6 +11,7 @@ export const CatalogPatterns = {
     BLOCKS_FIND_BY_PROPERTY: 'catalog.blocks.findByProperty',
 
     FLOOR_CREATE: 'catalog.floor.create',
+    FLOOR_UPDATE: 'catalog.floor.update',
     FLOOR_DELETE: 'catalog.floor.delete',
     FLOORS_FIND_BY_BLOCK: 'catalog.floors.findByBlock',
 

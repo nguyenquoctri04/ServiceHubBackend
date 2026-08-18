@@ -79,6 +79,17 @@ export class CreateFloorDto {
   status?: 'ACTIVE' | 'INACTIVE';
 }
 
+export class UpdateFloorDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  floorName?: string;
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
 export class CreateRoomTypeDto {
   @IsString()
   @MaxLength(100)

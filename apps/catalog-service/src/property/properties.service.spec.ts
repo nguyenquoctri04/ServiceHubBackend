@@ -168,4 +168,17 @@ describe('PropertiesService', () => {
       data: expect.objectContaining({ blockName: 'Khu B' }),
     });
   });
+
+  it('updates only a floor owned by the active provider', async () => {
+    prisma.floor = {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findFirst: jest.fn().mockResolvedValue({ id: 'floor-1', floorName: 'Tầng 2' }),
+    };
+
+    await expect(service.updateFloor('provider-1', 'floor-1', { floorName: 'Tầng 2' }))
+      .resolves.toMatchObject({ id: 'floor-1', floorName: 'Tầng 2' });
+    expect(prisma.floor.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'floor-1', block: { property: { providerId: 'provider-1' } } },
+    }));
+  });
 });

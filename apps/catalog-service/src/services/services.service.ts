@@ -81,7 +81,7 @@ export class ServicesService {
   async findServicePricesForProvider(providerId: string, priceIds: string[]) {
     return this.prisma.servicePrice.findMany({
       where: { id: { in: priceIds }, service: { providerId } },
-      select: { id: true },
+      select: { id: true, price: true, service: { select: { name: true } } },
     });
   }
 

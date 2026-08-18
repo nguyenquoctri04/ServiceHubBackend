@@ -55,6 +55,22 @@ export interface EnrichedContract extends Contract {
   terms?: any[];
 }
 
+type ContractWithRelations = Contract & {
+  services: Array<{ servicePriceId: string; [key: string]: unknown }>;
+  terms?: unknown[];
+};
+
+interface ServicePriceReference {
+  id: string;
+  price: unknown;
+  service?: { name?: string | null } | null;
+}
+
+interface RoomReference {
+  id: string;
+  roomNumber?: string | null;
+}
+
 @Injectable()
 export class ProviderContractsService {
   private readonly logger = new Logger(ProviderContractsService.name);
@@ -297,51 +313,57 @@ export class ProviderContractsService {
     });
   }
 
-  /**
-   * Enriches contract data by fetching external references (Customer, Services).
-   */
-  private async enrichContractData(contract: Contract & { services?: any[], terms?: any[] }): Promise<EnrichedContract> {
-    try {
-      const customer = await this.secureRpc.send<CustomerIdentity>(
+  /** Enriches an entire page with bounded, provider-scoped RPC calls. */
+  private async enrichContractsData(contracts: ContractWithRelations[]): Promise<EnrichedContract[]> {
+    if (contracts.length === 0) return [];
+
+    const providerId = contracts[0].providerId;
+    const customerIds = [...new Set(contracts.map((contract) => contract.customerId))];
+    const roomIds = [...new Set(contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []))];
+    const priceIds = [...new Set(contracts.flatMap((contract) => contract.services.map((service) => service.servicePriceId)))];
+    const [identities, rooms, prices] = await Promise.all([
+      this.secureRpc.send<CustomerIdentity[]>(
         this.identityClient,
-        { cmd: 'get.customer.by.id' },
-        { customerId: contract.customerId }
-      ).catch(() => null);
-
-      const customerName = customer?.email || customer?.phone || contract.customerId;
-      const customerPhone = customer?.phone || '';
-
-      const enrichedServices = await Promise.all((contract.services || []).map(async (s: any) => {
-        const priceDetail = await this.secureRpc.send<any>(
+        { cmd: 'provider.identities.batch' },
+        { identityIds: customerIds },
+      ).catch(() => []),
+      roomIds.length === 0
+        ? Promise.resolve<RoomReference[]>([])
+        : this.secureRpc.send<RoomReference[]>(
           this.catalogClient,
-          { cmd: 'get.service.price.by.id' },
-          { servicePriceId: s.servicePriceId }
-        ).catch(() => null);
+          { cmd: 'catalog.rooms.findByIdsForProvider' },
+          { providerId, roomIds },
+        ).catch(() => []),
+      priceIds.length === 0
+        ? Promise.resolve<ServicePriceReference[]>([])
+        : this.secureRpc.send<ServicePriceReference[]>(
+          this.catalogClient,
+          { cmd: 'services.prices.findForProvider' },
+          { providerId, priceIds },
+        ).catch(() => []),
+    ]);
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
+    const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
+    const pricesById = new Map(prices.map((price) => [price.id, price] as const));
 
-        return {
-          ...s,
-          serviceName: priceDetail?.service?.name || 'Unknown Service',
-          price: Number(priceDetail?.price || 0)
-        };
-      }));
-
+    return contracts.map((contract) => {
+      const customer = identitiesById.get(contract.customerId);
+      const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
       return {
         ...contract,
-        customerName,
-        customerPhone,
-        roomName: 'Phòng ' + (contract.roomId ? contract.roomId.slice(-4) : 'Mới'),
-        services: enrichedServices
-      };
-    } catch (error) {
-      this.logger.warn(`Failed to enrich contract data for ID: ${contract.id}`, error.stack);
-      return {
-        ...contract,
-        customerName: 'Unknown',
-        customerPhone: 'Unknown',
-        roomName: 'Unknown',
-        services: contract.services || []
-      };
-    }
+        customerName: customer?.email || customer?.phone || 'Khách hàng',
+        customerPhone: customer?.phone || '',
+        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        services: contract.services.map((service) => {
+          const price = pricesById.get(service.servicePriceId);
+          return {
+            ...service,
+            serviceName: price?.service?.name || 'Chưa có tên dịch vụ',
+            price: Number(price?.price ?? 0),
+          };
+        }),
+      } as EnrichedContract;
+    });
   }
 
   /**
@@ -360,7 +382,7 @@ export class ProviderContractsService {
       include: { services: true, terms: true }
     });
 
-    return Promise.all(contracts.map(c => this.enrichContractData(c)));
+    return this.enrichContractsData(contracts);
   }
   
   /**
@@ -375,7 +397,7 @@ export class ProviderContractsService {
     
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     
-    return this.enrichContractData(contract);
+    return (await this.enrichContractsData([contract]))[0];
   }
 
   async findDraftByRequestNumber(providerId: string, contractNumber: string): Promise<EnrichedContract> {
@@ -384,7 +406,7 @@ export class ProviderContractsService {
       include: { services: true, terms: true },
     });
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy yêu cầu dịch vụ.' });
-    return this.enrichContractData(contract);
+    return (await this.enrichContractsData([contract]))[0];
   }
 
   /**

@@ -45,6 +45,25 @@ export class NotificationsService {
     });
   }
 
+  async createInAppNotification(data: {
+    userId: string;
+    providerId?: string;
+    title: string;
+    content: string;
+  }) {
+    return this.prisma.notification.create({
+      data: {
+        userId: data.userId,
+        providerId: data.providerId ?? null,
+        title: data.title,
+        content: data.content,
+        channel: 'IN_APP',
+        status: 'SENT',
+        sendAt: new Date(),
+      },
+    });
+  }
+
   /**
    * Đánh dấu tất cả thông báo IN_APP của user là đã đọc (status = READ).
    */

@@ -22,4 +22,12 @@ export class CustomerContractsController {
             payload.limit,
         );
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.CREATE_SERVICE_REQUEST })
+    async createServiceRequest(@Payload() payload: {
+        customerId: string;
+        dto: { providerId: string; servicePriceIds: string[]; requireSignature?: boolean };
+    }) {
+        return this.service.createServiceRequest(payload.customerId, payload.dto);
+    }
 }

@@ -78,6 +78,13 @@ export class ServicesService {
     });
   }
 
+  async findServicePricesForProvider(providerId: string, priceIds: string[]) {
+    return this.prisma.servicePrice.findMany({
+      where: { id: { in: priceIds }, service: { providerId } },
+      select: { id: true },
+    });
+  }
+
   // --- Private Helper Methods for Clean Code ---
 
   private async validateAndGetProviderInfo(providerId: string): Promise<ProviderInfo> {

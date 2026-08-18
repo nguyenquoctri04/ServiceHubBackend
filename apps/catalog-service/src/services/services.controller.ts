@@ -26,6 +26,11 @@ export class ServicesController {
     return this.servicesService.findCategories();
   }
 
+  @MessagePattern({ cmd: 'services.prices.findForProvider' })
+  async findServicePricesForProvider(@Payload() payload: { providerId: string; priceIds: string[] }) {
+    return this.servicesService.findServicePricesForProvider(payload.providerId, payload.priceIds);
+  }
+
   @MessagePattern({ cmd: 'services.findOne' })
   async getServiceDetail(@Payload() payload: { providerId: string; serviceId: string }) {
     return this.servicesService.findOneService(payload.providerId, payload.serviceId);

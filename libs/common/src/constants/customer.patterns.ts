@@ -44,6 +44,8 @@ export class CustomerPatterns {
 
     public static readonly GET_POPULAR_SERVICES =
         this.CONTRACTS + "get-popular-services";
+    public static readonly CREATE_SERVICE_REQUEST =
+        this.CONTRACTS + "create-service-request";
 
     /*
         ===============================

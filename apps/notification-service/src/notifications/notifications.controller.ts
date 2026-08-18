@@ -17,6 +17,13 @@ export class NotificationsController {
     return this.service.getUserNotifications(data.userId, data.providerId);
   }
 
+  @MessagePattern({ cmd: 'notifications.createInApp' })
+  async createInAppNotification(
+    @Payload() data: { userId: string; providerId?: string; title: string; content: string },
+  ) {
+    return this.service.createInAppNotification(data);
+  }
+
   /**
    * Đánh dấu tất cả thông báo là đã đọc.
    * Caller: API Gateway → PUT /api/provider/notifications/read-all

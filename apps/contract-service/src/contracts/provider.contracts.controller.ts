@@ -53,6 +53,16 @@ export class ProviderContractsController {
     return this.providerContractsService.blockCustomer(payload);
   }
 
+  @MessagePattern({ cmd: ProviderContractPatterns.RESTRICTIONS_FIND })
+  async findRestrictions(@Payload() payload: { providerId: string; status?: 'ACTIVE' | 'LIFTED' }) {
+    return this.providerContractsService.findRestrictions(payload.providerId, payload.status);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.RESTRICTIONS_LIFT })
+  async liftRestriction(@Payload() payload: { providerId: string; restrictionId: string }) {
+    return this.providerContractsService.liftRestriction(payload.providerId, payload.restrictionId);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.FIND_ONE })
   async findOneContract(@Payload() payload: { providerId: string; contractId: string }) {
     // Calling the service method to find one contract

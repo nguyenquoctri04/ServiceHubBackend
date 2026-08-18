@@ -25,7 +25,7 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
-import { CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationDto, CreateViolationAppealDto, ViolationActionDto } from './dto/contract.dto';
+import { BlockCustomerDto, CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationDto, CreateViolationAppealDto, RestrictionQueryDto, ViolationActionDto } from './dto/contract.dto';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
@@ -604,13 +604,33 @@ export class ProviderController {
   async blockCustomer(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') customerId: string,
-    @Body() dto: { reason: string }
+    @Body() dto: BlockCustomerDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient, 
       { cmd: 'provider.customers.block' }, 
       { providerId, customerId, reason: dto.reason, blockBy: user.id }
+    );
+  }
+
+  @Get('restrictions')
+  async getRestrictions(@CurrentUser() user: CurrentUserPayload, @Query() query: RestrictionQueryDto) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.contractClient,
+      { cmd: ProviderContractPatterns.RESTRICTIONS_FIND },
+      { providerId, status: query.status },
+    );
+  }
+
+  @Put('restrictions/:id/lift')
+  async liftRestriction(@CurrentUser() user: CurrentUserPayload, @Param('id') restrictionId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.contractClient,
+      { cmd: ProviderContractPatterns.RESTRICTIONS_LIFT },
+      { providerId, restrictionId },
     );
   }
 

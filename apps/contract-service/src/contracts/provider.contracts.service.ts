@@ -449,6 +449,64 @@ export class ProviderContractsService {
     return map;
   }
 
+  async findRestrictions(providerId: string, status?: 'ACTIVE' | 'LIFTED') {
+    const restrictions = await this.prisma.restriction.findMany({
+      where: {
+        providerId,
+        scopeType: 'PROVIDER',
+        isDeleted: false,
+        ...(status === 'ACTIVE' ? { endAt: null } : status === 'LIFTED' ? { endAt: { not: null } } : {}),
+      },
+      select: {
+        id: true,
+        customerId: true,
+        reason: true,
+        startAt: true,
+        endAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const customerIds = restrictions.flatMap((restriction) => restriction.customerId ? [restriction.customerId] : []);
+    const identities = customerIds.length === 0
+      ? []
+      : await this.secureRpc.send<CustomerIdentity[]>(
+        this.identityClient,
+        { cmd: 'provider.identities.batch' },
+        { identityIds: customerIds },
+      ).catch(() => []);
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity]));
+
+    return restrictions.map((restriction) => {
+      const identity = restriction.customerId ? identitiesById.get(restriction.customerId) : undefined;
+      return {
+        ...restriction,
+        status: restriction.endAt ? 'LIFTED' : 'ACTIVE',
+        customerName: identity?.email || identity?.phone || 'Khách hàng',
+        customerPhone: identity?.phone || '',
+      };
+    });
+  }
+
+  async liftRestriction(providerId: string, restrictionId: string) {
+    const now = new Date();
+    const result = await this.prisma.restriction.updateMany({
+      where: {
+        id: restrictionId,
+        providerId,
+        scopeType: 'PROVIDER',
+        isDeleted: false,
+        endAt: null,
+      },
+      data: { endAt: now, updatedAt: now },
+    });
+    if (result.count !== 1) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy lệnh chặn đang hiệu lực' });
+    }
+    return { success: true };
+  }
+
   async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
     this.logger.log(`Provider ${payload.providerId} blocking customer ${payload.customerId} with reason: ${payload.reason}`);
 

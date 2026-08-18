@@ -414,7 +414,7 @@ export class PropertiesService {
   async findRoomsByIdsForProvider(providerId: string, roomIds: string[]) {
     return this.prisma.room.findMany({
       where: { id: { in: roomIds }, floor: { block: { property: { providerId } } } },
-      select: { id: true },
+      select: { id: true, roomNumber: true },
     });
   }
 

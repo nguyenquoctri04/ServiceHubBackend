@@ -8,6 +8,7 @@ export class ContractsService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
+    @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
   ) {}
 
@@ -35,7 +36,8 @@ export class ContractsService {
       }
     });
 
-    let customerIds = contracts.map(c => c.customerId);
+    const customerIds = contracts.map(c => c.customerId);
+    const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
     
     // Call Identity Service batch to get customer details
     let customersData = [];
@@ -51,15 +53,25 @@ export class ContractsService {
       console.error('Failed to fetch identity batch', error);
     }
     
-    // Map identity data and apply search/filter
+    const rooms = roomIds.length === 0
+      ? []
+      : await this.secureRpc.send<any[]>(
+        this.catalogClient,
+        { cmd: 'catalog.rooms.findByIdsForProvider' },
+        { providerId, roomIds },
+      ).catch(() => []);
+    const roomsById = new Map(rooms.map((room: any) => [room.id, room]));
+
+    // Map identity and room data in batches, then apply search/filter.
     let results = contracts.map(contract => {
       const identity = customersData.find((i: any) => i.id === contract.customerId);
+      const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
       return {
         id: contract.customerId,
         name: identity?.email || identity?.phone || 'Khách hàng',
         phone: identity?.phone || '',
         contractId: contract.id,
-        room: contract.roomId || 'Chưa xếp phòng',
+        room: room?.roomNumber || 'Chưa xếp phòng',
         status: contract.status,
         joinDate: contract.startDate
       };

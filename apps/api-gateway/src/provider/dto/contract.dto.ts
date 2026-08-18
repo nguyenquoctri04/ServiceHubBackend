@@ -67,6 +67,14 @@ export class CreateViolationDto {
   @IsString() @IsOptional() @MaxLength(100) violationType?: string;
 }
 
+export class BlockCustomerDto {
+  @IsString() @MaxLength(2000) reason: string;
+}
+
+export class RestrictionQueryDto {
+  @IsIn(['ACTIVE', 'LIFTED']) @IsOptional() status?: 'ACTIVE' | 'LIFTED';
+}
+
 export class CreateViolationAppealDto {
   @IsString() @MaxLength(2000) reason: string;
 }

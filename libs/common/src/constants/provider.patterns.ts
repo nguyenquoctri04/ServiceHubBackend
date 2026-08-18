@@ -13,5 +13,7 @@ export class ProviderContractPatterns {
   public static readonly TERMS_FIND = 'contracts.terms.find';
   public static readonly VIOLATIONS_FIND = 'contracts.violations.find';
   public static readonly CUSTOMERS_FIND = 'contracts.customers.find';
+  public static readonly RESTRICTIONS_FIND = 'contracts.restrictions.find';
+  public static readonly RESTRICTIONS_LIFT = 'contracts.restrictions.lift';
   public static readonly PROPERTIES_FIND = 'catalog.properties.find';
 }

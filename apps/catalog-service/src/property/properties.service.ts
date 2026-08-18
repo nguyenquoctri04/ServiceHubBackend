@@ -151,6 +151,48 @@ export class PropertiesService {
     });
   }
 
+  async createRoom(
+    providerId: string,
+    dto: {
+      floorId: string;
+      roomTypeId: string;
+      roomNumber: string;
+      status?: 'ACTIVE' | 'MAINTENANCE';
+    },
+  ) {
+    const floor = await this.prisma.floor.findFirst({
+      where: { id: dto.floorId, block: { property: { providerId } } },
+      select: { id: true, block: { select: { propertyId: true } } },
+    });
+    if (!floor) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy tầng.' });
+    }
+
+    const roomType = await this.prisma.roomType.findFirst({
+      where: {
+        id: dto.roomTypeId,
+        propertyId: floor.block.propertyId,
+        property: { providerId },
+      },
+      select: { id: true },
+    });
+    if (!roomType) {
+      throw new RpcException({ statusCode: 400, message: 'Loại phòng không thuộc bất động sản này.' });
+    }
+
+    const now = new Date();
+    return this.prisma.room.create({
+      data: {
+        floorId: floor.id,
+        roomTypeId: roomType.id,
+        roomNumber: dto.roomNumber.trim(),
+        status: dto.status ?? 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

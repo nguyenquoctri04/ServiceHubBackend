@@ -13,6 +13,7 @@ export const CatalogPatterns = {
 
     ROOMS_FIND_BY_FLOOR: 'catalog.rooms.findByFloor',
     ROOMS_FIND_BY_PROPERTY: 'catalog.rooms.findByProperty',
+    ROOM_CREATE: 'catalog.room.create',
     ROOM_TYPE_CREATE: 'catalog.roomType.create',
     ROOM_TYPES_FIND_BY_PROPERTY: 'catalog.roomTypes.findByProperty',
     ROOMS_FIND_BY_IDS: 'catalog.rooms.findByIds',

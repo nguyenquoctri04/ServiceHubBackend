@@ -118,4 +118,24 @@ describe('PropertiesService', () => {
       }),
     });
   });
+
+  it('creates a room only when its floor and room type belong to the same active-provider property', async () => {
+    prisma.floor = {
+      findFirst: jest.fn().mockResolvedValue({ id: 'floor-1', block: { propertyId: 'property-1' } }),
+    };
+    prisma.roomType = { findFirst: jest.fn().mockResolvedValue({ id: 'room-type-1' }) };
+    prisma.room = { create: jest.fn().mockResolvedValue({ id: 'room-1' }) };
+
+    await service.createRoom('provider-1', {
+      floorId: 'floor-1', roomTypeId: 'room-type-1', roomNumber: 'P.101', status: 'ACTIVE',
+    });
+
+    expect(prisma.roomType.findFirst).toHaveBeenCalledWith({
+      where: { id: 'room-type-1', propertyId: 'property-1', property: { providerId: 'provider-1' } },
+      select: { id: true },
+    });
+    expect(prisma.room.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ floorId: 'floor-1', roomTypeId: 'room-type-1', roomNumber: 'P.101', status: 'ACTIVE' }),
+    });
+  });
 });

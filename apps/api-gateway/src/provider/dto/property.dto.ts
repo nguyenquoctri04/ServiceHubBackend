@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -90,4 +91,20 @@ export class CreateRoomTypeDto {
   @IsOptional()
   @IsIn(['ACTIVE', 'INACTIVE'])
   status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export class CreateRoomDto {
+  @IsUUID()
+  roomTypeId: string;
+
+  @IsUUID()
+  floorId: string;
+
+  @IsString()
+  @MaxLength(100)
+  roomNumber: string;
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'MAINTENANCE'])
+  status?: 'ACTIVE' | 'MAINTENANCE';
 }

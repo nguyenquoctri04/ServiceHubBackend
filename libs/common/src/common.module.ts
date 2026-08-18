@@ -59,6 +59,7 @@ export class CommonModule {
                 SecureRpcService,
                 SERVICE_IDENTITY,
                 HmacGuard,
+                RedisService,
                 ReplayProtectionService,
             ],
         };

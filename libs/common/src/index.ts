@@ -16,6 +16,7 @@ export * from "./security/hmac.type";
 export * from "./security/replay-protection.service";
 export * from "./security/secure-rpc.service";
 export * from "./common.module";
+export * from "./constants/notification.patterns";
 export * from "./rate-limit/rate-limit.module";
 export * from "./rate-limit/redis-throttler-storage.service";
 export * from "./constants/provider.billing.patterns";

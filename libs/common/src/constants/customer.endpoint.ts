@@ -63,6 +63,10 @@ export const CUSTOMER_CONTRACT_ENDPOINT = {
 export const CUSTOMER_IDENTITY_SERVICE_PREFIX = "api/customer/identity";
 
 export const CUSTOMER_EKYC = CUSTOMER_IDENTITY_SERVICE_PREFIX + "/ekyc";
+export const CUSTOMER_EKYC_ENDPOINT = {
+    OCR: "ocr",
+    VERIFY_FACE: "verify-face",
+};
 export const CUSTOMER_IDENTITIES =
     CUSTOMER_IDENTITY_SERVICE_PREFIX + "/identities";
 

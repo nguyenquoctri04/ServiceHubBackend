@@ -91,6 +91,8 @@ export class CustomerPatterns {
         ===============================
     */
     public static readonly EKYC = "customer.ekyc.";
+    public static readonly EKYC_OCR = this.EKYC + "ocr";
+    public static readonly EKYC_VERIFY_FACE = this.EKYC + "verify-face";
     public static readonly IDENTITIES = "customer.identities.";
 
     public static readonly GET_PROVIDER_IN_POPULAR =

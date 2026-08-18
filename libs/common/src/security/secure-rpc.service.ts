@@ -20,6 +20,7 @@ export class SecureRpcService {
         client: ClientProxy,
         pattern: string | object,
         data: any = {},
+        timeoutMs: number = 5000,
     ): Promise<T> {
         const patternKey =
             typeof pattern === "string" ? pattern : JSON.stringify(pattern);

@@ -8,7 +8,6 @@ import {
 } from "@app/common/types/authenticated-user.type";
 import { RedisService, SecureRpcService } from "@app/common";
 import { ClientProxy } from "@nestjs/microservices";
-import { firstValueFrom } from "rxjs";
 import { Patterns } from "@app/common/constants/patterns";
 import { Request } from "express";
 

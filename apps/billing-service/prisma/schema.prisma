@@ -139,7 +139,8 @@ enum InvoiceStatus {
 
 enum PaymentMethod {
   CASH
-  CARD
+  VNPAY
+  ZALOPAY
 }
 
 enum PaymentStatus {

@@ -658,19 +658,18 @@ export class ProviderController {
         customer_id: contract?.customerId || '',
         customer_name: contract?.customerName || 'Khách hàng',
         contract_id: inv.contractId,
+        contract_number: contract?.contractNumber || '',
         room_name: contract?.roomName || 'Chưa xếp phòng',
-        billing_period_start: inv.billingPeriodStart,
-        billing_period_end: inv.billingPeriodEnd,
-        due_date: inv.dueDate,
         total: inv.total,
         status: inv.status,
         created_at: inv.createdAt,
         updated_at: inv.updatedAt,
         items: inv.items?.map((item: any) => ({
           id: item.id,
-          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unitPrice,
           amount: item.amount,
-          type: item.type
         })),
         payments: inv.payments?.map((p: any) => ({
           id: p.id,
@@ -678,7 +677,6 @@ export class ProviderController {
           payment_method: p.paymentMethod,
           status: p.status,
           paid_at: p.paidAt,
-          note: p.note,
           created_at: p.createdAt,
         }))
       };

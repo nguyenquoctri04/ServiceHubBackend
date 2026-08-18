@@ -25,7 +25,7 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
-import { CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationAppealDto, ViolationActionDto } from './dto/contract.dto';
+import { CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationDto, CreateViolationAppealDto, ViolationActionDto } from './dto/contract.dto';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
@@ -570,6 +570,12 @@ export class ProviderController {
   async getViolations(@CurrentUser() user: CurrentUserPayload, @Query('status') status?: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, actorId: user.id, status });
+  }
+
+  @Post('violations')
+  async createViolation(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateViolationDto) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.contractClient, { cmd: 'provider.violations.create' }, { providerId, reportedBy: user.id, ...dto });
   }
 
   @Post('violations/:id/appeals')

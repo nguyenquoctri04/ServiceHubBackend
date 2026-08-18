@@ -98,6 +98,18 @@ export class ViolationsService {
     return { success: true, appeal };
   }
 
+  async createReport(data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
+    const contract = await this.prisma.contract.findFirst({ where: { id: data.contractId, providerId: data.providerId }, select: { id: true, customerId: true } });
+    if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy hợp đồng thuộc workspace.' });
+    const ruleName = data.violationType || ViolationType.OTHER;
+    let rule = await this.prisma.violationRule.findFirst({ where: { name: ruleName, targetType: 'CUSTOMER', isActive: true } });
+    if (!rule) rule = await this.prisma.violationRule.create({ data: { name: ruleName, targetType: 'CUSTOMER', isActive: true, createdAt: new Date(), updatedAt: new Date() } });
+    const now = new Date();
+    const violation = await this.prisma.violationCase.create({ data: { violationRuleId: rule.id, contractId: contract.id, providerId: data.providerId, reportedBy: data.reportedBy, status: 'REPORTED', description: data.description, occurredAt: now, createdAt: now, updatedAt: now } });
+    await this.secureRpc.send(this.notificationClient, { cmd: 'notifications.createInApp' }, { userId: contract.customerId, providerId: data.providerId, title: 'Có báo cáo vi phạm mới', content: 'Một báo cáo vi phạm liên quan đến hợp đồng của bạn đã được tạo. Vui lòng mở hợp đồng để theo dõi.' });
+    return violation;
+  }
+
   /**
    * Xử lý một vi phạm: tạo ViolationAction và tuỳ chọn chuyển status sang RESOLVED.
    * Kiểm tra quyền: violation phải thuộc về providerId được truyền vào để tránh IDOR.

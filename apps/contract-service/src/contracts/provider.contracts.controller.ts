@@ -74,6 +74,11 @@ export class ProviderContractsController {
     return this.providerContractsService.findActiveContractsByRoomIds(payload.providerId, payload.roomIds);
   }
 
+  @MessagePattern({ cmd: ProviderContractPatterns.HAS_ROOM_REFERENCES })
+  async hasRoomReferences(@Payload() payload: { providerId: string; roomId: string }) {
+    return this.providerContractsService.hasRoomReferences(payload.providerId, payload.roomId);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER })
   async findDraftByRequestNumber(@Payload() payload: { providerId: string; contractNumber: string }) {
     return this.providerContractsService.findDraftByRequestNumber(payload.providerId, payload.contractNumber);

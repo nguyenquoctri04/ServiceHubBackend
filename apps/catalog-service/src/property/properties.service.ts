@@ -336,6 +336,14 @@ export class PropertiesService {
     return this.prisma.room.findFirst({ where: { id: roomId, floor: { block: { property: { providerId } } } }, include: { roomType: true } });
   }
 
+  async deleteRoom(providerId: string, roomId: string) {
+    const result = await this.prisma.room.deleteMany({
+      where: { id: roomId, floor: { block: { property: { providerId } } } },
+    });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy phòng.' });
+    return { success: true };
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

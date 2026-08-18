@@ -364,6 +364,20 @@ export class ProviderController {
     return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_UPDATE }, { providerId, roomId, dto });
   }
 
+  @Delete('catalog/rooms/:id')
+  async deleteRoom(@CurrentUser() user: CurrentUserPayload, @Param('id') roomId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    const reference = await this.proxy.send(
+      this.contractClient,
+      { cmd: ProviderContractPatterns.HAS_ROOM_REFERENCES },
+      { providerId, roomId },
+    );
+    if (reference?.hasReferences) {
+      throw new BadRequestException('Không thể xóa phòng đang được hợp đồng tham chiếu.');
+    }
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_DELETE }, { providerId, roomId });
+  }
+
   @Get('catalog/rooms')
   async getRoomsForProvider(@CurrentUser() user: CurrentUserPayload) {
     const providerId = await this.providerCache.resolveActiveProvider(user);

@@ -20,6 +20,7 @@ export const CatalogPatterns = {
     ROOMS_FIND_BY_PROPERTY: 'catalog.rooms.findByProperty',
     ROOM_CREATE: 'catalog.room.create',
     ROOM_UPDATE: 'catalog.room.update',
+    ROOM_DELETE: 'catalog.room.delete',
     ROOM_TYPE_CREATE: 'catalog.roomType.create',
     ROOM_TYPE_UPDATE: 'catalog.roomType.update',
     ROOM_TYPE_DELETE: 'catalog.roomType.delete',

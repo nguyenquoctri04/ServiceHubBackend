@@ -130,6 +130,11 @@ export class PropertiesController {
     return this.propertiesService.updateRoom(data.providerId, data.roomId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.ROOM_DELETE })
+  async deleteRoom(@Payload() data: { providerId: string; roomId: string }) {
+    return this.propertiesService.deleteRoom(data.providerId, data.roomId);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

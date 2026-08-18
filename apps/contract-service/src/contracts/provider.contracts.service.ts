@@ -516,6 +516,11 @@ export class ProviderContractsService {
     });
   }
 
+  async hasRoomReferences(providerId: string, roomId: string) {
+    const count = await this.prisma.contract.count({ where: { providerId, roomId } });
+    return { hasReferences: count > 0 };
+  }
+
   async findRestrictions(providerId: string, status?: 'ACTIVE' | 'LIFTED') {
     const restrictions = await this.prisma.restriction.findMany({
       where: {

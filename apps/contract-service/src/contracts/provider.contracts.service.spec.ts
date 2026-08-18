@@ -37,4 +37,12 @@ describe('ProviderContractsService.findContracts', () => {
     expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: 'services.prices.findForProvider' }, { providerId: 'provider-1', priceIds: ['price-1'] });
     expect(secureRpc.send).toHaveBeenCalledTimes(3);
   });
+
+  it('reports room references only inside the active provider workspace', async () => {
+    const prisma = { contract: { count: jest.fn().mockResolvedValue(1) } };
+    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any);
+
+    await expect(service.hasRoomReferences('provider-1', 'room-1')).resolves.toEqual({ hasReferences: true });
+    expect(prisma.contract.count).toHaveBeenCalledWith({ where: { providerId: 'provider-1', roomId: 'room-1' } });
+  });
 });

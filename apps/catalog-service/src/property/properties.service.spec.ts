@@ -209,4 +209,13 @@ describe('PropertiesService', () => {
     await expect(service.updateRoom('provider-1', 'room-1', { floorId: 'other-floor' }))
       .rejects.toMatchObject({ error: { message: 'Tầng không thuộc bất động sản của bạn.' } });
   });
+
+  it('deletes only a room owned by the active provider', async () => {
+    prisma.room = { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) };
+
+    await expect(service.deleteRoom('provider-1', 'room-1')).resolves.toEqual({ success: true });
+    expect(prisma.room.deleteMany).toHaveBeenCalledWith({
+      where: { id: 'room-1', floor: { block: { property: { providerId: 'provider-1' } } } },
+    });
+  });
 });

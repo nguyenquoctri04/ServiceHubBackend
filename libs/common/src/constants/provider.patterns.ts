@@ -8,6 +8,7 @@ export class ProviderContractPatterns {
   public static readonly FIND = 'contracts.find';
   public static readonly FIND_ONE = 'contracts.findOne';
   public static readonly FIND_BY_IDS = 'contracts.findByIds';
+  public static readonly FIND_ACTIVE_BY_ROOM_IDS = 'contracts.findActiveByRoomIds';
   public static readonly FIND_DRAFT_BY_REQUEST_NUMBER = 'contracts.findDraftByRequestNumber';
   public static readonly TEMPLATES_FIND = 'contracts.templates.find';
   public static readonly TEMPLATES_FIND_ONE = 'contracts.templates.findOne';

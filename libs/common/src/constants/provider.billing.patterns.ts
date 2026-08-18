@@ -5,6 +5,7 @@ export class ProviderBillingPatterns {
 
   // Meters
   public static readonly METERS_FIND = 'billing.meters.find';
+  public static readonly METERS_GROUPED = 'billing.meters.grouped';
   public static readonly METERS_READING_CREATE = 'billing.meters.reading.create';
   public static readonly METERS_OCR = 'billing.meters.ocr';
   public static readonly METERS_OCR_CONFIRM = 'billing.meters.ocr.confirm';

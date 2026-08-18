@@ -38,6 +38,41 @@ export class MetersService {
     return { data, total, page, limit };
   }
 
+  async findGroupedMeters(providerId: string, roomIds: string[], month: number, year: number) {
+    if (roomIds.length === 0) return {};
+    const startOfMonth = new Date(year, month - 1, 1);
+    const startOfNextMonth = new Date(year, month, 1);
+    const readingScope = { roomId: { in: roomIds }, status: 'VALID' as const, meter: { providerId } };
+    const [meters, currentReadings, previousReadings] = await Promise.all([
+      this.prisma.meter.findMany({ where: { providerId, status: 'ACTIVE' }, select: { id: true, serviceId: true, name: true, unit: true } }),
+      this.prisma.meterReading.findMany({
+        where: { ...readingScope, createdAt: { gte: startOfMonth, lt: startOfNextMonth } },
+        distinct: ['roomId', 'meterId'],
+        orderBy: [{ roomId: 'asc' }, { meterId: 'asc' }, { createdAt: 'desc' }],
+      }),
+      this.prisma.meterReading.findMany({
+        where: { ...readingScope, createdAt: { lt: startOfMonth } },
+        distinct: ['roomId', 'meterId'],
+        orderBy: [{ roomId: 'asc' }, { meterId: 'asc' }, { createdAt: 'desc' }],
+      }),
+    ]);
+    const currentByKey = new Map<string, typeof currentReadings[number]>(
+      currentReadings.map((reading) => [`${reading.roomId}:${reading.meterId}`, reading] as const),
+    );
+    const previousByKey = new Map<string, typeof previousReadings[number]>(
+      previousReadings.map((reading) => [`${reading.roomId}:${reading.meterId}`, reading] as const),
+    );
+
+    return Object.fromEntries(roomIds.map((roomId) => [roomId, meters.map((meter) => {
+      const key = `${roomId}:${meter.id}`;
+      return {
+        meter: { id: meter.id, serviceId: meter.serviceId, serviceName: meter.name, unit: meter.unit },
+        currentReading: currentByKey.get(key) ?? null,
+        previousReading: previousByKey.get(key) ?? null,
+      };
+    })]));
+  }
+
   async processOcr(imgUrl: string) {
     const value = await this.ocrService.processImage(imgUrl);
     return { value };

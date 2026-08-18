@@ -490,6 +490,14 @@ export class ProviderContractsService {
     }));
   }
 
+  async findActiveContractsByRoomIds(providerId: string, roomIds: string[]) {
+    if (roomIds.length === 0) return [];
+    return this.prisma.contract.findMany({
+      where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
+      select: { id: true, roomId: true },
+    });
+  }
+
   async findRestrictions(providerId: string, status?: 'ACTIVE' | 'LIFTED') {
     const restrictions = await this.prisma.restriction.findMany({
       where: {

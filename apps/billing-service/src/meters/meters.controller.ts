@@ -17,6 +17,11 @@ export class MetersController {
     return this.service.findMeters(payload);
   }
 
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_GROUPED })
+  async findGroupedMeters(@Payload() payload: { providerId: string; roomIds: string[]; month: number; year: number }) {
+    return this.service.findGroupedMeters(payload.providerId, payload.roomIds, payload.month, payload.year);
+  }
+
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_READING_CREATE })
   async createManualReading(@Payload() payload: { providerId: string; recordedBy: string; dto: CreateMeterReadingDto }) {
     return this.service.createMeterReading(payload.providerId, payload.dto, payload.recordedBy, 'MANUAL');

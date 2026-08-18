@@ -36,7 +36,7 @@ import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-read
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
-import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
+import { GroupedMeterQueryDto, MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, CreateRoomDto, CreateRoomTypeDto, UpdateBlockDto, UpdateFloorDto, UpdatePropertyDto, UpdateRoomDto, UpdateRoomTypeDto } from './dto/property.dto';
@@ -710,44 +710,44 @@ export class ProviderController {
   }
 
   @Get('billing/meters/grouped')
-  async getGroupedMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: any) {
+  async getGroupedMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: GroupedMeterQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const { propertyId, month, year } = query;
-    if (!propertyId) throw new BadRequestException('propertyId is required');
 
-    // 1. Fetch rooms for property
     const rooms = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY },
       { providerId, propertyId },
     );
-    // 2. Fetch active contracts for provider
-    const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
-    // 3. Fetch all meters for provider
-    const metersResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_FIND }, { providerId, limit: 1000 });
-    const allMeters = metersResp?.data || [];
+    const roomIds = (rooms || []).map((room: any) => room.id);
+    const [contracts, metersByRoom] = await Promise.all([
+      this.proxy.send(
+        this.contractClient,
+        { cmd: ProviderContractPatterns.FIND_ACTIVE_BY_ROOM_IDS },
+        { providerId, roomIds },
+      ),
+      this.proxy.send(
+        this.billingClient,
+        { cmd: ProviderBillingPatterns.METERS_GROUPED },
+        { providerId, roomIds, month, year },
+      ),
+    ]);
+    const contractsByRoom = new Map<string, { id: string }>(
+      (contracts || [])
+        .filter((contract: any) => Boolean(contract.roomId))
+        .map((contract: any) => [contract.roomId, { id: contract.id }] as const),
+    );
 
     const occupied: any[] = [];
     const vacant: any[] = [];
 
     (rooms || []).forEach((room: any) => {
-      const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
-      const roomMeters = allMeters.filter((m: any) => m.roomId === room.id);
-      
+      const activeContract = contractsByRoom.get(room.id);
       const card = {
         roomId: room.id,
         roomName: room.roomNumber,
         contractId: activeContract?.id || null,
-        meters: roomMeters.map((m: any) => ({
-          meter: {
-            id: m.id,
-            serviceId: m.serviceId || '',
-            serviceName: m.serviceType === 'ELECTRICITY' ? 'Điện' : (m.serviceType === 'WATER' ? 'Nước' : m.serviceType),
-            unit: m.serviceType === 'ELECTRICITY' ? 'kWh' : (m.serviceType === 'WATER' ? 'm3' : '')
-          },
-          currentReading: null, // Depending on requirements, we can fetch readings for month/year here
-          previousReading: null,
-        }))
+        meters: metersByRoom?.[room.id] || [],
       };
 
       if (activeContract) {

@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsBoolean, ArrayMinSize } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsBoolean, ArrayMinSize, IsIn, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ContractServiceDto {
@@ -59,6 +59,25 @@ export class ContractActionDto {
   @IsString()
   @IsOptional()
   reason?: string;
+}
+
+export class CreateViolationDto {
+  @IsUUID() contractId: string;
+  @IsString() @MaxLength(1000) description: string;
+  @IsString() @IsOptional() @MaxLength(100) violationType?: string;
+}
+
+export class CreateViolationAppealDto {
+  @IsString() @MaxLength(2000) reason: string;
+}
+
+export class ViolationActionDto {
+  @IsIn(['WARNING', 'REQUEST_CORRECTION', 'FINE', 'RESTRICT', 'TERMINATE_CONTRACT', 'NO_ACTION'])
+  actionType: 'WARNING' | 'REQUEST_CORRECTION' | 'FINE' | 'RESTRICT' | 'TERMINATE_CONTRACT' | 'NO_ACTION';
+
+  @IsString() @MaxLength(2000) description: string;
+  @IsBoolean() resolveViolation: boolean;
+  @IsBoolean() @IsOptional() createRestriction?: boolean;
 }
 
 export class ContractQueryDto {

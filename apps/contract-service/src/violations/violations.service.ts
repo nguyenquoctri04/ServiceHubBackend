@@ -1,13 +1,14 @@
 import { Injectable } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
-import { ViolationTargetType, AppealStatus, ViolationActionType } from '@prisma/client-contract';
+import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
 import { ViolationType } from '@app/common';
 
 @Injectable()
 export class ViolationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findByProvider(providerId: string, status?: string) {
+  async findByProvider(providerId: string, actorId: string, status?: string) {
     const where: any = {
       contract: {
         providerId
@@ -29,7 +30,8 @@ export class ViolationsService {
       orderBy: { occurredAt: 'desc' }
     });
 
-    // Map to FE expected format loosely
+    // Never expose reportedBy. The UI receives only permissions derived from
+    // the authenticated actor, so the reporter's identity remains private.
     return cases.map(c => ({
       id: c.id,
       contractId: c.contractId,
@@ -41,8 +43,9 @@ export class ViolationsService {
       description: c.description,
       status: c.status,
       violationDate: c.occurredAt,
-      reporterType: c.reportedBy === providerId ? ViolationTargetType.PROVIDER : ViolationTargetType.CUSTOMER,
-      violatorType: c.reportedBy === providerId ? ViolationTargetType.CUSTOMER : ViolationTargetType.PROVIDER,
+      reportView: c.reportedBy === actorId ? 'REPORTED_BY_ME' : 'REPORTED_AGAINST_ME',
+      canProviderProcess: c.reportedBy === actorId && c.status === 'REPORTED',
+      canProviderAppeal: c.reportedBy !== actorId && c.status === 'REPORTED',
       actions: c.actions.map(a => ({
         id: a.id,
         actionType: a.actionType,
@@ -67,9 +70,15 @@ export class ViolationsService {
       }
     });
 
-    if (!violation) {
-      throw new Error('Violation case not found');
+    if (!violation || violation.reportedBy === data.appellantId) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể khiếu nại.' });
     }
+
+    const existingAppeal = await this.prisma.violationAppeal.findFirst({
+      where: { violationCaseId: data.violationCaseId, appellantId: data.appellantId, status: AppealStatus.PENDING },
+      select: { id: true },
+    });
+    if (existingAppeal) throw new RpcException({ statusCode: 409, message: 'Khiếu nại đang được xử lý.' });
 
     const appeal = await this.prisma.violationAppeal.create({
       data: {
@@ -98,11 +107,11 @@ export class ViolationsService {
     resolveViolation: boolean;
   }) {
     const violation = await this.prisma.violationCase.findFirst({
-      where: { id: data.violationCaseId, providerId: data.providerId },
+      where: { id: data.violationCaseId, providerId: data.providerId, reportedBy: data.performedBy, status: 'REPORTED' },
     });
 
     if (!violation) {
-      throw new Error('Violation case not found or access denied');
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể xử lý.' });
     }
 
     const now = new Date();

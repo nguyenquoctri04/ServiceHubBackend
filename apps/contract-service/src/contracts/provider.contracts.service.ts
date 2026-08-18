@@ -335,6 +335,15 @@ export class ProviderContractsService {
     return this.enrichContractData(contract);
   }
 
+  async findDraftByRequestNumber(providerId: string, contractNumber: string): Promise<EnrichedContract> {
+    const contract = await this.prisma.contract.findFirst({
+      where: { providerId, contractNumber, status: ContractStatus.DRAFT },
+      include: { services: true, terms: true },
+    });
+    if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy yêu cầu dịch vụ.' });
+    return this.enrichContractData(contract);
+  }
+
   /**
    * Retrieves all templates for a provider.
    */

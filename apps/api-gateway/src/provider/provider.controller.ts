@@ -505,6 +505,12 @@ export class ProviderController {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, ...query });
   }
 
+  @Get('contracts/requests/:requestNumber')
+  async getDraftByRequestNumber(@CurrentUser() user: CurrentUserPayload, @Param('requestNumber') contractNumber: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER }, { providerId, contractNumber });
+  }
+
   @Get('contracts/:id')
   async getContractById(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);

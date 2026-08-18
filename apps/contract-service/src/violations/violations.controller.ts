@@ -30,6 +30,7 @@ export class ViolationsController {
       description: string;
       performedBy: string;
       resolveViolation: boolean;
+      createRestriction?: boolean;
     },
   ) {
     return this.service.handleAction(data);

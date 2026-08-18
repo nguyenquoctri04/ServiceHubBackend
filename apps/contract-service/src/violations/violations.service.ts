@@ -105,34 +105,29 @@ export class ViolationsService {
     description: string;
     performedBy: string;
     resolveViolation: boolean;
+    createRestriction?: boolean;
   }) {
-    const violation = await this.prisma.violationCase.findFirst({
-      where: { id: data.violationCaseId, providerId: data.providerId, reportedBy: data.performedBy, status: 'REPORTED' },
-    });
-
-    if (!violation) {
-      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể xử lý.' });
-    }
-
     const now = new Date();
-
-    const action = await this.prisma.violationAction.create({
-      data: {
-        violationCaseId: data.violationCaseId,
-        performedBy: data.performedBy,
-        actionType: data.actionType as ViolationActionType,
-        reason: data.description,
-        createdAt: now,
-      },
-    });
-
-    if (data.resolveViolation) {
-      await this.prisma.violationCase.update({
-        where: { id: data.violationCaseId },
-        data: { status: 'RESOLVED', updatedAt: now },
+    return this.prisma.$transaction(async (tx) => {
+      const violation = await tx.violationCase.findFirst({
+        where: { id: data.violationCaseId, providerId: data.providerId, reportedBy: data.performedBy, status: 'REPORTED' },
+        include: { contract: { select: { id: true, customerId: true, status: true } } },
       });
-    }
-
-    return { success: true, action };
+      if (!violation) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể xử lý.' });
+      const terminates = data.actionType === 'TERMINATE_CONTRACT';
+      if (terminates && violation.contract.status !== 'ACTIVE') {
+        throw new RpcException({ statusCode: 400, message: 'Chỉ có thể chấm dứt hợp đồng đang hiệu lực.' });
+      }
+      const action = await tx.violationAction.create({
+        data: { violationCaseId: violation.id, performedBy: data.performedBy, actionType: data.actionType as ViolationActionType, reason: data.description, createdAt: now },
+      });
+      if (terminates) await tx.contract.update({ where: { id: violation.contractId }, data: { status: 'TERMINATED', updatedAt: now } });
+      if (terminates && data.createRestriction) {
+        const existing = await tx.restriction.findFirst({ where: { providerId: data.providerId, customerId: violation.contract.customerId, scopeType: 'PROVIDER', isDeleted: false, OR: [{ endAt: null }, { endAt: { gt: now } }] }, select: { id: true } });
+        if (!existing) await tx.restriction.create({ data: { violationActionId: action.id, providerId: data.providerId, customerId: violation.contract.customerId, scopeType: 'PROVIDER', reason: data.description, startAt: now, createdBy: data.performedBy, createdAt: now, updatedAt: now } });
+      }
+      if (data.resolveViolation || terminates) await tx.violationCase.update({ where: { id: violation.id }, data: { status: 'RESOLVED', updatedAt: now } });
+      return { success: true, action, contractId: violation.contractId, customerId: violation.contract.customerId, terminated: terminates };
+    }, { isolationLevel: 'Serializable' });
   }
 }

@@ -58,6 +58,17 @@ export class CreateBlockDto {
   status?: 'ACTIVE' | 'INACTIVE';
 }
 
+export class UpdateBlockDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  blockName?: string;
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
 export class CreateFloorDto {
   @IsString()
   @MaxLength(100)

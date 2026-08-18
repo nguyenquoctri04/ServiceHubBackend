@@ -154,4 +154,18 @@ describe('PropertiesService', () => {
       error: { message: 'Không thể xóa tầng đang có phòng.' },
     });
   });
+
+  it('updates only a block owned by the active provider', async () => {
+    prisma.block = {
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      findFirst: jest.fn().mockResolvedValue({ id: 'block-1', blockName: 'Khu B' }),
+    };
+
+    await service.updateBlock('provider-1', 'block-1', { blockName: 'Khu B' });
+
+    expect(prisma.block.updateMany).toHaveBeenCalledWith({
+      where: { id: 'block-1', property: { providerId: 'provider-1' } },
+      data: expect.objectContaining({ blockName: 'Khu B' }),
+    });
+  });
 });

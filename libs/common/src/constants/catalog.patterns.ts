@@ -6,6 +6,7 @@ export const CatalogPatterns = {
     PROPERTIES_FIND_BY_PROVIDER: 'catalog.properties.findByProvider',
 
     BLOCK_CREATE: 'catalog.block.create',
+    BLOCK_UPDATE: 'catalog.block.update',
     BLOCK_DELETE: 'catalog.block.delete',
     BLOCKS_FIND_BY_PROPERTY: 'catalog.blocks.findByProperty',
 

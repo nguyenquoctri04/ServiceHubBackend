@@ -109,6 +109,25 @@ export class PropertiesService {
     return { success: true };
   }
 
+  async updateBlock(
+    providerId: string,
+    blockId: string,
+    dto: { blockName?: string; status?: 'ACTIVE' | 'INACTIVE' },
+  ) {
+    const result = await this.prisma.block.updateMany({
+      where: { id: blockId, property: { providerId } },
+      data: {
+        ...(dto.blockName !== undefined && { blockName: dto.blockName.trim() }),
+        ...(dto.status !== undefined && { status: dto.status }),
+        updatedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy khu nhà.' });
+    }
+    return this.prisma.block.findFirst({ where: { id: blockId, property: { providerId } } });
+  }
+
   async createFloor(
     providerId: string,
     blockId: string,

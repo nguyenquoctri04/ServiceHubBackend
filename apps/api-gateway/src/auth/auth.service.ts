@@ -2,11 +2,10 @@ import { Inject, Injectable, UnauthorizedException, HttpException } from '@nestj
 import { ClientProxy } from '@nestjs/microservices';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom, catchError, throwError } from 'rxjs';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 
-import { RedisService } from '@app/common';
+import { RedisService, SecureRpcService } from '@app/common';
 import { AuthenticatedUser, JwtPayload } from '@app/common/types/authenticated-user.type';
 
 @Injectable()
@@ -16,33 +15,39 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   async register(registerDto: RegisterDto, ipAddress?: string) {
-    // Send register payload to Identity Service
-    const response = await firstValueFrom(
-      this.identityClient.send({ cmd: 'auth.register' }, { ...registerDto, ipAddress }).pipe(
-        catchError(err => {
-          console.error('RPC Error in register:', err);
-          const errMsg = err?.message || err?.response?.message || err || 'Unknown RPC Error';
-          return throwError(() => new HttpException(errMsg, err?.status || err?.statusCode || 400));
-        })
-      )
-    );
-    return response;
+    try {
+      return await this.secureRpc.send(
+        this.identityClient,
+        { cmd: 'auth.register' },
+        { ...registerDto, ipAddress },
+      );
+    } catch (err: any) {
+      console.error('RPC Error in register:', err);
+      const errMsg = err?.message || err?.response?.message || 'Unknown RPC Error';
+      const errStatus = err?.statusCode || err?.status || err?.response?.statusCode || 400;
+      throw new HttpException(errMsg, errStatus);
+    }
   }
 
   async login(loginDto: LoginDto, ipAddress?: string) {
-    // Send login payload to Identity Service to verify credentials
-    const response = await firstValueFrom(
-      this.identityClient.send({ cmd: 'auth.login' }, { ...loginDto, ipAddress }).pipe(
-        catchError(err => {
-          console.error('RPC Error in login:', err);
-          const errMsg = err?.message || err?.response?.message || err || 'Unknown RPC Error';
-          return throwError(() => new HttpException(errMsg, err?.status || err?.statusCode || 401));
-        })
-      )
-    );
+    let response: any;
+
+    try {
+      response = await this.secureRpc.send(
+        this.identityClient,
+        { cmd: 'auth.login' },
+        { ...loginDto, ipAddress },
+      );
+    } catch (err: any) {
+      console.error('RPC Error in login:', err);
+      const errMsg = err?.message || err?.response?.message || 'Unknown RPC Error';
+      const errStatus = err?.statusCode || err?.status || err?.response?.statusCode || 401;
+      throw new HttpException(errMsg, errStatus);
+    }
 
     // If valid, sign Access & Refresh Tokens and store in Redis
     const userPayload = response.user || response;

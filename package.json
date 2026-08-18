@@ -28,7 +28,6 @@
     "prisma:reset:audit": "prisma migrate reset --schema=apps/audit-service/prisma/schema.prisma --force",
     "prisma:pull": "prisma db pull --schema=apps/identity-service/prisma/schema.prisma && prisma db pull --schema=apps/catalog-service/prisma/schema.prisma && prisma db pull --schema=apps/contract-service/prisma/schema.prisma && prisma db pull --schema=apps/signature-service/prisma/schema.prisma && prisma db pull --schema=apps/billing-service/prisma/schema.prisma && prisma db pull --schema=apps/notification-service/prisma/schema.prisma && prisma db pull --schema=apps/audit-service/prisma/schema.prisma",
     "prisma:push": "prisma db push --schema=apps/identity-service/prisma/schema.prisma && prisma db push --schema=apps/catalog-service/prisma/schema.prisma && prisma db push --schema=apps/contract-service/prisma/schema.prisma && prisma db push --schema=apps/signature-service/prisma/schema.prisma && prisma db push --schema=apps/billing-service/prisma/schema.prisma && prisma db push --schema=apps/notification-service/prisma/schema.prisma && prisma db push --schema=apps/audit-service/prisma/schema.prisma",
-    
     "seed:identity": "npx tsx apps/identity-service/prisma/seed.ts",
     "seed:catalog": "npx tsx apps/catalog-service/prisma/seed.ts",
     "seed:contract": "npx tsx apps/contract-service/prisma/seed.ts",
@@ -44,6 +43,8 @@
     "@nestjs/microservices": "^10.3.0",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.3.0",
+    "@nestjs/platform-socket.io": "^10.3.0",
+    "@nestjs/websockets": "^10.3.0",
     "@prisma/client": "^5.10.0",
     "@types/uuid": "^9.0.8",
     "bcrypt": "^5.1.1",
@@ -56,6 +57,7 @@
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.1",
     "rxjs": "^7.8.1",
+    "socket.io": "^4.7.5",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

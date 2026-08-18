@@ -6,9 +6,8 @@ import {
   AuthenticatedUser,
   JwtPayload,
 } from "@app/common/types/authenticated-user.type";
-import { RedisService } from "@app/common";
+import { RedisService, SecureRpcService } from "@app/common";
 import { ClientProxy } from "@nestjs/microservices";
-import { firstValueFrom } from "rxjs";
 import { Patterns } from "@app/common/constants/patterns";
 import { Request } from "express";
 
@@ -18,6 +17,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @Inject("IDENTITY_SERVICE") private readonly identityClient: ClientProxy,
     private configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly secureRpc: SecureRpcService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -55,11 +55,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("Invalid access token");
     }
 
-    const isActive = await firstValueFrom(
-      this.identityClient.send(
-        { cmd: Patterns.CHECK_USER_ACTIVE },
-        { userId: payload.sub },
-      ),
+    const isActive = await this.secureRpc.send<boolean>(
+      this.identityClient,
+      { cmd: Patterns.CHECK_USER_ACTIVE },
+      { userId: payload.sub },
     );
 
     if (!isActive) {

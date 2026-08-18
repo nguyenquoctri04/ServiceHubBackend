@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
-import { firstValueFrom } from "rxjs";
+import { firstValueFrom, timeout } from "rxjs";
 import { HmacService } from "./hmac.service";
 import { ServiceIdentity } from "./hmac.type";
 
@@ -19,6 +19,7 @@ export class SecureRpcService {
         client: ClientProxy,
         pattern: string | object,
         data: any = {},
+        timeoutMs: number = 5000,
     ): Promise<T> {
         const patternKey =
             typeof pattern === "string" ? pattern : JSON.stringify(pattern);
@@ -30,6 +31,8 @@ export class SecureRpcService {
             patternKey,
         );
 
-        return firstValueFrom(client.send<T>(pattern, request));
+        return firstValueFrom(
+            client.send<T>(pattern, request).pipe(timeout(timeoutMs)),
+        );
     }
 }

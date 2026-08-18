@@ -5,8 +5,6 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 
-import { RedisService } from '@app/common';
-
 @Module({
   imports: [
     JwtModule.registerAsync({
@@ -18,7 +16,7 @@ import { RedisService } from '@app/common';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, RedisService],
+  providers: [AuthService, JwtStrategy],
 })
 export class AuthModule {}
 

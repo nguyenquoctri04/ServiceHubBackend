@@ -42,6 +42,9 @@ out/
 **/generated/
 apps/**/node_modules/
 
+# Prisma local seed files with sample/private accounts
+apps/identity-service/prisma/seed.ts
+
 # ------------------------------------------------------------------------------
 # Logs
 # ------------------------------------------------------------------------------

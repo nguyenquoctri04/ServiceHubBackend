@@ -14,3 +14,4 @@ export * from "./security/hmac.type";
 export * from "./security/replay-protection.service";
 export * from "./security/secure-rpc.service";
 export * from "./common.module";
+export * from "./constants/notification.patterns";

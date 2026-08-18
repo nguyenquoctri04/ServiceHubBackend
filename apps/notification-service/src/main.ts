@@ -6,7 +6,14 @@ import { GlobalExceptionFilter, ResponseInterceptor, parseRedisUrl, HmacGuard } 
 import { NotificationServiceModule } from './notification-service.module';
 
 async function bootstrap() {
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(NotificationServiceModule, {
+  const app = await NestFactory.create(NotificationServiceModule);
+
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    credentials: true,
+  });
+
+  app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.REDIS,
     options: parseRedisUrl(process.env.REDIS_BROKER_URL),
   });
@@ -16,7 +23,10 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
   app.useGlobalGuards(app.get(HmacGuard));
 
-  await app.listen();
-  console.log('✅ Notification Service is running and connected to Redis');
+  await app.startAllMicroservices();
+  await app.listen(process.env.PORT_NOTIFICATION_SERVICE || 3009);
+
+  console.log('✅ Notification Service is running with Redis and WebSocket');
+  console.log(`Notification WebSocket namespace: ${await app.getUrl()}/notifications`);
 }
 bootstrap();

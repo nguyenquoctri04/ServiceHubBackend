@@ -8,6 +8,7 @@ export const CatalogPatterns = {
     BLOCK_CREATE: 'catalog.block.create',
     BLOCKS_FIND_BY_PROPERTY: 'catalog.blocks.findByProperty',
 
+    FLOOR_CREATE: 'catalog.floor.create',
     FLOORS_FIND_BY_BLOCK: 'catalog.floors.findByBlock',
 
     ROOMS_FIND_BY_FLOOR: 'catalog.rooms.findByFloor',

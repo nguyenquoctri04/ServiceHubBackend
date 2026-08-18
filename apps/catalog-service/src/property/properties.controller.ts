@@ -54,6 +54,18 @@ export class PropertiesController {
     return this.propertiesService.createBlock(data.providerId, data.propertyId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.FLOOR_CREATE })
+  async createFloor(
+    @Payload()
+    data: {
+      providerId: string;
+      blockId: string;
+      dto: { floorName: string; status?: 'ACTIVE' | 'INACTIVE' };
+    },
+  ) {
+    return this.propertiesService.createFloor(data.providerId, data.blockId, data.dto);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

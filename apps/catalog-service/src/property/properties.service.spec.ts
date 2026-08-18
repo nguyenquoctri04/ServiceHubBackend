@@ -92,4 +92,15 @@ describe('PropertiesService', () => {
     });
     expect(prisma.block.create).not.toHaveBeenCalled();
   });
+
+  it('creates a floor only under a block owned by the active provider', async () => {
+    prisma.block = { findFirst: jest.fn().mockResolvedValue({ id: 'block-1' }) };
+    prisma.floor = { create: jest.fn().mockResolvedValue({ id: 'floor-1' }) };
+
+    await service.createFloor('provider-1', 'block-1', { floorName: 'Tầng 1' });
+
+    expect(prisma.floor.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ blockId: 'block-1', floorName: 'Tầng 1', status: 'ACTIVE' }),
+    });
+  });
 });

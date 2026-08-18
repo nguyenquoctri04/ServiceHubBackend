@@ -8,6 +8,39 @@ datasource db {
   url      = env("NOTIFICATION_DATABASE_URL")
 }
 
+model NotificationTemplate {
+  id            String                     @id @default(uuid()) @db.Uuid
+  code          String                     @unique
+  title         String
+  content       String
+  channel       NotificationChannel
+  status        NotificationTemplateStatus
+  createdAt     DateTime                   @map("created_at")
+  updatedAt     DateTime                   @map("updated_at")
+  notifications Notification[]
+
+  @@map("notification_template")
+}
+
+model Notification {
+  id         String                @id @default(uuid()) @db.Uuid
+  userId     String                @map("user_id") @db.Uuid
+  templateId String?               @map("template_id") @db.Uuid
+  title      String?
+  content    String?
+  channel    NotificationChannel
+  status     NotificationStatus
+  sendAt     DateTime              @map("send_at")
+  providerId String?               @map("provider_id") @db.Uuid
+  template   NotificationTemplate? @relation(fields: [templateId], references: [id])
+
+  @@index([userId])
+  @@index([userId, providerId])
+  @@index([templateId])
+  @@index([status, sendAt])
+  @@map("notification")
+}
+
 enum NotificationChannel {
   EMAIL
   SMS
@@ -25,48 +58,4 @@ enum NotificationStatus {
   SENT
   FAILED
   READ
-}
-
-model NotificationTemplate {
-  id   String @id @default(uuid()) @db.Uuid
-  code String @unique
-
-  title   String
-  content String
-
-  channel NotificationChannel
-  status  NotificationTemplateStatus
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  notifications Notification[]
-
-  @@map("notification_template")
-}
-
-model Notification {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity-service
-  userId     String  @map("user_id") @db.Uuid
-  providerId String? @map("provider_id") @db.Uuid
-
-  templateId String? @map("template_id") @db.Uuid
-
-  title   String?
-  content String?
-
-  channel NotificationChannel
-  status  NotificationStatus
-
-  sendAt DateTime @map("send_at")
-
-  template NotificationTemplate? @relation(fields: [templateId], references: [id])
-
-  @@index([userId])
-  @@index([userId, providerId])
-  @@index([templateId])
-  @@index([status, sendAt])
-  @@map("notification")
 }

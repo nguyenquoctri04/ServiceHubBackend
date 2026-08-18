@@ -1,0 +1,1 @@
+export * from "./provider-detail.types";

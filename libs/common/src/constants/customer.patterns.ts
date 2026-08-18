@@ -25,14 +25,28 @@ export class CustomerPatterns {
 
     public static readonly GET_HOME_CATEGORIES =
         this.CATEGORIES + "get-home-categories";
+
     public static readonly GET_ACTIVE_SERVICES_FOR_POPULAR =
         this.SERVICES + "get-active-services-for-popular";
+
     public static readonly GET_POPULAR_SERVICE_DETAIL =
         this.SERVICES + "get-popular-services";
+
     public static readonly GET_SERVICE_PRICE_MAPPINGS =
         this.SERVICES + "get-service-price-mappings";
+
     public static readonly GET_SERVICES = this.SERVICES + "get-services";
+
     public static readonly GET_CATEGORIES = this.CATEGORIES + "get-categories";
+
+    public static readonly GET_SERVICE_DETAIL =
+        this.SERVICES + "get-service-detail";
+
+    public static readonly GET_RELATED_SERVICES =
+        this.SERVICES + "get-related-services";
+
+    public static readonly GET_PROVIDER_SERVICES_AND_PROPERTIES =
+        this.SERVICES + "get-provider-services-and-properties";
 
     /*
         ===============================
@@ -47,6 +61,18 @@ export class CustomerPatterns {
     public static readonly GET_POPULAR_SERVICES =
         this.CONTRACTS + "get-popular-services";
 
+    public static readonly GET_MARKETPLACE_RESTRICTIONS =
+        this.CONTRACTS + "get-marketplace-restrictions";
+
+    public static readonly CHECK_SERVICE_ACCESS =
+        this.CONTRACTS + "check-service-access";
+
+    public static readonly CHECK_PROVIDER_ACCESS =
+        this.CONTRACTS + "check-provider-access";
+
+    public static readonly GET_PROVIDER_SERVICE_INSIGHTS =
+        this.CONTRACTS + "get-provider-service-insights";
+
     /*
         ===============================
             Identity & eKYC Service
@@ -57,6 +83,15 @@ export class CustomerPatterns {
 
     public static readonly GET_PROVIDER_IN_POPULAR =
         this.IDENTITIES + "get-provider-in-popular";
+
+    public static readonly GET_PROVIDER_SUMMARY =
+        this.IDENTITIES + "get-provider-summary";
+
+    public static readonly GET_ACCESSIBLE_PROVIDERS =
+        this.IDENTITIES + "get-accessible-providers";
+
+    public static readonly GET_PROVIDER_DETAIL_FOR_CUSTOMER =
+        this.IDENTITIES + "get-provider-detail-for-customer";
 
     /*
         ===============================

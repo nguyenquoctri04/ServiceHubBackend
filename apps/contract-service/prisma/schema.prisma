@@ -8,6 +8,222 @@ datasource db {
   url      = env("CONTRACT_DATABASE_URL")
 }
 
+model Contract {
+  id               String            @id @default(uuid()) @db.Uuid
+  contractNumber   String            @unique @map("contract_number")
+  providerId       String            @map("provider_id") @db.Uuid
+  roomId           String?           @map("room_id") @db.Uuid
+  customerId       String            @map("customer_id") @db.Uuid
+  startDate        DateTime          @map("start_date") @db.Date
+  endDate          DateTime?         @map("end_date") @db.Date
+  status           ContractStatus
+  requireSignature Boolean           @default(false) @map("require_signature")
+  signedAt         DateTime?         @map("signed_at")
+  createdAt        DateTime          @map("created_at")
+  updatedAt        DateTime          @map("updated_at")
+  billingPeriods   BillingPeriod[]
+  files            ContractFile[]
+  services         ContractService[]
+  terms            ContractTerm[]
+  violationCases   ViolationCase[]
+
+  @@index([providerId])
+  @@index([customerId])
+  @@index([roomId])
+  @@index([status])
+  @@index([providerId, status, customerId])
+  @@map("contract")
+}
+
+model ContractService {
+  id             String   @id @default(uuid()) @db.Uuid
+  contractId     String   @map("contract_id") @db.Uuid
+  servicePriceId String   @map("service_price_id") @db.Uuid
+  quantity       Decimal? @db.Decimal(18, 2)
+  createdAt      DateTime @map("created_at")
+  contract       Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@index([servicePriceId])
+  @@map("contract_service")
+}
+
+model ContractTemplate {
+  id          String                  @id @default(uuid()) @db.Uuid
+  providerId  String?                 @map("provider_id") @db.Uuid
+  name        String?
+  description String?
+  content     Json?
+  status      ContractTemplateStatus?
+  createdAt   DateTime?               @map("created_at")
+  updatedAt   DateTime?               @map("updated_at")
+
+  @@index([providerId])
+  @@map("contract_template")
+}
+
+model TemplateVariable {
+  id        String @id @default(uuid()) @db.Uuid
+  key       String
+  label     String
+  groupName String @map("group_name")
+
+  @@unique([key, groupName])
+  @@map("template_variable")
+}
+
+model ContractFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  contractId   String   @map("contract_id") @db.Uuid
+  pdfUrl       String   @map("pdf_url")
+  hashContract String?  @map("hash_contract")
+  contract     Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@map("contract_file")
+}
+
+model Term {
+  id        String         @id @default(uuid()) @db.Uuid
+  content   String
+  status    TermStatus
+  createdAt DateTime       @map("created_at")
+  contracts ContractTerm[]
+
+  @@map("term")
+}
+
+model ContractTerm {
+  id         String   @id @default(uuid()) @db.Uuid
+  contractId String   @map("contract_id") @db.Uuid
+  termId     String   @map("term_id") @db.Uuid
+  createdAt  DateTime @map("created_at")
+  contract   Contract @relation(fields: [contractId], references: [id])
+  term       Term     @relation(fields: [termId], references: [id])
+
+  @@unique([contractId, termId])
+  @@map("contract_term")
+}
+
+model BillingPeriod {
+  id          String   @id @default(uuid()) @db.Uuid
+  contractId  String   @map("contract_id") @db.Uuid
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+  contract    Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId, periodStart])
+  @@map("billing_period")
+}
+
+model ViolationRule {
+  id          String              @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  targetType  ViolationTargetType @map("target_type")
+  isActive    Boolean             @default(true) @map("is_active")
+  createdAt   DateTime            @map("created_at")
+  updatedAt   DateTime            @map("updated_at")
+  cases       ViolationCase[]
+
+  @@map("violation_rule")
+}
+
+model ViolationCase {
+  id              String              @id @default(uuid()) @db.Uuid
+  violationRuleId String              @map("violation_rule_id") @db.Uuid
+  contractId      String              @map("contract_id") @db.Uuid
+  providerId      String              @map("provider_id") @db.Uuid
+  reportedBy      String              @map("reported_by") @db.Uuid
+  serviceId       String?             @map("service_id") @db.Uuid
+  status          ViolationCaseStatus
+  description     String
+  occurredAt      DateTime            @map("occurred_at")
+  createdAt       DateTime            @map("created_at")
+  updatedAt       DateTime            @map("updated_at")
+  actions         ViolationAction[]
+  appeals         ViolationAppeal[]
+  contract        Contract            @relation(fields: [contractId], references: [id])
+  violationRule   ViolationRule       @relation(fields: [violationRuleId], references: [id])
+  evidence        ViolationEvidence[]
+
+  @@index([violationRuleId])
+  @@index([contractId])
+  @@index([reportedBy])
+  @@index([serviceId])
+  @@index([providerId, status, createdAt])
+  @@map("violation_case")
+}
+
+model ViolationEvidence {
+  id              String        @id @default(uuid()) @db.Uuid
+  violationCaseId String        @map("violation_case_id") @db.Uuid
+  fileUrl         String        @map("file_url")
+  violationCase   ViolationCase @relation(fields: [violationCaseId], references: [id])
+
+  @@index([violationCaseId])
+  @@map("violation_evidence")
+}
+
+model ViolationAction {
+  id              String              @id @default(uuid()) @db.Uuid
+  violationCaseId String              @map("violation_case_id") @db.Uuid
+  performedBy     String              @map("performed_by") @db.Uuid
+  actionType      ViolationActionType @map("action_type")
+  reason          String?
+  amount          Decimal?            @db.Decimal(18, 2)
+  createdAt       DateTime            @map("created_at")
+  restrictions    Restriction[]
+  violationCase   ViolationCase       @relation(fields: [violationCaseId], references: [id])
+
+  @@index([violationCaseId])
+  @@index([performedBy])
+  @@map("violation_action")
+}
+
+model Restriction {
+  id                String               @id @default(uuid()) @db.Uuid
+  violationActionId String               @map("violation_action_id") @db.Uuid
+  providerId        String?              @map("provider_id") @db.Uuid
+  customerId        String?              @map("customer_id") @db.Uuid
+  serviceId         String?              @map("service_id") @db.Uuid
+  scopeType         RestrictionScopeType @map("scope_type")
+  reason            String
+  startAt           DateTime             @map("start_at")
+  endAt             DateTime?            @map("end_at")
+  createdBy         String               @map("created_by") @db.Uuid
+  isDeleted         Boolean              @default(false) @map("is_deleted")
+  createdAt         DateTime             @map("created_at")
+  updatedAt         DateTime             @map("updated_at")
+  violationAction   ViolationAction      @relation(fields: [violationActionId], references: [id])
+
+  @@index([providerId])
+  @@index([customerId])
+  @@index([serviceId])
+  @@index([scopeType])
+  @@map("restriction")
+}
+
+model ViolationAppeal {
+  id              String        @id @default(uuid()) @db.Uuid
+  violationCaseId String        @map("violation_case_id") @db.Uuid
+  appellantId     String        @map("appellant_id") @db.Uuid
+  reviewedBy      String?       @map("reviewed_by") @db.Uuid
+  reason          String
+  status          AppealStatus
+  reviewedAt      DateTime?     @map("reviewed_at")
+  resolutionNote  String?       @map("resolution_note")
+  createdAt       DateTime      @map("created_at")
+  updatedAt       DateTime      @map("updated_at")
+  violationCase   ViolationCase @relation(fields: [violationCaseId], references: [id])
+
+  @@index([violationCaseId])
+  @@index([appellantId])
+  @@map("violation_appeal")
+}
+
 enum ContractStatus {
   DRAFT
   PENDING_SIGNATURE
@@ -61,270 +277,4 @@ enum AppealStatus {
   APPROVED
   REJECTED
   CANCELLED
-}
-
-model Contract {
-  id             String @id @default(uuid()) @db.Uuid
-  contractNumber String @unique @map("contract_number")
-
-  // Cross-service references
-  providerId       String         @map("provider_id") @db.Uuid
-  roomId           String?        @map("room_id") @db.Uuid
-  customerId       String         @map("customer_id") @db.Uuid
-
-  startDate DateTime  @map("start_date") @db.Date
-  endDate   DateTime? @map("end_date") @db.Date
-
-  status ContractStatus
-
-  requireSignature Boolean   @default(false) @map("require_signature")
-  signedAt         DateTime? @map("signed_at")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  services       ContractService[]
-  files          ContractFile[]
-  terms          ContractTerm[]
-  billingPeriods BillingPeriod[]
-  violationCases ViolationCase[]
-
-  @@index([providerId])
-  @@index([customerId])
-  @@index([roomId])
-  @@index([status])
-  @@index([providerId, status, customerId])
-  @@map("contract")
-}
-
-model ContractService {
-  id         String @id @default(uuid()) @db.Uuid
-  contractId String @map("contract_id") @db.Uuid
-
-  // Cross-service reference -> service-catalog-service
-  servicePriceId String @map("service_price_id") @db.Uuid
-
-  quantity Decimal? @db.Decimal(18, 2)
-
-  createdAt DateTime @map("created_at")
-
-  contract Contract @relation(fields: [contractId], references: [id])
-
-  @@index([contractId])
-  @@index([servicePriceId])
-  @@map("contract_service")
-}
-
-model ContractTemplate {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity-service
-  providerId String? @map("provider_id") @db.Uuid
-
-  name        String?
-  description String?
-  content     Json?
-  status      ContractTemplateStatus?
-
-  createdAt DateTime? @map("created_at")
-  updatedAt DateTime? @map("updated_at")
-
-  @@index([providerId])
-  @@map("contract_template")
-}
-
-model TemplateVariable {
-  id        String @id @default(uuid()) @db.Uuid
-  key       String
-  label     String
-  groupName String @map("group_name")
-
-  @@unique([key, groupName])
-  @@map("template_variable")
-}
-
-model ContractFile {
-  id           String  @id @default(uuid()) @db.Uuid
-  contractId   String  @map("contract_id") @db.Uuid
-  pdfUrl       String  @map("pdf_url")
-  hashContract String? @map("hash_contract")
-
-  contract Contract @relation(fields: [contractId], references: [id])
-
-  @@index([contractId])
-  @@map("contract_file")
-}
-
-model Term {
-  id      String     @id @default(uuid()) @db.Uuid
-  content String
-  status  TermStatus
-
-  createdAt DateTime @map("created_at")
-
-  contracts ContractTerm[]
-
-  @@map("term")
-}
-
-model ContractTerm {
-  id         String @id @default(uuid()) @db.Uuid
-  contractId String @map("contract_id") @db.Uuid
-  termId     String @map("term_id") @db.Uuid
-
-  createdAt DateTime @map("created_at")
-
-  contract Contract @relation(fields: [contractId], references: [id])
-  term     Term     @relation(fields: [termId], references: [id])
-
-  @@unique([contractId, termId])
-  @@map("contract_term")
-}
-
-model BillingPeriod {
-  id         String @id @default(uuid()) @db.Uuid
-  contractId String @map("contract_id") @db.Uuid
-
-  periodStart DateTime @map("period_start")
-  periodEnd   DateTime @map("period_end")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  contract Contract @relation(fields: [contractId], references: [id])
-
-  @@index([contractId, periodStart])
-  @@map("billing_period")
-}
-
-model ViolationRule {
-  id          String  @id @default(uuid()) @db.Uuid
-  name        String
-  description String?
-
-  targetType ViolationTargetType @map("target_type")
-  isActive   Boolean             @default(true) @map("is_active")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  cases ViolationCase[]
-
-  @@map("violation_rule")
-}
-
-model ViolationCase {
-  id              String @id @default(uuid()) @db.Uuid
-  violationRuleId String @map("violation_rule_id") @db.Uuid
-  contractId      String @map("contract_id") @db.Uuid
-
-  // Cross-service references
-  providerId String @map("provider_id") @db.Uuid
-  reportedBy String  @map("reported_by") @db.Uuid
-  serviceId  String? @map("service_id") @db.Uuid
-
-  status      ViolationCaseStatus
-  description String
-  occurredAt  DateTime            @map("occurred_at")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  violationRule ViolationRule @relation(fields: [violationRuleId], references: [id])
-  contract      Contract      @relation(fields: [contractId], references: [id])
-
-  evidence ViolationEvidence[]
-  actions  ViolationAction[]
-  appeals  ViolationAppeal[]
-
-  @@index([violationRuleId])
-  @@index([contractId])
-  @@index([reportedBy])
-  @@index([serviceId])
-  @@index([providerId, status, createdAt])
-  @@map("violation_case")
-}
-
-model ViolationEvidence {
-  id              String @id @default(uuid()) @db.Uuid
-  violationCaseId String @map("violation_case_id") @db.Uuid
-  fileUrl         String @map("file_url")
-
-  violationCase ViolationCase @relation(fields: [violationCaseId], references: [id])
-
-  @@index([violationCaseId])
-  @@map("violation_evidence")
-}
-
-model ViolationAction {
-  id              String @id @default(uuid()) @db.Uuid
-  violationCaseId String @map("violation_case_id") @db.Uuid
-
-  // Cross-service reference
-  performedBy String @map("performed_by") @db.Uuid
-
-  actionType ViolationActionType @map("action_type")
-  reason     String?
-  amount     Decimal?            @db.Decimal(18, 2)
-
-  createdAt DateTime @map("created_at")
-
-  violationCase ViolationCase @relation(fields: [violationCaseId], references: [id])
-  restrictions  Restriction[]
-
-  @@index([violationCaseId])
-  @@index([performedBy])
-  @@map("violation_action")
-}
-
-model Restriction {
-  id                String @id @default(uuid()) @db.Uuid
-  violationActionId String @map("violation_action_id") @db.Uuid
-
-  providerId String? @map("provider_id") @db.Uuid
-  customerId String? @map("customer_id") @db.Uuid
-  serviceId  String? @map("service_id") @db.Uuid
-
-  scopeType RestrictionScopeType @map("scope_type")
-  reason    String
-
-  startAt DateTime  @map("start_at")
-  endAt   DateTime? @map("end_at")
-
-  createdBy String  @map("created_by") @db.Uuid
-  isDeleted Boolean @default(false) @map("is_deleted")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  violationAction ViolationAction @relation(fields: [violationActionId], references: [id])
-
-  @@index([providerId])
-  @@index([customerId])
-  @@index([serviceId])
-  @@index([scopeType])
-  @@map("restriction")
-}
-
-model ViolationAppeal {
-  id              String @id @default(uuid()) @db.Uuid
-  violationCaseId String @map("violation_case_id") @db.Uuid
-
-  appellantId String  @map("appellant_id") @db.Uuid
-  reviewedBy  String? @map("reviewed_by") @db.Uuid
-
-  reason String
-  status AppealStatus
-
-  reviewedAt     DateTime? @map("reviewed_at")
-  resolutionNote String?   @map("resolution_note")
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  violationCase ViolationCase @relation(fields: [violationCaseId], references: [id])
-
-  @@index([violationCaseId])
-  @@index([appellantId])
-  @@map("violation_appeal")
 }

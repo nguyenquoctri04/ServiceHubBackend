@@ -71,6 +71,11 @@ export class PropertiesController {
     return this.propertiesService.createFloor(data.providerId, data.blockId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.FLOOR_DELETE })
+  async deleteFloor(@Payload() data: { providerId: string; floorId: string }) {
+    return this.propertiesService.deleteFloor(data.providerId, data.floorId);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.ROOM_TYPE_CREATE })
   async createRoomType(
     @Payload()

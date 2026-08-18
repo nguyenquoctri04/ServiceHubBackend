@@ -283,6 +283,12 @@ export class ProviderController {
     );
   }
 
+  @Delete('catalog/floors/:id')
+  async deleteFloor(@CurrentUser() user: CurrentUserPayload, @Param('id') floorId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.FLOOR_DELETE }, { providerId, floorId });
+  }
+
   @Post('catalog/properties/:id/room-types')
   async createRoomType(
     @CurrentUser() user: CurrentUserPayload,

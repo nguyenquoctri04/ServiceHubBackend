@@ -146,4 +146,12 @@ describe('PropertiesService', () => {
       error: { message: 'Không thể xóa khu nhà đang có tầng hoặc phòng.' },
     });
   });
+
+  it('refuses to delete a floor when it still has rooms', async () => {
+    prisma.room = { count: jest.fn().mockResolvedValue(1) };
+
+    await expect(service.deleteFloor('provider-1', 'floor-1')).rejects.toMatchObject({
+      error: { message: 'Không thể xóa tầng đang có phòng.' },
+    });
+  });
 });

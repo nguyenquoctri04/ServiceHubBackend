@@ -138,4 +138,12 @@ describe('PropertiesService', () => {
       data: expect.objectContaining({ floorId: 'floor-1', roomTypeId: 'room-type-1', roomNumber: 'P.101', status: 'ACTIVE' }),
     });
   });
+
+  it('refuses to delete a block when it still has floors', async () => {
+    prisma.floor = { count: jest.fn().mockResolvedValue(1) };
+
+    await expect(service.deleteBlock('provider-1', 'block-1')).rejects.toMatchObject({
+      error: { message: 'Không thể xóa khu nhà đang có tầng hoặc phòng.' },
+    });
+  });
 });

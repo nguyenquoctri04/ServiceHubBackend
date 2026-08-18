@@ -263,6 +263,12 @@ export class ProviderController {
     );
   }
 
+  @Delete('catalog/blocks/:id')
+  async deleteBlock(@CurrentUser() user: CurrentUserPayload, @Param('id') blockId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.BLOCK_DELETE }, { providerId, blockId });
+  }
+
   @Post('catalog/blocks/:id/floors')
   async createFloor(
     @CurrentUser() user: CurrentUserPayload,

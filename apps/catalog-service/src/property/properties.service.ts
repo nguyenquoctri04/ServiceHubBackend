@@ -92,6 +92,23 @@ export class PropertiesService {
     });
   }
 
+  async deleteBlock(providerId: string, blockId: string) {
+    const floorCount = await this.prisma.floor.count({
+      where: { blockId, block: { property: { providerId } } },
+    });
+    if (floorCount > 0) {
+      throw new RpcException({ statusCode: 409, message: 'Không thể xóa khu nhà đang có tầng hoặc phòng.' });
+    }
+
+    const result = await this.prisma.block.deleteMany({
+      where: { id: blockId, property: { providerId } },
+    });
+    if (result.count !== 1) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy khu nhà.' });
+    }
+    return { success: true };
+  }
+
   async createFloor(
     providerId: string,
     blockId: string,

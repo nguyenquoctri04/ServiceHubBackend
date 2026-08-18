@@ -18,7 +18,15 @@ export class CustomerCategoriesService {
             {
                 cmd: CustomerPatterns.GET_HOME_CATEGORIES,
             },
-            {}
+            {},
+        );
+    }
+
+    fetchCategories() {
+        return this.secureRpc.send(
+            this.catalogClient,
+            { cmd: CustomerPatterns.GET_CATEGORIES },
+            {},
         );
     }
 }

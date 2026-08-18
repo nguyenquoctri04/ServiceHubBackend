@@ -1,4 +1,11 @@
-import { Inject, Injectable, HttpException } from "@nestjs/common";
+import { SecureRpcService } from "@app/common";
+import { CustomerPatterns } from "@app/common/constants/customer.patterns";
+import {
+    ProviderCatalogDetailRpcResult,
+    ProviderDetail,
+    ProviderIdentityDetailRpcResult,
+} from "@app/common/dto/customer/identity";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
 import { SecureRpcService } from "@app/common";
 
@@ -23,5 +30,62 @@ export class CustomerIdentitiesService {
                 : (typeof err?.status === "number" ? err.status : 400);
             throw new HttpException(msg, status);
         }
+
+        @Inject("CATALOG_SERVICE")
+        private readonly catalogClient: ClientProxy,
+
+        @Inject("CONTRACT_SERVICE")
+        private readonly contractClient: ClientProxy,
+
+        private readonly secureRpc: SecureRpcService,
+    ) {}
+
+    async getProviderDetail(
+        providerId: string,
+        customerId?: string,
+    ): Promise<ProviderDetail> {
+        console.log(customerId);
+        const { blocked } = await this.secureRpc.send<{ blocked: boolean }>(
+            this.contractClient,
+            { cmd: CustomerPatterns.CHECK_PROVIDER_ACCESS },
+            { providerId, customerId },
+        );
+
+        if (blocked) {
+            throw new NotFoundException("Không tìm thấy nhà cung cấp.");
+        }
+
+        let identityResult: ProviderIdentityDetailRpcResult;
+        try {
+            identityResult =
+                await this.secureRpc.send<ProviderIdentityDetailRpcResult>(
+                    this.identityClient,
+                    { cmd: CustomerPatterns.GET_PROVIDER_DETAIL_FOR_CUSTOMER },
+                    { providerId },
+                );
+        } catch (err: any) {
+            throw new NotFoundException(
+                err?.message || "Không tìm thấy nhà cung cấp.",
+            );
+        }
+
+        const catalogResult =
+            await this.secureRpc.send<ProviderCatalogDetailRpcResult>(
+                this.catalogClient,
+                { cmd: CustomerPatterns.GET_PROVIDER_SERVICES_AND_PROPERTIES },
+                { providerId, customerId },
+            );
+
+        return {
+            provider: identityResult.provider,
+            services: catalogResult.services,
+            properties: catalogResult.properties,
+            legalDocuments: identityResult.legalDocuments,
+            stats: {
+                serviceCount: catalogResult.serviceCount,
+                propertyCount: catalogResult.propertyCount,
+                verifiedDocumentCount: identityResult.verifiedDocumentCount,
+            },
+        };
     }
 }

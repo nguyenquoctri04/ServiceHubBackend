@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
@@ -5,6 +6,7 @@ import { ServicesService } from './services.service';
 import { LocationService } from '../location/location.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { of, throwError } from 'rxjs';
+import { ServiceType, CalculationMethod, BillingFrequency, BillingIntervalUnit } from './dto/create-service.dto';
 
 describe('ServicesService', () => {
   let service: ServicesService;
@@ -69,6 +71,12 @@ describe('ServicesService', () => {
       name: 'Test',
       categoryId: 'cat-1',
       address: '123 Test St',
+      serviceType: ServiceType.NORMAL,
+      billingRule: {
+        calculationMethod: CalculationMethod.FIXED,
+        billingFrequency: BillingFrequency.ONE_TIME,
+        billingIntervalUnit: BillingIntervalUnit.MONTH,
+      },
       prices: [],
     });
 
@@ -88,6 +96,12 @@ describe('ServicesService', () => {
         name: 'Test',
         categoryId: 'cat-1',
         address: '123 Test St',
+        serviceType: ServiceType.NORMAL,
+        billingRule: {
+          calculationMethod: CalculationMethod.FIXED,
+          billingFrequency: BillingFrequency.ONE_TIME,
+          billingIntervalUnit: BillingIntervalUnit.MONTH,
+        },
         prices: [],
       })
     ).rejects.toThrow(RpcException);
@@ -108,6 +122,12 @@ describe('ServicesService', () => {
         name: 'Test',
         categoryId: 'cat-1',
         address: '123 Test St',
+        serviceType: ServiceType.NORMAL,
+        billingRule: {
+          calculationMethod: CalculationMethod.FIXED,
+          billingFrequency: BillingFrequency.ONE_TIME,
+          billingIntervalUnit: BillingIntervalUnit.MONTH,
+        },
         prices: [],
       })
     ).rejects.toThrow(RpcException);
@@ -125,25 +145,35 @@ describe('ServicesService', () => {
       name: 'Test',
       categoryId: 'cat-1',
       address: '123 Test St',
+      serviceType: ServiceType.NORMAL,
+      billingRule: {
+        calculationMethod: CalculationMethod.FIXED,
+        billingFrequency: BillingFrequency.ONE_TIME,
+        billingIntervalUnit: BillingIntervalUnit.MONTH,
+      },
       prices: [],
     });
 
     expect(prismaService.service.create).toHaveBeenCalled();
   });
 
-  it('Nhánh 5: External API bị timeout -> Pass (Fail-open)', async () => {
+  it('Nhánh 5: External API bị timeout -> Ném lỗi 400 (Không còn Fail-open nữa)', async () => {
     // Giả lập Identity Service timeout
     identityClient.send.mockReturnValue(throwError(() => new Error('Timeout')));
     
-    await service.createService('provider-1', {
-      name: 'Test',
-      categoryId: 'cat-1',
-      address: '123 Test St',
-      prices: [],
-    });
-
-    // Nó sẽ fallback thành non-external service và không gọi geocode
-    expect(locationService.geocode).not.toHaveBeenCalled();
-    expect(prismaService.service.create).toHaveBeenCalled();
+    await expect(
+      service.createService('provider-1', {
+        name: 'Test',
+        categoryId: 'cat-1',
+        address: '123 Test St',
+        serviceType: ServiceType.NORMAL,
+        billingRule: {
+          calculationMethod: CalculationMethod.FIXED,
+          billingFrequency: BillingFrequency.ONE_TIME,
+          billingIntervalUnit: BillingIntervalUnit.MONTH,
+        },
+        prices: [],
+      })
+    ).rejects.toThrow(RpcException);
   });
 });

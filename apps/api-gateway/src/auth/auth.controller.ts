@@ -4,7 +4,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtService } from '@nestjs/jwt';
-import { JwtAuthGuard, CurrentUser } from '@app/common';
+import { JwtAuthGuard, CurrentUser, AuthThrottleGuard } from '@app/common';
 
 @Controller('api/auth')
 export class AuthController {
@@ -13,11 +13,15 @@ export class AuthController {
     private readonly jwtService: JwtService
   ) {}
 
+  // Giới hạn riêng, chặt hơn default: chống brute-force tạo tài khoản hàng loạt.
+  @UseGuards(AuthThrottleGuard)
   @Post('register')
   async register(@Body() registerDto: RegisterDto, @Req() req: Request) {
     return this.authService.register(registerDto, req.ip);
   }
 
+  // Giới hạn riêng, chặt hơn default: chống brute-force dò mật khẩu.
+  @UseGuards(AuthThrottleGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginDto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -43,6 +47,22 @@ export class AuthController {
     }
 
     const tokens = await this.authService.refreshToken(refreshToken);
+    this.setRefreshTokenCookie(res, tokens.refreshToken);
+    
+    return {
+      accessToken: tokens.accessToken,
+      user: tokens.user
+    };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('switch-profile')
+  @HttpCode(HttpStatus.OK)
+  async switchProfile(@Body() body: { providerId: string }, @CurrentUser() user: any, @Res({ passthrough: true }) res: Response) {
+    if (!body.providerId) {
+      throw new UnauthorizedException('providerId is required');
+    }
+    const tokens = await this.authService.switchProfile(user, body.providerId);
     this.setRefreshTokenCookie(res, tokens.refreshToken);
     
     return {

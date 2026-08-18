@@ -6,6 +6,7 @@ import { UnitsModule } from "./units/units.module";
 import { ServicesModule } from "./services/services.module";
 import { LocationModule } from "./location/location.module";
 import { CommonModule } from "@app/common";
+import { RoomsController } from "./rooms.controller";
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { CommonModule } from "@app/common";
     ServicesModule,
     LocationModule,
   ],
-  controllers: [],
+  controllers: [RoomsController],
   providers: [],
 })
 export class CatalogServiceModule {}

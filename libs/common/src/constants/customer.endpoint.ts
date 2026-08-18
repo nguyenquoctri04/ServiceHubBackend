@@ -33,6 +33,7 @@ export const CUSTOMER_UNITS = CUSTOMER_CATALOG_SERVICE_PREFIX + "/units";
 
 export const CUSTOMER_CATALOG_ENDPOINT = {
     FETCH_HOME: "home",
+    FETCH_SERVICE_DETAIL: "detail",
 };
 
 /*
@@ -67,7 +68,9 @@ export const CUSTOMER_EKYC_ENDPOINT = {
 export const CUSTOMER_IDENTITIES =
     CUSTOMER_IDENTITY_SERVICE_PREFIX + "/identities";
 
-export const CUSTOMER_IDENTITY_ENDPOINT = {};
+export const CUSTOMER_IDENTITY_ENDPOINT = {
+    FETCH_PROVIDER_DETAIL: "providers/:id/detail",
+};
 
 /*
   ===============================

@@ -8,6 +8,15 @@ import * as express from 'express';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+import { NestExpressApplication } from '@nestjs/platform-express';
+
+async function bootstrap() {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Cần thiết để ThrottlerGuard (và mọi logic dựa vào req.ip) lấy đúng IP
+  // gốc của client từ header X-Forwarded-For khi gateway chạy sau reverse
+  // proxy/load balancer, thay vì lấy nhầm IP của proxy cho mọi request.
+  app.set('trust proxy', 1);
 
   // Enable CORS
   app.enableCors({
@@ -20,6 +29,9 @@ async function bootstrap() {
   // Increase payload limit for Base64 eKYC image uploads
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
+  // Security headers
+  const helmet = require('helmet');
+  app.use(helmet());
 
   // Global pipes, filters, interceptors
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

@@ -1,12 +1,13 @@
 import { Global, Module } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import {
   ClientsModule,
   Transport,
   ClientsModuleAsyncOptions,
 } from "@nestjs/microservices";
-
-import { CommonModule, parseRedisUrl } from "@app/common";
+import { ThrottlerGuard } from "@nestjs/throttler";
+import { CommonModule, RateLimitModule, parseRedisUrl } from "@app/common";
 import { AuthModule } from "./auth/auth.module";
 import { ProxyModule } from "./proxy/proxy.module";
 import { ProviderModule } from "./provider/provider.module";
@@ -47,6 +48,7 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
       serviceName: "API_GATEWAY_NAME",
       secretEnv: "API_GATEWAY_SECRET",
     }),
+    RateLimitModule,
     ProxyModule,
     AuthModule,
     ProviderModule,
@@ -54,7 +56,14 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
     GatewayNotificationsModule,
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    // Áp rate limit cho MỌI route của api-gateway (điểm vào HTTP duy nhất
+    // của hệ thống). Route nào cần limit riêng (vd auth) dùng @Throttle().
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
   exports: [ClientsModule, ProxyModule],
 })
 export class AppModule {}

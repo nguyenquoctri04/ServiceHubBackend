@@ -4,7 +4,7 @@
   "sourceRoot": "apps/api-gateway/src",
 
   "compilerOptions": {
-    "deleteOutDir": true,
+    "deleteOutDir": false,
     "builder": "tsc"
   },
 

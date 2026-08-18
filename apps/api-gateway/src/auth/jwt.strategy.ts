@@ -15,6 +15,7 @@ import { Request } from "express";
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     @Inject("IDENTITY_SERVICE") private readonly identityClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
     private configService: ConfigService,
     private readonly redisService: RedisService,
     private readonly secureRpc: SecureRpcService,
@@ -55,11 +56,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException("Invalid access token");
     }
 
-    const isActive = await this.secureRpc.send<boolean>(
-      this.identityClient,
-      { cmd: Patterns.CHECK_USER_ACTIVE },
-      { userId: payload.sub },
-    );
+    let isActive = false;
+    try {
+      isActive = await this.secureRpc.send(
+        this.identityClient,
+        { cmd: Patterns.CHECK_USER_ACTIVE },
+        { userId: payload.sub },
+      );
+    } catch (err: any) {
+      require('fs').appendFileSync('/tmp/jwt_errors.log', `Error checking user active: ${err?.message || err}\n`);
+      console.error('Error checking user active status:', err);
+      throw new UnauthorizedException("Could not verify account status");
+    }
 
     if (!isActive) {
       throw new UnauthorizedException("Account is inactive");
@@ -69,6 +77,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       email: payload.email,
       role: payload.role,
+      providerId: payload.providerId,
     };
   }
 }

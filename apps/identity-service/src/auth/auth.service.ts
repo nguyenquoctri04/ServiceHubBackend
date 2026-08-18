@@ -124,4 +124,16 @@ export class AuthService {
 
     return false;
   }
+
+  async switchProfile(userId: string, providerId: string) {
+    const provider = await this.prisma.provider.findFirst({
+      where: { id: providerId, identityId: userId }
+    });
+    
+    if (!provider) {
+      return { success: false };
+    }
+    
+    return { success: true };
+  }
 }

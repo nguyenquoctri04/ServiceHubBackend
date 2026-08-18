@@ -299,6 +299,43 @@ export class PropertiesService {
     return { success: true };
   }
 
+  async updateRoom(providerId: string, roomId: string, dto: {
+    floorId?: string; roomTypeId?: string; roomNumber?: string; status?: 'ACTIVE' | 'MAINTENANCE';
+  }) {
+    const room = await this.prisma.room.findFirst({
+      where: { id: roomId, floor: { block: { property: { providerId } } } },
+      select: { id: true, floorId: true, roomTypeId: true },
+    });
+    if (!room) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy phòng.' });
+
+    const floorId = dto.floorId ?? room.floorId;
+    if (!floorId) throw new RpcException({ statusCode: 400, message: 'Phòng phải thuộc một tầng.' });
+    const floor = await this.prisma.floor.findFirst({
+      where: { id: floorId, block: { property: { providerId } } },
+      select: { id: true, block: { select: { propertyId: true } } },
+    });
+    if (!floor) throw new RpcException({ statusCode: 400, message: 'Tầng không thuộc bất động sản của bạn.' });
+
+    const roomType = await this.prisma.roomType.findFirst({
+      where: { id: dto.roomTypeId ?? room.roomTypeId, propertyId: floor.block.propertyId, property: { providerId } },
+      select: { id: true },
+    });
+    if (!roomType) throw new RpcException({ statusCode: 400, message: 'Loại phòng không thuộc bất động sản của tầng đã chọn.' });
+
+    const result = await this.prisma.room.updateMany({
+      where: { id: roomId, floor: { block: { property: { providerId } } } },
+      data: {
+        floorId: floor.id,
+        roomTypeId: roomType.id,
+        ...(dto.roomNumber !== undefined && { roomNumber: dto.roomNumber.trim() }),
+        ...(dto.status !== undefined && { status: dto.status }),
+        updatedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy phòng.' });
+    return this.prisma.room.findFirst({ where: { id: roomId, floor: { block: { property: { providerId } } } }, include: { roomType: true } });
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

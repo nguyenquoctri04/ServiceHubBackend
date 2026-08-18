@@ -138,3 +138,10 @@ export class CreateRoomDto {
   @IsIn(['ACTIVE', 'MAINTENANCE'])
   status?: 'ACTIVE' | 'MAINTENANCE';
 }
+
+export class UpdateRoomDto {
+  @IsOptional() @IsUUID() floorId?: string;
+  @IsOptional() @IsUUID() roomTypeId?: string;
+  @IsOptional() @IsString() @MaxLength(100) roomNumber?: string;
+  @IsOptional() @IsIn(['ACTIVE', 'MAINTENANCE']) status?: 'ACTIVE' | 'MAINTENANCE';
+}

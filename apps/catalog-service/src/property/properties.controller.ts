@@ -125,6 +125,11 @@ export class PropertiesController {
     return this.propertiesService.createRoom(data.providerId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.ROOM_UPDATE })
+  async updateRoom(@Payload() data: { providerId: string; roomId: string; dto: any }) {
+    return this.propertiesService.updateRoom(data.providerId, data.roomId, data.dto);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

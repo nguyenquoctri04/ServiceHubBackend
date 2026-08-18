@@ -190,4 +190,12 @@ describe('PropertiesService', () => {
       error: { message: 'Không thể xóa loại phòng đang được phòng hoặc dịch vụ sử dụng.' },
     });
   });
+
+  it('rejects moving a room to a floor outside the active provider workspace', async () => {
+    prisma.room = { findFirst: jest.fn().mockResolvedValue({ id: 'room-1', floorId: 'floor-1', roomTypeId: 'type-1' }) };
+    prisma.floor = { findFirst: jest.fn().mockResolvedValue(null) };
+
+    await expect(service.updateRoom('provider-1', 'room-1', { floorId: 'other-floor' }))
+      .rejects.toMatchObject({ error: { message: 'Tầng không thuộc bất động sản của bạn.' } });
+  });
 });

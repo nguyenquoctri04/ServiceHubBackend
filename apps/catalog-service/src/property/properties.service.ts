@@ -411,6 +411,13 @@ export class PropertiesService {
     });
   }
 
+  async findRoomsByIdsForProvider(providerId: string, roomIds: string[]) {
+    return this.prisma.room.findMany({
+      where: { id: { in: roomIds }, floor: { block: { property: { providerId } } } },
+      select: { id: true },
+    });
+  }
+
   async getFloors(providerId: string, blockId: string) {
     return this.prisma.floor.findMany({
       where: {

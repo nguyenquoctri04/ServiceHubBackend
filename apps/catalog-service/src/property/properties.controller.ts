@@ -160,6 +160,11 @@ export class PropertiesController {
     return this.propertiesService.getRoomsByIds(roomIds);
   }
 
+  @MessagePattern({ cmd: 'catalog.rooms.findByIdsForProvider' })
+  async findRoomsByIdsForProvider(@Payload() payload: { providerId: string; roomIds: string[] }) {
+    return this.propertiesService.findRoomsByIdsForProvider(payload.providerId, payload.roomIds);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.ROOMS_COUNT_BY_PROVIDER })
   async countRooms(@Payload() data: { providerId: string }) {
     return this.propertiesService.countRooms(data.providerId);

@@ -22,7 +22,14 @@ export interface CreateContractPayload {
 /**
  * Payload interface for updating a contract.
  */
-export interface UpdateContractPayload extends CreateContractPayload {}
+export interface UpdateContractPayload {
+  roomId?: string;
+  startDate?: string;
+  endDate?: string;
+  requireSignature?: boolean;
+  services?: { servicePriceId: string; quantity?: number }[];
+  termIds?: string[];
+}
 
 /**
  * Payload interface for querying contracts.
@@ -56,6 +63,7 @@ export class ProviderContractsService {
     private readonly prisma: PrismaService,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
   ) {}
 
@@ -173,17 +181,56 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Only draft contracts can be updated' });
     }
 
-    return this.prisma.contract.update({
+    if (dto.roomId) {
+      const rooms = await this.secureRpc.send<{ id: string }[]>(
+        this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [dto.roomId] },
+      );
+      if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
+    }
+    if (dto.services !== undefined) {
+      const ids = [...new Set(dto.services.map((service) => service.servicePriceId))];
+      if (!ids.length || ids.length !== dto.services.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ hợp đồng không hợp lệ.' });
+      const prices = await this.secureRpc.send<{ id: string }[]>(
+        this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds: ids },
+      );
+      if (prices.length !== ids.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ không thuộc nhà cung cấp.' });
+    }
+    if (dto.termIds !== undefined) {
+      const ids = [...new Set(dto.termIds)];
+      if (ids.length !== dto.termIds.length) throw new RpcException({ statusCode: 400, message: 'Điều khoản hợp đồng không hợp lệ.' });
+      const count = await this.prisma.term.count({ where: { id: { in: ids }, status: 'ACTIVE' } });
+      if (count !== ids.length) throw new RpcException({ statusCode: 400, message: 'Có điều khoản không còn hiệu lực.' });
+    }
+
+    const contractNumber = existing.contractNumber.startsWith('YCDV-')
+      ? await this.generateContractNumber()
+      : existing.contractNumber;
+
+    return this.prisma.$transaction(async (tx) => tx.contract.update({
       where: { id: contractId },
       data: {
-        customerId: dto.customerId,
-        roomId: dto.roomId,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        requireSignature: dto.requireSignature,
+        ...(dto.roomId !== undefined && { roomId: dto.roomId }),
+        ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
+        ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
+        ...(dto.requireSignature !== undefined && { requireSignature: dto.requireSignature }),
+        ...(contractNumber !== existing.contractNumber && { contractNumber }),
         updatedAt: new Date(),
-      }
-    });
+        ...(dto.services !== undefined && {
+          services: {
+            deleteMany: {},
+            create: dto.services.map((service) => ({
+              servicePriceId: service.servicePriceId,
+              quantity: service.quantity ?? 1,
+              createdAt: new Date(),
+            })),
+          },
+        }),
+        ...(dto.termIds !== undefined && {
+          terms: { deleteMany: {}, create: dto.termIds.map((termId) => ({ termId, createdAt: new Date() })) },
+        }),
+      },
+      include: { services: true, terms: true },
+    }));
   }
 
   /**
@@ -198,10 +245,21 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Invalid status for send' });
     }
 
-    return this.prisma.contract.update({
+    const contract = await this.prisma.contract.update({
       where: { id: contractId },
       data: { status: ContractStatus.PENDING_SIGNATURE, updatedAt: new Date() }
     });
+    await this.secureRpc.send(
+      this.notificationClient,
+      { cmd: 'notifications.createInApp' },
+      {
+        userId: contract.customerId,
+        providerId,
+        title: 'Nhà cung cấp đã gửi hợp đồng',
+        content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}.`,
+      },
+    );
+    return contract;
   }
 
   /**

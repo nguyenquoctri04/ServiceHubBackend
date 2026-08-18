@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsBoolean, ArrayMinSize } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ContractServiceDto {
@@ -45,7 +45,15 @@ export class CreateContractDto {
   requireSignature?: boolean;
 }
 
-export class UpdateContractDto extends CreateContractDto {}
+export class UpdateContractDto {
+  @IsUUID() @IsOptional() roomId?: string;
+  @IsString() @IsOptional() startDate?: string;
+  @IsString() @IsOptional() endDate?: string;
+  @IsBoolean() @IsOptional() requireSignature?: boolean;
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ContractServiceDto) @IsOptional()
+  services?: ContractServiceDto[];
+  @IsArray() @IsUUID('4', { each: true }) @IsOptional() termIds?: string[];
+}
 
 export class ContractActionDto {
   @IsString()

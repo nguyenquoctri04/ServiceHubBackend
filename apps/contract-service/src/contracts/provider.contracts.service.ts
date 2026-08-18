@@ -449,6 +449,47 @@ export class ProviderContractsService {
     return map;
   }
 
+  async getContractsByIdsForProvider(providerId: string, contractIds: string[]) {
+    if (contractIds.length === 0) return {};
+
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId, id: { in: contractIds } },
+      select: { id: true, customerId: true, roomId: true, contractNumber: true },
+    });
+    const customerIds = contracts.map((contract) => contract.customerId);
+    const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
+    const [identities, rooms] = await Promise.all([
+      customerIds.length === 0
+        ? Promise.resolve<CustomerIdentity[]>([])
+        : this.secureRpc.send<CustomerIdentity[]>(
+          this.identityClient,
+          { cmd: 'provider.identities.batch' },
+          { identityIds: customerIds },
+        ).catch(() => []),
+      roomIds.length === 0
+        ? Promise.resolve<any[]>([])
+        : this.secureRpc.send<any[]>(
+          this.catalogClient,
+          { cmd: 'catalog.rooms.findByIdsForProvider' },
+          { providerId, roomIds },
+        ).catch(() => []),
+    ]);
+    const identitiesById = new Map<string, CustomerIdentity>(
+      identities.map((identity) => [identity.id, identity] as const),
+    );
+    const roomsById = new Map<string, any>(rooms.map((room: any) => [room.id, room] as const));
+
+    return Object.fromEntries(contracts.map((contract) => {
+      const identity = identitiesById.get(contract.customerId);
+      const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
+      return [contract.id, {
+        ...contract,
+        customerName: identity?.email || identity?.phone || 'Khách hàng',
+        roomName: room?.roomNumber || 'Chưa xếp phòng',
+      }];
+    }));
+  }
+
   async findRestrictions(providerId: string, status?: 'ACTIVE' | 'LIFTED') {
     const restrictions = await this.prisma.restriction.findMany({
       where: {

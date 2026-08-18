@@ -640,19 +640,25 @@ export class ProviderController {
   async getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const invoicesResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query });
-    const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
     
     if (!invoicesResp || !invoicesResp.data) return invoicesResp;
 
+    const contractIds = [...new Set(invoicesResp.data.map((invoice: any) => invoice.contractId).filter(Boolean))];
+    const contractsById = await this.proxy.send(
+      this.contractClient,
+      { cmd: ProviderContractPatterns.FIND_BY_IDS },
+      { providerId, contractIds },
+    );
+
     const mappedData = invoicesResp.data.map((inv: any) => {
-      const contract = contracts?.find((c: any) => c.id === inv.contractId);
+      const contract = contractsById?.[inv.contractId];
       return {
         id: inv.id,
         invoice_number: inv.invoiceNumber,
         customer_id: contract?.customerId || '',
-        customer_name: contract?.customerName || 'Dịch vụ lẻ',
+        customer_name: contract?.customerName || 'Khách hàng',
         contract_id: inv.contractId,
-        room_name: contract?.roomName || 'Không xác định',
+        room_name: contract?.roomName || 'Chưa xếp phòng',
         billing_period_start: inv.billingPeriodStart,
         billing_period_end: inv.billingPeriodEnd,
         due_date: inv.dueDate,

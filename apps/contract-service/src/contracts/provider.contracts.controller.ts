@@ -69,6 +69,11 @@ export class ProviderContractsController {
     return this.providerContractsService.findOneContract(payload.providerId, payload.contractId);
   }
 
+  @MessagePattern({ cmd: ProviderContractPatterns.FIND_BY_IDS })
+  async findContractsByIds(@Payload() payload: { providerId: string; contractIds: string[] }) {
+    return this.providerContractsService.getContractsByIdsForProvider(payload.providerId, payload.contractIds);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER })
   async findDraftByRequestNumber(@Payload() payload: { providerId: string; contractNumber: string }) {
     return this.providerContractsService.findDraftByRequestNumber(payload.providerId, payload.contractNumber);

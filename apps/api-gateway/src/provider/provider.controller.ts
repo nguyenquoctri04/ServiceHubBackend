@@ -25,7 +25,7 @@ import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
-import { BlockCustomerDto, CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationDto, CreateViolationAppealDto, RestrictionQueryDto, ViolationActionDto } from './dto/contract.dto';
+import { BlockCustomerDto, CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto, CreateViolationDto, CreateViolationAppealDto, RestrictionQueryDto, ViolationActionDto, ViolationQueryDto } from './dto/contract.dto';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
@@ -36,7 +36,7 @@ import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-read
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
-import { GroupedMeterQueryDto, MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
+import { DashboardRoomsQueryDto, GroupedMeterQueryDto, MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
 import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, CreateRoomDto, CreateRoomTypeDto, UpdateBlockDto, UpdateFloorDto, UpdatePropertyDto, UpdateRoomDto, UpdateRoomTypeDto } from './dto/property.dto';
@@ -105,11 +105,11 @@ export class ProviderController {
   @Get('dashboard/rooms')
   async getDashboardRooms(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('propertyId') propertyId?: string
+    @Query() query: DashboardRoomsQueryDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
 
-    let targetPropertyId = propertyId;
+    let targetPropertyId = query.propertyId;
     if (!targetPropertyId) {
       const properties = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId });
       if (!properties || properties.length === 0) {
@@ -561,9 +561,9 @@ export class ProviderController {
   // --- VIOLATIONS MODULE ---
 
   @Get('violations')
-  async getViolations(@CurrentUser() user: CurrentUserPayload, @Query('status') status?: string) {
+  async getViolations(@CurrentUser() user: CurrentUserPayload, @Query() query: ViolationQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, actorId: user.id, status });
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, actorId: user.id, status: query.status });
   }
 
   @Post('violations')

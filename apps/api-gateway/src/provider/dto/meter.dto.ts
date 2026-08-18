@@ -32,6 +32,11 @@ export class GroupedMeterQueryDto {
   year: number;
 }
 
+export class DashboardRoomsQueryDto {
+  @IsUUID() @IsOptional()
+  propertyId?: string;
+}
+
 export class ExcelRowPreviewDto {
   @IsOptional()
   @IsString()

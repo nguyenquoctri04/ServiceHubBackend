@@ -75,6 +75,11 @@ export class RestrictionQueryDto {
   @IsIn(['ACTIVE', 'LIFTED']) @IsOptional() status?: 'ACTIVE' | 'LIFTED';
 }
 
+export class ViolationQueryDto {
+  @IsIn(['REPORTED', 'REJECTED', 'RESOLVED', 'CANCELLED']) @IsOptional()
+  status?: 'REPORTED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED';
+}
+
 export class CreateViolationAppealDto {
   @IsString() @MaxLength(2000) reason: string;
 }

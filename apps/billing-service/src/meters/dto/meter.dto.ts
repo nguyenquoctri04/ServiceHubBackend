@@ -5,10 +5,3 @@ export interface ExcelRowDto {
   value?: number;
   imgUrl?: string;
 }
-
-export interface ServiceCreatedPayload {
-  id: string;
-  name: string;
-  calculation_method: string;
-  providerId: string;
-}

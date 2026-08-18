@@ -1,12 +1,12 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload, EventPattern } from '@nestjs/microservices';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { MetersService } from './meters.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-reading.dto';
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
-import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
+import { ExcelRowDto } from './dto/meter.dto';
 
 @Controller()
 export class MetersController {
@@ -45,11 +45,6 @@ export class MetersController {
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM })
   async confirmImport(@Payload() payload: { providerId: string; recordedBy: string; dto: ExcelImportConfirmDto }) {
     return this.service.confirmImport(payload.providerId, payload.dto.rows, payload.recordedBy);
-  }
-
-  @EventPattern(ProviderBillingPatterns.EVENT_SERVICE_CREATED)
-  async handleServiceCreated(@Payload() payload: ServiceCreatedPayload) {
-    return this.service.handleServiceCreated(payload);
   }
 
   @MessagePattern({ cmd: 'billing.meters.dashboardStats' })

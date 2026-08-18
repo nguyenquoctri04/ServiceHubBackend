@@ -16,7 +16,4 @@ export class ProviderBillingPatterns {
   public static readonly CATALOG_ROOMS_BY_IDS = 'catalog.rooms.findByIds';
   public static readonly CONTRACTS_BY_IDS = 'contracts.byIds';
 
-  // Events
-  public static readonly EVENT_METER_READING_CONFIRMED = 'event.billing.meterReadingConfirmed';
-  public static readonly EVENT_SERVICE_CREATED = 'event.catalog.serviceCreated';
 }

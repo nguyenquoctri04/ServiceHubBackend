@@ -1,11 +1,11 @@
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { Prisma, Meter } from '@prisma/client-billing';
 import { SecureRpcService } from '@app/common';
-import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
+import { ExcelRowDto } from './dto/meter.dto';
 
 export interface MeterContext {
   meter: Meter;
@@ -15,8 +15,6 @@ export interface MeterContext {
 
 @Injectable()
 export class MetersService {
-  private readonly logger = new Logger(MetersService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly ocrService: OcrService,
@@ -136,9 +134,6 @@ export class MetersService {
       }
     });
 
-    // TODO: Emit Event MeterReadingConfirmed here if needed.
-    // this.eventEmitter.emit(ProviderBillingPatterns.EVENT_METER_READING_CONFIRMED, reading);
-
     return reading;
   }
 
@@ -211,27 +206,6 @@ export class MetersService {
       .filter(Boolean);
 
     return { success: successCount, failed };
-  }
-
-  async handleServiceCreated(payload: ServiceCreatedPayload) {
-    // If service calculation_method is METERED, create a Meter for it
-    if (payload.calculation_method === 'METERED') {
-      if (!payload.providerId || !payload.id) {
-        this.logger.warn('Bỏ qua event tạo meter thiếu providerId hoặc serviceId');
-        return;
-      }
-      await this.prisma.meter.create({
-        data: {
-          providerId: payload.providerId,
-          name: `${payload.name} Meter`,
-          serviceId: payload.id, // we might need serviceId in Meter if it's there. 
-          unit: 'N/A', // Default unit, as the payload might not have it
-          status: 'ACTIVE',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-      });
-    }
   }
 
   async getMeterDashboardStats(providerId: string) {

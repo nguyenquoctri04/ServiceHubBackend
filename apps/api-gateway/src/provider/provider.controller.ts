@@ -1,5 +1,6 @@
 import {
   Body,
+  Delete,
   Controller,
   Get,
   Inject,
@@ -240,6 +241,12 @@ export class ProviderController {
   async updateProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string, @Body() dto: UpdatePropertyDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_UPDATE }, { providerId, propertyId, dto });
+  }
+
+  @Delete('catalog/properties/:id')
+  async deleteProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_DELETE }, { providerId, propertyId });
   }
 
   @Get('catalog/properties/:id/rooms')

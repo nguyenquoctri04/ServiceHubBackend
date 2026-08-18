@@ -37,6 +37,11 @@ export class PropertiesController {
     return this.propertiesService.updateProperty(data.providerId, data.propertyId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.PROPERTY_DELETE })
+  async deleteProperty(@Payload() data: { providerId: string; propertyId: string }) {
+    return this.propertiesService.deleteProperty(data.providerId, data.propertyId);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

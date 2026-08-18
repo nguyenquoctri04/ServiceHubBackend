@@ -57,6 +57,16 @@ export class PropertiesService {
     return this.getPropertyById(providerId, propertyId);
   }
 
+  async deleteProperty(providerId: string, propertyId: string) {
+    const blockCount = await this.prisma.block.count({ where: { propertyId, property: { providerId } } });
+    if (blockCount > 0) {
+      throw new RpcException({ statusCode: 409, message: 'Không thể xóa bất động sản đang có khu nhà hoặc phòng.' });
+    }
+    const result = await this.prisma.property.deleteMany({ where: { id: propertyId, providerId } });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Property not found' });
+    return { success: true };
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

@@ -63,4 +63,12 @@ describe('PropertiesService', () => {
       data: expect.objectContaining({ propertyName: 'Khu nhà B' }),
     });
   });
+
+  it('rejects deletion when the owned property still has blocks', async () => {
+    prisma.block = { count: jest.fn().mockResolvedValue(1) };
+
+    await expect(service.deleteProperty('provider-1', 'property-1')).rejects.toMatchObject({
+      error: { message: 'Không thể xóa bất động sản đang có khu nhà hoặc phòng.' },
+    });
+  });
 });

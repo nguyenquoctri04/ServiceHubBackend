@@ -1,18 +1,14 @@
-import { Injectable, Inject, RequestTimeoutException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { RpcException } from '@nestjs/microservices';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
-import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { Prisma } from '@prisma/client-billing';
-import { SecureRpcService } from '@app/common/security/secure-rpc.service';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
-    private readonly secureRpc: SecureRpcService,
   ) { }
 
   async findInvoices(providerId: string, query: InvoiceQueryDto) {
@@ -47,63 +43,52 @@ export class InvoicesService {
   }
 
   async payInvoice(providerId: string, invoiceId: string, dto: PayInvoiceDto, idempotencyKey: string) {
-    // Note: Idempotency-Key logic is checked at Gateway via Redis, so we assume this request is unique.
-
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id: invoiceId },
-      include: { payments: true }
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, providerId },
+      select: { id: true },
     });
+    if (!invoice) throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
 
-    if (!invoice) {
-      throw new RpcException(new NotFoundException('Invoice not found'));
+    const previousPayment = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
+    if (previousPayment) {
+      if (previousPayment.invoiceId === invoiceId) return previousPayment;
+      throw new RpcException(new ConflictException('Idempotency-Key đã được dùng cho hóa đơn khác'));
     }
 
-    // Provider check via contract is skipped here for brevity, but could be added.
-    // For now we assume Gateway checked or we trust it. Let's check contract.
-    let contractRes;
     try {
-      contractRes = await Promise.race([
-        this.secureRpc.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId: invoice.contractId }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-      ]);
-    } catch (err) {
-      throw new RpcException('Contract Service timeout or failed');
+      return await this.prisma.$transaction(async (tx) => {
+        const currentInvoice = await tx.invoice.findFirst({
+          where: { id: invoiceId, providerId },
+          include: { payments: { where: { status: 'PENDING' }, select: { id: true } } },
+        });
+        if (!currentInvoice) throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
+        if (currentInvoice.status === 'PAID') throw new RpcException(new ConflictException('Hóa đơn đã được thanh toán'));
+        if (currentInvoice.payments.length > 0) throw new RpcException(new ConflictException('Hóa đơn đang có giao dịch chờ xử lý'));
+
+        const now = new Date();
+        const updated = await tx.invoice.updateMany({
+          where: { id: invoiceId, providerId, status: { in: ['UNPAID', 'OVERDUE'] } },
+          data: { status: 'PAID', updatedAt: now },
+        });
+        if (updated.count !== 1) throw new RpcException(new ConflictException('Hóa đơn không còn ở trạng thái có thể thanh toán'));
+
+        return tx.payment.create({
+          data: {
+            invoiceId,
+            paymentMethod: dto.paymentMethod,
+            paymentLinkId: idempotencyKey,
+            status: 'SUCCESS',
+            paidAt: now,
+            createdAt: now,
+          },
+        });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const duplicate = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
+        if (duplicate?.invoiceId === invoiceId) return duplicate;
+      }
+      throw error;
     }
-    if (!contractRes) {
-      throw new RpcException(new NotFoundException('Invoice contract not found or unauthorized'));
-    }
-
-    if (invoice.status === 'PAID') {
-      throw new RpcException(new ConflictException('Invoice is already paid'));
-    }
-
-    const pendingPayment = invoice.payments.find(p => p.status === 'PENDING');
-    if (pendingPayment) {
-      throw new RpcException(new ConflictException('There is an ongoing pending payment. Please wait or cancel it.'));
-    }
-
-    const payment = await this.prisma.$transaction(async (tx) => {
-      const p = await tx.payment.create({
-        data: {
-          invoiceId: invoice.id,
-          paymentMethod: dto.paymentMethod as any,
-          status: 'SUCCESS',
-          paidAt: new Date(),
-          createdAt: new Date(),
-        }
-      });
-
-      await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          status: 'PAID',
-          updatedAt: new Date(),
-        }
-      });
-
-      return p;
-    });
-
-    return payment;
   }
 }

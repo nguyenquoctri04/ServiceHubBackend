@@ -146,7 +146,9 @@ export class MetersService {
 
     // 2. Fetch all meters internally
     const meterIds = [...new Set(rows.map(r => r.meterId).filter(Boolean))];
-    const meters = await this.prisma.meter.findMany({ where: { id: { in: meterIds } } });
+    const meters = await this.prisma.meter.findMany({
+      where: { id: { in: meterIds }, providerId, status: 'ACTIVE' },
+    });
     const metersMap = Object.fromEntries(meters.map(m => [m.id, m]));
 
     // 3. Process each row with pre-fetched context (Partial Success)

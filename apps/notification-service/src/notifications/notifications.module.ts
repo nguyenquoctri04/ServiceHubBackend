@@ -1,15 +1,12 @@
+import { parseRedisUrl } from '@app/common';
 import { Module } from '@nestjs/common';
-import { ConfigModule, ConfigService } from "@nestjs/config";
-import { JwtModule } from "@nestjs/jwt";
-import {
-  ClientsModule,
-  ClientsModuleAsyncOptions,
-  Transport,
-} from "@nestjs/microservices";
-import { parseRedisUrl } from "@app/common";
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
-import { NotificationsGateway } from "./notifications.gateway";
+import { CustomerNotificationsController } from './customer.notifications.controller';
+import { CustomerNotificationsService } from './customer.notifications.service';
+import { ClientsModule, ClientsModuleAsyncOptions, Transport } from '@nestjs/microservices';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 
 const clientProviders: ClientsModuleAsyncOptions = [
   {
@@ -34,7 +31,7 @@ const clientProviders: ClientsModuleAsyncOptions = [
       inject: [ConfigService],
     }),
   ],
-  controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsGateway],
+  controllers: [NotificationsController, CustomerNotificationsController],
+  providers: [NotificationsService, CustomerNotificationsService],
 })
 export class NotificationsModule {}

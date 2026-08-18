@@ -48,6 +48,9 @@ export class CustomerPatterns {
     public static readonly GET_PROVIDER_SERVICES_AND_PROPERTIES =
         this.SERVICES + "get-provider-services-and-properties";
 
+    public static readonly VALIDATE_SERVICE_PRICE =
+        this.SERVICES + "validate-service-price";
+
     /*
         ===============================
             Contract Service
@@ -73,6 +76,15 @@ export class CustomerPatterns {
     public static readonly GET_PROVIDER_SERVICE_INSIGHTS =
         this.CONTRACTS + "get-provider-service-insights";
 
+    public static readonly CREATE_SERVICE_BOOKING =
+        this.CONTRACTS + "create_service_booking";
+
+    public static readonly GET_CONTRACT_FILE_HASH_FOR_SIGNING =
+        this.CONTRACTS + "get-contract-file-hash-for-signing";
+
+    public static readonly GET_CONTRACT_FILE_HASH_FOR_VERIFY =
+        this.CONTRACTS + "get_contract_file_hash_for_verify";
+
     /*
         ===============================
             Identity & eKYC Service
@@ -95,12 +107,21 @@ export class CustomerPatterns {
     public static readonly GET_PROVIDER_DETAIL_FOR_CUSTOMER =
         this.IDENTITIES + "get-provider-detail-for-customer";
 
+    public static readonly GET_CUSTOMER_INFORMATION =
+        this.IDENTITIES + "get-customer-information";
+
+    public static readonly GET_SIGNATURE_INFOR =
+        this.IDENTITIES + "get-signature-infor";
+
     /*
         ===============================
             Notification Service
         ===============================
     */
     public static readonly NOTIFICATION = "customer.notification.";
+
+    public static readonly NOTIFY_SERVICE_REGISTRATION =
+        this.NOTIFICATION + "notify-service-registration";
 
     /*
         ===============================
@@ -109,4 +130,15 @@ export class CustomerPatterns {
     */
     public static readonly KEYS = "customer.keys.";
     public static readonly SIGNATURES = "customer.signatures.";
+
+    public static readonly GET_DIGITAL_SIGNATURE_IN_SETTING =
+        this.KEYS + "get-digital-signature-in-setting";
+
+    public static readonly CREATE_SIGNATURE = this.KEYS + "create";
+
+    public static readonly SIGN_CONTRACT_FILE =
+        this.SIGNATURES + "sign-contract-file";
+
+    public static readonly VERIFY_CONTRACT =
+        this.SIGNATURES + "verify-contract";
 }

@@ -10,7 +10,7 @@ import { CustomerContractsService } from './customer.contracts.service';
 import { ProviderContractsController } from './provider.contracts.controller';
 import { ProviderContractsService } from './provider.contracts.service';
 
-const microservices = ['IDENTITY_SERVICE', 'CATALOG_SERVICE'];
+const microservices = ['IDENTITY_SERVICE', 'CATALOG_SERVICE', 'NOTIFICATION_SERVICE'];
 
 @Module({
   imports: [

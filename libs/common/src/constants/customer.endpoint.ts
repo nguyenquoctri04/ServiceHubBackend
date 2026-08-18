@@ -51,7 +51,9 @@ export const CUSTOMER_TERMS = CUSTOMER_CONTRACT_SERVICE_PREFIX + "/terms";
 export const CUSTOMER_VIOLATIONS =
     CUSTOMER_CONTRACT_SERVICE_PREFIX + "/violations";
 
-export const CUSTOMER_CONTRACT_ENDPOINT = {};
+export const CUSTOMER_CONTRACT_ENDPOINT = {
+    CREATE_SERVICE_BOOKING: "booking",
+};
 
 /*
   ===============================
@@ -70,6 +72,7 @@ export const CUSTOMER_IDENTITIES =
 
 export const CUSTOMER_IDENTITY_ENDPOINT = {
     FETCH_PROVIDER_DETAIL: "providers/:id/detail",
+    FETCH_CUSTOMER_INFORMATION: "detail",
 };
 
 /*
@@ -92,4 +95,6 @@ export const CUSTOMER_KEYS = CUSTOMER_SIGNATURE_SERVICE_PREFIX + "/keys";
 export const CUSTOMER_SIGNATURES =
     CUSTOMER_SIGNATURE_SERVICE_PREFIX + "/signatures";
 
-export const CUSTOMER_SIGNATURE_ENDPOINT = {};
+export const CUSTOMER_SIGNATURE_ENDPOINT = {
+  VERIFY_CONTRACT: ":contractFileId/verify",
+};

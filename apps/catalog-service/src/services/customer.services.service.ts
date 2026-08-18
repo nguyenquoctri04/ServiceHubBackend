@@ -1206,4 +1206,36 @@ export class CustomerServicesService {
             })),
         };
     }
+
+    async validateServicePrice(servicePriceId: string) {
+        const now = new Date();
+
+        const servicePrice = await this.prisma.servicePrice.findFirst({
+            where: {
+                id: servicePriceId,
+                effectiveFrom: { lte: now },
+                OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+                service: { status: "ACTIVE" },
+            },
+            select: {
+                id: true,
+                price: true,
+                unit: true,
+                service: {
+                    select: { id: true, name: true, providerId: true },
+                },
+            },
+        });
+
+        if (!servicePrice) return null;
+
+        return {
+            servicePriceId: servicePrice.id,
+            serviceId: servicePrice.service.id,
+            serviceName: servicePrice.service.name,
+            providerId: servicePrice.service.providerId,
+            price: Number(servicePrice.price),
+            unit: servicePrice.unit,
+        };
+    }
 }

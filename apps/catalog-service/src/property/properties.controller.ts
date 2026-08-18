@@ -66,6 +66,24 @@ export class PropertiesController {
     return this.propertiesService.createFloor(data.providerId, data.blockId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.ROOM_TYPE_CREATE })
+  async createRoomType(
+    @Payload()
+    data: {
+      providerId: string;
+      propertyId: string;
+      dto: {
+        typeName: string;
+        area: number;
+        maxOccupancy: number;
+        description?: string;
+        status?: 'ACTIVE' | 'INACTIVE';
+      };
+    },
+  ) {
+    return this.propertiesService.createRoomType(data.providerId, data.propertyId, data.dto);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

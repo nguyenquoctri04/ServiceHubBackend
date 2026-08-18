@@ -1,11 +1,14 @@
 import { Type } from 'class-transformer';
 import {
   IsIn,
+  IsInt,
   IsLatitude,
   IsLongitude,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
 } from 'class-validator';
 
 export class CreatePropertyDto {
@@ -58,6 +61,31 @@ export class CreateFloorDto {
   @IsString()
   @MaxLength(100)
   floorName: string;
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
+}
+
+export class CreateRoomTypeDto {
+  @IsString()
+  @MaxLength(100)
+  typeName: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  area: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxOccupancy: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
 
   @IsOptional()
   @IsIn(['ACTIVE', 'INACTIVE'])

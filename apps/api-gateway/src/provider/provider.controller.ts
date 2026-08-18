@@ -38,7 +38,7 @@ import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-conf
 import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
-import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
+import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, CreateRoomTypeDto, UpdatePropertyDto } from './dto/property.dto';
 
 export interface CurrentUserPayload {
   id: string;
@@ -274,6 +274,20 @@ export class ProviderController {
       this.catalogClient,
       { cmd: CatalogPatterns.FLOOR_CREATE },
       { providerId, blockId, dto },
+    );
+  }
+
+  @Post('catalog/properties/:id/room-types')
+  async createRoomType(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') propertyId: string,
+    @Body() dto: CreateRoomTypeDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOM_TYPE_CREATE },
+      { providerId, propertyId, dto },
     );
   }
 

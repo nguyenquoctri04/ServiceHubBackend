@@ -103,4 +103,19 @@ describe('PropertiesService', () => {
       data: expect.objectContaining({ blockId: 'block-1', floorName: 'Tầng 1', status: 'ACTIVE' }),
     });
   });
+
+  it('creates a room type only under a property owned by the active provider', async () => {
+    prisma.property = { findFirst: jest.fn().mockResolvedValue({ id: 'property-1' }) };
+    prisma.roomType = { create: jest.fn().mockResolvedValue({ id: 'room-type-1' }) };
+
+    await service.createRoomType('provider-1', 'property-1', {
+      typeName: 'Phòng tiêu chuẩn', area: 25, maxOccupancy: 2,
+    });
+
+    expect(prisma.roomType.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        propertyId: 'property-1', typeName: 'Phòng tiêu chuẩn', area: 25, maxOccupancy: 2, status: 'ACTIVE',
+      }),
+    });
+  });
 });

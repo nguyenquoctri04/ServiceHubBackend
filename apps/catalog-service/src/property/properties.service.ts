@@ -117,6 +117,40 @@ export class PropertiesService {
     });
   }
 
+  async createRoomType(
+    providerId: string,
+    propertyId: string,
+    dto: {
+      typeName: string;
+      area: number;
+      maxOccupancy: number;
+      description?: string;
+      status?: 'ACTIVE' | 'INACTIVE';
+    },
+  ) {
+    const property = await this.prisma.property.findFirst({
+      where: { id: propertyId, providerId },
+      select: { id: true },
+    });
+    if (!property) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy bất động sản.' });
+    }
+
+    const now = new Date();
+    return this.prisma.roomType.create({
+      data: {
+        propertyId: property.id,
+        typeName: dto.typeName.trim(),
+        area: dto.area,
+        maxOccupancy: dto.maxOccupancy,
+        description: dto.description?.trim() || null,
+        status: dto.status ?? 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

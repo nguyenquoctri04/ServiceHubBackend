@@ -4,6 +4,7 @@ import { InvoicesService } from './invoices.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { parseRedisUrl } from '@app/common/utils/redis.config';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { parseRedisUrl } from '@app/common/utils/redis.config';
         inject: [ConfigService],
       },
     ]),
+    PaymentsModule,
   ],
   controllers: [InvoicesController],
   providers: [InvoicesService],

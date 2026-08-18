@@ -8,39 +8,6 @@ datasource db {
   url      = env("NOTIFICATION_DATABASE_URL")
 }
 
-model NotificationTemplate {
-  id            String                     @id @default(uuid()) @db.Uuid
-  code          String                     @unique
-  title         String
-  content       String
-  channel       NotificationChannel
-  status        NotificationTemplateStatus
-  createdAt     DateTime                   @map("created_at")
-  updatedAt     DateTime                   @map("updated_at")
-  notifications Notification[]
-
-  @@map("notification_template")
-}
-
-model Notification {
-  id         String                @id @default(uuid()) @db.Uuid
-  userId     String                @map("user_id") @db.Uuid
-  templateId String?               @map("template_id") @db.Uuid
-  title      String?
-  content    String?
-  channel    NotificationChannel
-  status     NotificationStatus
-  sendAt     DateTime              @map("send_at")
-  providerId String?               @map("provider_id") @db.Uuid
-  template   NotificationTemplate? @relation(fields: [templateId], references: [id])
-
-  @@index([userId])
-  @@index([userId, providerId])
-  @@index([templateId])
-  @@index([status, sendAt])
-  @@map("notification")
-}
-
 enum NotificationChannel {
   EMAIL
   SMS
@@ -74,13 +41,10 @@ enum NotificationTargetType {
 model NotificationTemplate {
   id        String                     @id @default(uuid()) @db.Uuid
   code      String                     @unique
-
   title     String
   content   String
-
   channel   NotificationChannel
   status    NotificationTemplateStatus
-
   createdAt DateTime                   @map("created_at")
   updatedAt DateTime                   @map("updated_at")
 
@@ -90,33 +54,26 @@ model NotificationTemplate {
 }
 
 model Notification {
-  id         String               @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity-service
-  userId     String               @map("user_id") @db.Uuid
-
-  templateId String?              @map("template_id") @db.Uuid
-
-  kind       NotificationKind     @default(EVENT)
-  eventType  String?              @map("event_type")
+  id         String                  @id @default(uuid()) @db.Uuid
+  userId     String                  @map("user_id") @db.Uuid
+  templateId String?                 @map("template_id") @db.Uuid
+  kind       NotificationKind        @default(EVENT)
+  eventType  String?                 @map("event_type")
   targetType NotificationTargetType? @map("target_type")
-  actorId    String?              @map("actor_id") @db.Uuid
-  createdBy  String?              @map("created_by") @db.Uuid
-  entityType String?              @map("entity_type")
-  entityId   String?              @map("entity_id")
+  actorId    String?                 @map("actor_id") @db.Uuid
+  createdBy  String?                 @map("created_by") @db.Uuid
+  entityType String?                 @map("entity_type")
+  entityId   String?                 @map("entity_id")
   payload    Json?
-
   title      String?
   content    String?
-
   channel    NotificationChannel
   status     NotificationStatus
-
-  sendAt     DateTime             @map("send_at")
-  deliveredAt DateTime?           @map("delivered_at")
-  readAt     DateTime?            @map("read_at")
-  createdAt  DateTime             @default(now()) @map("created_at")
-  updatedAt  DateTime             @updatedAt @map("updated_at")
+  sendAt     DateTime                @map("send_at")
+  deliveredAt DateTime?              @map("delivered_at")
+  readAt     DateTime?               @map("read_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+  updatedAt  DateTime                @updatedAt @map("updated_at")
 
   template NotificationTemplate? @relation(fields: [templateId], references: [id])
 

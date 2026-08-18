@@ -18,7 +18,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly secureRpc: SecureRpcService,
     private configService: ConfigService,
     private readonly redisService: RedisService,
-    private readonly secureRpc: SecureRpcService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

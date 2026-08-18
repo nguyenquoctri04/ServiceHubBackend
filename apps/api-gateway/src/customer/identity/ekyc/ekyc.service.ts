@@ -3,6 +3,7 @@ import { ClientProxy } from "@nestjs/microservices";
 import { IsNotEmpty, IsString } from "class-validator";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { SecureRpcService } from "@app/common";
+import { AuditEmitterService } from "../../../shared/audit-emitter.service";
 
 export class ApiGatewayExtractOcrDto {
     @IsString()
@@ -30,6 +31,7 @@ export class CustomerEkycService {
         @Inject("IDENTITY_SERVICE")
         private readonly identityClient: ClientProxy,
         private readonly secureRpc: SecureRpcService,
+        private readonly auditEmitter: AuditEmitterService,
     ) {}
 
     async extractOcr(dto: ApiGatewayExtractOcrDto, identityId: string) {
@@ -38,7 +40,7 @@ export class CustomerEkycService {
                 this.identityClient,
                 { cmd: CustomerPatterns.EKYC_OCR },
                 { ...dto, identityId },
-                60000, // 60s — upload 2 ảnh + VNPT OCR retry (3 card types) có thể tốn ~30-50s
+                60000,
             );
         } catch (err: any) {
             console.error("RPC Error in extractOcr:", err);
@@ -52,12 +54,32 @@ export class CustomerEkycService {
 
     async verifyFace(dto: ApiGatewayVerifyFaceDto, identityId: string) {
         try {
-            return await this.secureRpc.send(
+            const result = await this.secureRpc.send(
                 this.identityClient,
                 { cmd: CustomerPatterns.EKYC_VERIFY_FACE },
                 { ...dto, identityId },
-                60000, // 60s — upload selfie + VNPT face compare
+                60000,
             );
+
+            // Emit audit event after successful face verification
+            const verified = (result as any)?.verified ?? (result as any)?.data?.verified;
+            this.auditEmitter.emit({
+                userId:      identityId,
+                serviceName: 'identity-service',
+                action:      verified ? 'OTHER' : 'OTHER',
+                entityType:  'IdentityVerification',
+                entityId:    dto.verificationId,
+                newData:     {
+                    verificationId: dto.verificationId,
+                    verified,
+                    similarityScore: (result as any)?.similarityScore ?? (result as any)?.data?.similarityScore,
+                },
+                description: verified
+                    ? 'Xác thực eKYC khuôn mặt thành công'
+                    : 'Xác thực eKYC khuôn mặt thất bại',
+            });
+
+            return result;
         } catch (err: any) {
             console.error("RPC Error in verifyFace:", err);
             const errMsg = err?.message || err?.response?.message || "Lỗi xác thực khuôn mặt eKYC";

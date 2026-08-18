@@ -29,6 +29,7 @@
     "prisma:pull": "prisma db pull --schema=apps/identity-service/prisma/schema.prisma && prisma db pull --schema=apps/catalog-service/prisma/schema.prisma && prisma db pull --schema=apps/contract-service/prisma/schema.prisma && prisma db pull --schema=apps/signature-service/prisma/schema.prisma && prisma db pull --schema=apps/billing-service/prisma/schema.prisma && prisma db pull --schema=apps/notification-service/prisma/schema.prisma && prisma db pull --schema=apps/audit-service/prisma/schema.prisma",
     "prisma:push": "prisma db push --schema=apps/identity-service/prisma/schema.prisma && prisma db push --schema=apps/catalog-service/prisma/schema.prisma && prisma db push --schema=apps/contract-service/prisma/schema.prisma && prisma db push --schema=apps/signature-service/prisma/schema.prisma && prisma db push --schema=apps/billing-service/prisma/schema.prisma && prisma db push --schema=apps/notification-service/prisma/schema.prisma && prisma db push --schema=apps/audit-service/prisma/schema.prisma",
     "seed:identity": "npx tsx apps/identity-service/prisma/seed.ts",
+    "seed:admin": "npx tsx apps/identity-service/prisma/seed-admin.ts",
     "seed:catalog": "npx tsx apps/catalog-service/prisma/seed.ts",
     "seed:contract": "npx tsx apps/contract-service/prisma/seed.ts",
     "seed:billing": "npx tsx apps/billing-service/prisma/seed.ts",

@@ -12,7 +12,7 @@ export class ProviderBillingPatterns {
   public static readonly METERS_IMPORT_CONFIRM = 'billing.meters.import.confirm';
 
   // Cross-Service Batch RPCs
-  public static readonly CATALOG_ROOMS_BY_IDS = 'catalog.rooms.byIds';
+  public static readonly CATALOG_ROOMS_BY_IDS = 'catalog.rooms.findByIds';
   public static readonly CONTRACTS_BY_IDS = 'contracts.byIds';
 
   // Events

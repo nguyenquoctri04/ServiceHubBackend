@@ -364,6 +364,17 @@ export class ProviderController {
     return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_UPDATE }, { providerId, roomId, dto });
   }
 
+  @Get('catalog/rooms')
+  async getRoomsForProvider(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    const rooms = await this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOMS_FIND_BY_PROVIDER },
+      { providerId },
+    );
+    return this.aggregateRoomData(providerId, rooms || []);
+  }
+
   @Get('catalog/properties/:id/rooms')
   async getRoomsByProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);

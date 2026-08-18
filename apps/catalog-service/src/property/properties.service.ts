@@ -443,6 +443,14 @@ export class PropertiesService {
     });
   }
 
+  /** Loads rooms for the active workspace in one query for provider-wide selectors. */
+  async getRoomsForProvider(providerId: string) {
+    return this.prisma.room.findMany({
+      where: { floor: { block: { property: { providerId } } } },
+      include: { roomType: true },
+    });
+  }
+
   async getAllRooms(providerId: string, propertyId: string) {
     return this.prisma.room.findMany({
       where: {

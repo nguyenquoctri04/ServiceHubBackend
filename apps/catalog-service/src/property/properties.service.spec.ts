@@ -31,6 +31,17 @@ describe('PropertiesService', () => {
     });
   });
 
+  it('loads all workspace rooms in one provider-scoped query', async () => {
+    prisma.room.findMany.mockResolvedValue([]);
+
+    await service.getRoomsForProvider('provider-1');
+
+    expect(prisma.room.findMany).toHaveBeenCalledWith({
+      where: { floor: { block: { property: { providerId: 'provider-1' } } } },
+      include: { roomType: true },
+    });
+  });
+
   it('sets the provider from trusted server context when creating a property', async () => {
     prisma.property = { create: jest.fn().mockResolvedValue({ id: 'property-1' }) };
 

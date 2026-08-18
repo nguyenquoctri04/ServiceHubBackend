@@ -16,6 +16,7 @@ export const CatalogPatterns = {
     FLOORS_FIND_BY_BLOCK: 'catalog.floors.findByBlock',
 
     ROOMS_FIND_BY_FLOOR: 'catalog.rooms.findByFloor',
+    ROOMS_FIND_BY_PROVIDER: 'catalog.rooms.findByProvider',
     ROOMS_FIND_BY_PROPERTY: 'catalog.rooms.findByProperty',
     ROOM_CREATE: 'catalog.room.create',
     ROOM_UPDATE: 'catalog.room.update',

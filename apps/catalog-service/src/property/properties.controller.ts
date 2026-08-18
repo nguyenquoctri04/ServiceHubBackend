@@ -150,6 +150,11 @@ export class PropertiesController {
     return this.propertiesService.getRooms(data.providerId, data.floorId);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_PROVIDER })
+  async getRoomsForProvider(@Payload() data: { providerId: string }) {
+    return this.propertiesService.getRoomsForProvider(data.providerId);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY })
   async getAllRooms(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getAllRooms(data.providerId, data.propertyId);

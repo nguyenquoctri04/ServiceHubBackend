@@ -16,24 +16,8 @@ export class InvoicesService {
   ) { }
 
   async findInvoices(providerId: string, query: InvoiceQueryDto) {
-    // 1. Fetch contracts for provider
-    let contractsRes;
-    try {
-      contractsRes = await Promise.race([
-        this.secureRpc.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 }),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
-      ]);
-    } catch (err) {
-      throw new RpcException('Contract Service timeout or failed');
-    }
-
-    const contractIds = (Array.isArray(contractsRes) ? contractsRes : contractsRes?.data || []).map((c: any) => c.id);
-    if (contractIds.length === 0) {
-      return { data: [], total: 0, page: query.page || 1, limit: query.limit || 10 };
-    }
-
     const where: Prisma.InvoiceWhereInput = {
-      contractId: { in: contractIds },
+      providerId,
     };
 
     if (query.status) {

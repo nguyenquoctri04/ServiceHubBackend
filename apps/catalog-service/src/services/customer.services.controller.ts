@@ -33,18 +33,30 @@ export class CustomerServicesController {
     @MessagePattern({
         cmd: CustomerPatterns.GET_SERVICES,
     })
-    getServices(@Payload() payload: {query: MarketplaceServicesQueryDto, customerId: string | null}) {
+    getServices(
+        @Payload()
+        payload: {
+            query: MarketplaceServicesQueryDto;
+            customerId: string | null;
+        },
+    ) {
         return this.service.getMarketplaceServices(payload);
     }
 
     @MessagePattern({ cmd: CustomerPatterns.GET_SERVICE_DETAIL })
-    async getDetail(@Payload() payload: { serviceId: string, customerId: string | null }) {
+    async getDetail(
+        @Payload() payload: { serviceId: string; customerId: string | null },
+    ) {
         return this.service.getDetail(payload.serviceId, payload.customerId);
     }
 
     @MessagePattern({ cmd: CustomerPatterns.GET_RELATED_SERVICES })
     async getRelated(
-        @Payload() payload: { serviceId: string, customerId: string | null } & GetRelatedServicesDto,
+        @Payload()
+        payload: {
+            serviceId: string;
+            customerId: string | null;
+        } & GetRelatedServicesDto,
     ) {
         return this.service.getRelated(
             payload.serviceId,
@@ -64,5 +76,10 @@ export class CustomerServicesController {
             payload.providerId,
             payload.customerId,
         );
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.VALIDATE_SERVICE_PRICE })
+    async validateServicePrice(@Payload() payload: { servicePriceId: string }) {
+        return this.service.validateServicePrice(payload.servicePriceId);
     }
 }

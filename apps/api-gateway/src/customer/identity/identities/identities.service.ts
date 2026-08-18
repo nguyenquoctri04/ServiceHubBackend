@@ -1,6 +1,7 @@
 import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import {
+    AccountSettings,
     ProviderCatalogDetailRpcResult,
     ProviderDetail,
     ProviderIdentityDetailRpcResult,
@@ -19,6 +20,9 @@ export class CustomerIdentitiesService {
 
         @Inject("CONTRACT_SERVICE")
         private readonly contractClient: ClientProxy,
+
+        @Inject("SIGNATURE_SERVICE")
+        private readonly signatureClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
     ) {}
@@ -69,6 +73,34 @@ export class CustomerIdentitiesService {
                 propertyCount: catalogResult.propertyCount,
                 verifiedDocumentCount: identityResult.verifiedDocumentCount,
             },
+        };
+    }
+
+    async getCustomerInformation(customerId: string): Promise<AccountSettings> {
+        const [identityInformation, digitalSignature] = await Promise.all([
+            this.secureRpc.send(
+                this.identityClient,
+                { cmd: CustomerPatterns.GET_CUSTOMER_INFORMATION },
+                { customerId },
+            ),
+
+            this.secureRpc.send(
+                this.signatureClient,
+                { cmd: CustomerPatterns.GET_DIGITAL_SIGNATURE_IN_SETTING },
+                { identityId: customerId },
+            ),
+        ]);
+
+        return {
+            identity: identityInformation.identity,
+
+            personalInfo: identityInformation.personalInfo,
+
+            contactInfo: identityInformation.contactInfo,
+
+            identityVerification: identityInformation.identityVerification,
+
+            digitalSignature,
         };
     }
 }

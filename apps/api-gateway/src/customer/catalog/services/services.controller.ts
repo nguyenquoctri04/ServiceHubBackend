@@ -1,5 +1,6 @@
 import {
     CUSTOMER_CATALOG_ENDPOINT,
+    CUSTOMER_IDENTITY_ENDPOINT,
     CUSTOMER_SERVICES,
 } from "@app/common/constants/customer.endpoint";
 import {
@@ -15,7 +16,7 @@ import {
     GetRelatedServicesDto,
     MarketplaceServicesQueryDto,
 } from "@app/common/dto/customer/catalog";
-import { CurrentUser, OptionalJwtAuthGuard } from "@app/common";
+import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "@app/common";
 import { CurrentUserPayload } from "apps/api-gateway/src/provider/provider.controller";
 
 @Controller(CUSTOMER_SERVICES)
@@ -38,8 +39,11 @@ export class CustomerServicesController {
 
     @Get(`${CUSTOMER_CATALOG_ENDPOINT.FETCH_SERVICE_DETAIL}/:id`)
     @UseGuards(OptionalJwtAuthGuard)
-    async getDetail(@Param("id") id: string, @CurrentUser() user: CurrentUserPayload) {
-        const result = await this.service.getDetail(id, user.id);
+    async getDetail(
+        @Param("id") id: string,
+        @CurrentUser() user: CurrentUserPayload,
+    ) {
+        const result = await this.service.getDetail(id, user?.id);
         if (!result) {
             throw new NotFoundException("Không tìm thấy dịch vụ.");
         }

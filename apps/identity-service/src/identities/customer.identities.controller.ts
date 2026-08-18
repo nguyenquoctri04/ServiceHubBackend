@@ -25,4 +25,24 @@ export class CustomerIdentitiesController {
     ) {
         return this.service.getProviderDetailForCustomer(payload.providerId);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_CUSTOMER_INFORMATION })
+    async getCustomerInformation(
+        @Payload()
+        payload: {
+            customerId: string;
+        },
+    ) {
+        return this.service.getCustomerInformation(payload.customerId);
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_SIGNATURE_INFOR })
+    async getSignatureInfo(
+        @Payload()
+        payload: {
+            identityId: string;
+        },
+    ) {
+        return this.service.getSignatureInfo(payload.identityId);
+    }
 }

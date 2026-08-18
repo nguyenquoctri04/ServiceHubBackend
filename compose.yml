@@ -38,7 +38,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -68,7 +68,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -99,7 +99,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -129,7 +129,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -140,12 +140,14 @@ services:
   signature-service:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.signature
       args:
         APP_NAME: signature-service
     container_name: servicehub-signature-service
     restart: unless-stopped
     env_file: .env
+    volumes:
+      - gnupg-data:/var/lib/signature-service/gnupg
     depends_on:
       redis:
         condition: service_healthy
@@ -159,7 +161,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -189,7 +191,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -219,7 +221,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -249,7 +251,7 @@ services:
 
         - action: sync+restart
           path: ./libs/common/src
-          target: /app/libs/common/src
+          target: /usr/src/app/libs/common/src
 
         - action: rebuild
           path: package.json
@@ -259,6 +261,7 @@ services:
 
 volumes:
   redis-data:
+  gnupg-data:
 
 networks:
   servicehub-net:

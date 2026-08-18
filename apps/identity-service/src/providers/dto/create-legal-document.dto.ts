@@ -1,4 +1,4 @@
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
+import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import { LegalDocumentType } from '@prisma/client-identity';
 
 export class CreateLegalDocumentDto {
@@ -7,14 +7,14 @@ export class CreateLegalDocumentDto {
   documentType: LegalDocumentType;
 
   @IsOptional()
-  @IsString()
+  @IsString() @MaxLength(255)
   documentName?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString() @MaxLength(255)
   documentNumber?: string;
 
-  @IsUrl()
+  @IsUrl({ protocols: ['https'], require_protocol: true }) @MaxLength(2048)
   @IsNotEmpty()
   fileUrl: string;
 

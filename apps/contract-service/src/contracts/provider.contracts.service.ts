@@ -244,6 +244,9 @@ export class ProviderContractsService {
     if (existing.status !== ContractStatus.DRAFT) {
       throw new RpcException({ statusCode: 400, message: 'Invalid status for send' });
     }
+    if (existing.contractNumber.startsWith('YCDV-')) {
+      throw new RpcException({ statusCode: 400, message: 'Cần hoàn thiện bản nháp trước khi gửi hợp đồng.' });
+    }
 
     const contract = await this.prisma.contract.update({
       where: { id: contractId },

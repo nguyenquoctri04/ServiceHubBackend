@@ -430,13 +430,20 @@ export class ProviderController {
   private async aggregateRoomData(providerId: string, rooms: any[]) {
     if (!rooms || rooms.length === 0) return [];
 
-    const [contracts, invoicesRes, violations] = await Promise.all([
-      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 }),
-      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query: { limit: 1000 } }),
-      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId })
+    const contracts = await this.proxy.send(
+      this.contractClient,
+      { cmd: ProviderContractPatterns.FIND_ACTIVE_BY_ROOM_IDS },
+      { providerId, roomIds: rooms.map((room: any) => room.id) },
+    );
+    const contractIds = (contracts || []).map((contract: any) => contract.id);
+    const [outstandingTotals, violations] = await Promise.all([
+      contractIds.length === 0
+        ? Promise.resolve({})
+        : this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS }, { providerId, contractIds }),
+      contractIds.length === 0
+        ? Promise.resolve([])
+        : this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, contractIds }),
     ]);
-
-    const invoices = invoicesRes?.data || [];
 
     return rooms.map((room: any) => {
       const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
@@ -451,9 +458,8 @@ export class ProviderController {
         const contractViolations = violations?.filter((v: any) => v.contractId === activeContract.id && v.status === 'REPORTED');
         issueCount = contractViolations?.length || 0;
 
-        const contractInvoices = invoices.filter((inv: any) => inv.contractId === activeContract.id && (inv.status === 'UNPAID' || inv.status === 'OVERDUE'));
-        const hasDebt = contractInvoices && contractInvoices.length > 0;
-        debtAmount = hasDebt ? contractInvoices.reduce((acc: number, inv: any) => acc + Number(inv.total), 0) : 0;
+        debtAmount = Number(outstandingTotals?.[activeContract.id] || 0);
+        const hasDebt = debtAmount > 0;
 
         if (issueCount > 0) {
           rentStatus = 'ISSUE';

@@ -2,6 +2,7 @@ export class ProviderBillingPatterns {
   // Invoices
   public static readonly INVOICES_FIND = 'billing.invoices.find';
   public static readonly INVOICES_PAY = 'billing.invoices.pay';
+  public static readonly INVOICES_OUTSTANDING_TOTALS = 'billing.invoices.outstandingTotals';
 
   // Meters
   public static readonly METERS_FIND = 'billing.meters.find';

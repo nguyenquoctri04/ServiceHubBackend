@@ -14,6 +14,11 @@ export class InvoicesController {
     return this.service.findInvoices(payload.providerId, payload.query);
   }
 
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS })
+  async findOutstandingTotals(@Payload() payload: { providerId: string; contractIds: string[] }) {
+    return this.service.findOutstandingTotals(payload.providerId, payload.contractIds);
+  }
+
   @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_PAY })
   async payInvoice(@Payload() payload: { providerId: string; invoiceId: string; dto: PayInvoiceDto; idempotencyKey: string }) {
     return this.service.payInvoice(payload.providerId, payload.invoiceId, payload.dto, payload.idempotencyKey);

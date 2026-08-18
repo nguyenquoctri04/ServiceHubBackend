@@ -496,9 +496,23 @@ export class ProviderContractsService {
 
   async findActiveContractsByRoomIds(providerId: string, roomIds: string[]) {
     if (roomIds.length === 0) return [];
-    return this.prisma.contract.findMany({
+    const contracts = await this.prisma.contract.findMany({
       where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
-      select: { id: true, roomId: true },
+      select: { id: true, roomId: true, customerId: true },
+    });
+    const identities = await this.secureRpc.send<CustomerIdentity[]>(
+      this.identityClient,
+      { cmd: 'provider.identities.batch' },
+      { identityIds: contracts.map((contract) => contract.customerId) },
+    ).catch(() => []);
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
+    return contracts.map((contract) => {
+      const customer = identitiesById.get(contract.customerId);
+      return {
+        ...contract,
+        customerName: customer?.email || customer?.phone || 'Khách hàng',
+        customerPhone: customer?.phone || '',
+      };
     });
   }
 

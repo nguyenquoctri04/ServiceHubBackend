@@ -8,8 +8,8 @@ export class ViolationsController {
   constructor(private readonly service: ViolationsService) {}
 
   @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_FIND })
-  async findViolations(@Payload() data: { providerId: string, actorId: string, status?: string }) {
-    return this.service.findByProvider(data.providerId, data.actorId, data.status);
+  async findViolations(@Payload() data: { providerId: string, actorId?: string, status?: string, contractIds?: string[] }) {
+    return this.service.findByProvider(data.providerId, data.actorId, data.status, data.contractIds);
   }
 
   @MessagePattern({ cmd: 'provider.violations.create' })

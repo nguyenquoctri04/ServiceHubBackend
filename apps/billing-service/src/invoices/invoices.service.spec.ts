@@ -48,4 +48,29 @@ describe('InvoicesService', () => {
       data: expect.objectContaining({ invoiceId: 'invoice-1', paymentLinkId: 'key-1', status: 'SUCCESS' }),
     }));
   });
+
+  it('limits dashboard invoice reads to the requested provider-owned contracts', async () => {
+    const prisma = {
+      invoice: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new InvoicesService(prisma as any);
+
+    await service.findInvoices('provider-1', { contractIds: ['contract-1', 'contract-2'] } as any);
+
+    expect(prisma.invoice.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ providerId: 'provider-1', contractId: { in: ['contract-1', 'contract-2'] } }),
+    }));
+  });
+
+  it('returns outstanding totals grouped by provider-owned contract', async () => {
+    const prisma = {
+      invoice: { groupBy: jest.fn().mockResolvedValue([{ contractId: 'contract-1', _sum: { total: 350000 } }]) },
+    };
+    const service = new InvoicesService(prisma as any);
+
+    await expect(service.findOutstandingTotals('provider-1', ['contract-1'])).resolves.toEqual({ 'contract-1': 350000 });
+    expect(prisma.invoice.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: 'provider-1', contractId: { in: ['contract-1'] }, status: { in: ['UNPAID', 'OVERDUE'] } },
+    }));
+  });
 });

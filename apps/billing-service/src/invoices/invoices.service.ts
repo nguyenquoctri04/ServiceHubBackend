@@ -23,6 +23,9 @@ export class InvoicesService {
     if (query.search) {
       where.invoiceNumber = { contains: query.search, mode: 'insensitive' };
     }
+    if (query.contractIds?.length) {
+      where.contractId = { in: query.contractIds };
+    }
 
     const page = query.page ? Number(query.page) : 1;
     const limit = query.limit ? Number(query.limit) : 10;
@@ -40,6 +43,19 @@ export class InvoicesService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  async findOutstandingTotals(providerId: string, contractIds: string[]): Promise<Record<string, number>> {
+    if (contractIds.length === 0) return {};
+
+    const totals = await this.prisma.invoice.groupBy({
+      by: ['contractId'],
+      where: { providerId, contractId: { in: contractIds }, status: { in: ['UNPAID', 'OVERDUE'] } },
+      _sum: { total: true },
+    });
+    return Object.fromEntries(totals.flatMap((total) =>
+      total.contractId ? [[total.contractId, Number(total._sum.total ?? 0)] as const] : [],
+    ));
   }
 
   async payInvoice(providerId: string, invoiceId: string, dto: PayInvoiceDto, idempotencyKey: string) {

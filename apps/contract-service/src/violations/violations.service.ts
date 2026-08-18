@@ -12,7 +12,7 @@ export class ViolationsService {
     private readonly secureRpc: SecureRpcService,
   ) {}
 
-  async findByProvider(providerId: string, actorId: string, status?: string) {
+  async findByProvider(providerId: string, actorId?: string, status?: string, contractIds?: string[]) {
     const where: any = {
       contract: {
         providerId
@@ -21,6 +21,9 @@ export class ViolationsService {
     
     if (status && status !== 'ALL') {
       where.status = status;
+    }
+    if (contractIds?.length) {
+      where.contractId = { in: contractIds };
     }
 
     const cases = await this.prisma.violationCase.findMany({

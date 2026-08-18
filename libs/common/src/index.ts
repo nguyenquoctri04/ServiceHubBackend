@@ -6,6 +6,7 @@ export * from "./guards/auth-throttle.guard";
 export * from "./guards/jwt-auth.guard";
 export * from "./guards/roles.guard";
 export * from "./guards/hmac.guard";
+export * from "./guards/optional-jwt-auth.guard";
 export * from "./observability/structured-logger.service";
 export * from "./utils/redis.config";
 export * from "./dto/pagination.dto";

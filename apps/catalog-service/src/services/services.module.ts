@@ -8,7 +8,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LocationModule } from '../location/location.module';
 import { parseRedisUrl } from '@app/common';
 
-const microservices = ["IDENTITY_SERVICE"];
+const microservices = ["IDENTITY_SERVICE", "CONTRACT_SERVICE"];
 
 const clientProviders: ClientsModuleAsyncOptions = microservices.map(
   (name) => ({

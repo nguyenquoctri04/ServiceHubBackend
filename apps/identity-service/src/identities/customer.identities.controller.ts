@@ -13,4 +13,16 @@ export class CustomerIdentitiesController {
     ) {
         return this.service.getProvidersInPopularByIds(payload.providerIds);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_PROVIDER_SUMMARY })
+    async getProviderDetails(@Payload() payload: { providerIds: string[] }) {
+        return this.service.getSummaryProviders(payload.providerIds);
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_PROVIDER_DETAIL_FOR_CUSTOMER })
+    async getProviderDetailForCustomer(
+        @Payload() payload: { providerId: string },
+    ) {
+        return this.service.getProviderDetailForCustomer(payload.providerId);
+    }
 }

@@ -9,16 +9,11 @@ datasource db {
 }
 
 model GnupgKey {
-  id         String   @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity-service
-  identityId String?  @map("identity_id") @db.Uuid
-
-  publicKey  String?  @map("public_key")
-  privateKey String?  @map("private_key")
-
-  createdAt  DateTime @map("create_at")
-
+  id         String              @id @default(uuid()) @db.Uuid
+  identityId String?             @map("identity_id") @db.Uuid
+  publicKey  String?             @map("public_key")
+  privateKey String?             @map("private_key")
+  createdAt  DateTime            @map("create_at")
   signatures ContractSignature[]
 
   @@index([identityId])
@@ -27,12 +22,8 @@ model GnupgKey {
 
 model ContractSignature {
   id             String   @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> contract-management-service
   contractFileId String   @map("contract_file_id") @db.Uuid
-
   gnupgKeyId     String   @map("gnupg_key_id") @db.Uuid
-
   gnupgKey       GnupgKey @relation(fields: [gnupgKeyId], references: [id])
 
   @@index([contractFileId])

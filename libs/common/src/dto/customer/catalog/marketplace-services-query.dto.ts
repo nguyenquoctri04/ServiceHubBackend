@@ -46,5 +46,5 @@ export class MarketplaceServicesQueryDto {
     longitude?: number;
 
     @IsOptional()
-    sortBy?: MarketplaceSortBy = MarketplaceSortBy.NEWEST;
+    sortBy?: MarketplaceSortBy = MarketplaceSortBy.NEAREST;
 }

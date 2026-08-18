@@ -8,6 +8,220 @@ datasource db {
   url      = env("CATALOG_DATABASE_URL")
 }
 
+model Category {
+  id          String    @id @default(uuid()) @db.Uuid
+  description String?
+  name        String    @unique
+  services    Service[]
+
+  @@map("category")
+}
+
+/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
+model Service {
+  id                 String               @id @default(uuid()) @db.Uuid
+  name               String
+  description        String?
+  status             ServiceStatus
+  address            String
+  latitude           Decimal              @db.Decimal(9, 6)
+  longitude          Decimal              @map("longtitude") @db.Decimal(10, 6)
+  requiresPrepayment Boolean              @default(false) @map("requires_prepayment")
+  requiresContract   Boolean              @default(false) @map("requires_contract")
+  providerId         String               @map("provider_id") @db.Uuid
+  categoryId         String               @map("category_id") @db.Uuid
+  billingRuleId      String               @map("billing_rule_id") @db.Uuid
+  serviceType        ServiceType          @map("service_type")
+  roomTypeId         String?              @map("room_type_id") @db.Uuid
+  createdAt          DateTime             @map("created_at")
+  updatedAt          DateTime             @map("updated_at")
+  billingSchedules   BillingSchedule[]
+  billingRule        ServiceBillingRule   @relation(fields: [billingRuleId], references: [id])
+  category           Category             @relation(fields: [categoryId], references: [id])
+  roomType           RoomType?            @relation(fields: [roomTypeId], references: [id])
+  images             ServiceImage[]
+  prices             ServicePrice[]
+  requiredBy         ServiceRequirement[] @relation("AdditionalService")
+  requirements       ServiceRequirement[] @relation("MainService")
+
+  @@index([providerId])
+  @@index([categoryId])
+  @@index([billingRuleId])
+  @@index([roomTypeId])
+  @@map("service")
+}
+
+model ServiceBillingRule {
+  id                   String              @id @default(uuid()) @db.Uuid
+  calculationMethod    CalculationMethod   @map("calculation_method")
+  billingFrequency     BillingFrequency    @map("billing_frequency")
+  billingIntervalValue Int                 @default(1) @map("billing_interval_value")
+  billingIntervalUnit  BillingIntervalUnit @map("billing_interval_unit")
+  prorationMethod      ProrationMethod     @default(NONE) @map("proration_method")
+  usageSource          Boolean             @default(false) @map("usage_source")
+  createdAt            DateTime            @map("created_at")
+  updatedAt            DateTime            @map("updated_at")
+  services             Service[]
+
+  @@map("service_billing_rule")
+}
+
+model BillingSchedule {
+  id         String   @id @default(uuid()) @db.Uuid
+  serviceId  String   @map("service_id") @db.Uuid
+  billingDay Int      @map("billing_day")
+  dueDays    Int      @map("due_days")
+  createdAt  DateTime @map("created_at")
+  updatedAt  DateTime @map("updated_at")
+  service    Service  @relation(fields: [serviceId], references: [id])
+
+  @@index([serviceId])
+  @@map("billing_schedule")
+}
+
+model ServicePrice {
+  id            String             @id @default(uuid()) @db.Uuid
+  createdBy     String             @map("created_by") @db.Uuid
+  serviceId     String             @map("service_id") @db.Uuid
+  price         Decimal            @db.Decimal(18, 2)
+  unit          String
+  effectiveFrom DateTime           @map("effective_from") @db.Date
+  effectiveTo   DateTime?          @map("effective_to") @db.Date
+  createdAt     DateTime           @map("created_at")
+  service       Service            @relation(fields: [serviceId], references: [id])
+  tiers         ServicePriceTier[]
+
+  @@index([serviceId])
+  @@index([effectiveFrom, effectiveTo])
+  @@map("service_price")
+}
+
+model ServiceRequirement {
+  id                  String        @id @default(uuid()) @db.Uuid
+  serviceId           String        @map("service_id") @db.Uuid
+  additionalServiceId String        @map("additional_service_id") @db.Uuid
+  status              ServiceStatus
+  additionalService   Service       @relation("AdditionalService", fields: [additionalServiceId], references: [id])
+  service             Service       @relation("MainService", fields: [serviceId], references: [id])
+
+  @@unique([serviceId, additionalServiceId])
+  @@index([additionalServiceId])
+  @@map("service_requirement")
+}
+
+model ServicePriceTier {
+  id             String       @id @default(uuid()) @db.Uuid
+  servicePriceId String       @map("service_price_id") @db.Uuid
+  fromValue      Decimal?     @map("from_value") @db.Decimal(18, 2)
+  toValue        Decimal?     @map("to_value") @db.Decimal(18, 2)
+  price          Decimal      @db.Decimal(18, 2)
+  servicePrice   ServicePrice @relation(fields: [servicePriceId], references: [id])
+
+  @@index([servicePriceId])
+  @@map("service_price_tier")
+}
+
+model ServiceImage {
+  id           String   @id @default(uuid()) @db.Uuid
+  serviceId    String   @map("service_id") @db.Uuid
+  imageUrl     String   @map("image_url")
+  displayOrder Int      @map("display_order")
+  createdAt    DateTime @map("created_at")
+  service      Service  @relation(fields: [serviceId], references: [id])
+
+  @@index([serviceId, displayOrder])
+  @@map("service_image")
+}
+
+model Property {
+  id           String         @id @default(uuid()) @db.Uuid
+  providerId   String         @map("provider_id") @db.Uuid
+  propertyName String         @map("property_name")
+  description  String?
+  address      String
+  latitude     Decimal        @db.Decimal(9, 6)
+  longitude    Decimal        @map("longtitude") @db.Decimal(10, 6)
+  status       PropertyStatus
+  createdAt    DateTime       @map("created_at")
+  updatedAt    DateTime       @map("updated_at")
+  blocks       Block[]
+  roomTypes    RoomType[]
+
+  @@index([providerId])
+  @@map("property")
+}
+
+model Block {
+  id         String         @id @default(uuid()) @db.Uuid
+  propertyId String         @map("property_id") @db.Uuid
+  blockName  String         @map("block_name")
+  status     PropertyStatus
+  createdAt  DateTime       @map("created_at")
+  updatedAt  DateTime       @map("updated_at")
+  property   Property       @relation(fields: [propertyId], references: [id])
+  floors     Floor[]
+
+  @@index([propertyId])
+  @@map("block")
+}
+
+model Floor {
+  id        String         @id @default(uuid()) @db.Uuid
+  blockId   String         @map("block_id") @db.Uuid
+  floorName String         @map("floor_name")
+  status    PropertyStatus
+  createdAt DateTime       @map("created_at")
+  updatedAt DateTime       @map("updated_at")
+  block     Block          @relation(fields: [blockId], references: [id])
+  rooms     Room[]
+
+  @@index([blockId])
+  @@map("floor")
+}
+
+model RoomType {
+  id           String         @id @default(uuid()) @db.Uuid
+  propertyId   String         @map("property_id") @db.Uuid
+  typeName     String         @map("type_name")
+  area         Decimal        @db.Decimal(10, 2)
+  maxOccupancy Int            @map("max_occupancy")
+  description  String?
+  status       RoomTypeStatus
+  createdAt    DateTime       @map("created_at")
+  updatedAt    DateTime       @map("updated_at")
+  rooms        Room[]
+  property     Property       @relation(fields: [propertyId], references: [id])
+  services     Service[]
+
+  @@index([propertyId])
+  @@map("room_type")
+}
+
+model Room {
+  id         String     @id @default(uuid()) @db.Uuid
+  roomTypeId String     @map("room_type_id") @db.Uuid
+  floorId    String?    @map("floor_id") @db.Uuid
+  roomNumber String     @map("room_number")
+  status     RoomStatus
+  createdAt  DateTime   @map("created_at")
+  updatedAt  DateTime   @map("updated_at")
+  floor      Floor?     @relation(fields: [floorId], references: [id])
+  roomType   RoomType   @relation(fields: [roomTypeId], references: [id])
+
+  @@index([roomTypeId])
+  @@index([floorId])
+  @@map("room")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model spatial_ref_sys {
+  srid      Int     @id
+  auth_name String? @db.VarChar(256)
+  auth_srid Int?
+  srtext    String? @db.VarChar(2048)
+  proj4text String? @db.VarChar(2048)
+}
+
 enum ServiceStatus {
   ACTIVE
   INACTIVE
@@ -54,247 +268,4 @@ enum RoomTypeStatus {
 enum RoomStatus {
   ACTIVE
   INACTIVE
-}
-
-model Category {
-  id          String    @id @default(uuid()) @db.Uuid
-  description String?
-  name        String    @unique
-
-  services Service[]
-
-  @@map("category")
-}
-
-model Service {
-  id                 String      @id @default(uuid()) @db.Uuid
-  name               String
-  description        String?
-  status             ServiceStatus
-  address            String
-  latitude           Decimal     @db.Decimal(9, 6)
-  longitude          Decimal     @map("longtitude") @db.Decimal(10, 6)
-
-  requiresPrepayment Boolean     @default(false) @map("requires_prepayment")
-  requiresContract   Boolean     @default(false) @map("requires_contract")
-
-  // Cross-service reference -> identity-service
-  providerId         String      @map("provider_id") @db.Uuid
-
-  categoryId         String      @map("category_id") @db.Uuid
-  billingRuleId      String      @map("billing_rule_id") @db.Uuid
-  serviceType        ServiceType @map("service_type")
-  roomTypeId         String?     @map("room_type_id") @db.Uuid
-
-  createdAt          DateTime    @map("created_at")
-  updatedAt          DateTime    @map("updated_at")
-
-  category           Category           @relation(fields: [categoryId], references: [id])
-  billingRule        ServiceBillingRule @relation(fields: [billingRuleId], references: [id])
-  roomType           RoomType?           @relation(fields: [roomTypeId], references: [id])
-
-  billingSchedules   BillingSchedule[]
-  prices             ServicePrice[]
-  requirements       ServiceRequirement[] @relation("MainService")
-  requiredBy         ServiceRequirement[] @relation("AdditionalService")
-  images             ServiceImage[]
-
-  @@index([providerId])
-  @@index([categoryId])
-  @@index([billingRuleId])
-  @@index([roomTypeId])
-  @@map("service")
-}
-
-model ServiceBillingRule {
-  id                  String              @id @default(uuid()) @db.Uuid
-  calculationMethod   CalculationMethod   @map("calculation_method")
-  billingFrequency    BillingFrequency    @map("billing_frequency")
-  billingIntervalValue Int                @default(1) @map("billing_interval_value")
-  billingIntervalUnit BillingIntervalUnit @map("billing_interval_unit")
-
-  prorationMethod     ProrationMethod     @default(NONE) @map("proration_method")
-  usageSource         Boolean             @default(false) @map("usage_source")
-
-  createdAt           DateTime            @map("created_at")
-  updatedAt           DateTime            @map("updated_at")
-
-  services Service[]
-
-  @@map("service_billing_rule")
-}
-
-model BillingSchedule {
-  id         String   @id @default(uuid()) @db.Uuid
-  serviceId  String   @map("service_id") @db.Uuid
-  billingDay Int      @map("billing_day")
-  dueDays    Int      @map("due_days")
-
-  createdAt  DateTime @map("created_at")
-  updatedAt  DateTime @map("updated_at")
-
-  service Service @relation(fields: [serviceId], references: [id])
-
-  @@index([serviceId])
-  @@map("billing_schedule")
-}
-
-model ServicePrice {
-  id            String   @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity/provider
-  createdBy     String   @map("created_by") @db.Uuid
-
-  serviceId     String   @map("service_id") @db.Uuid
-  price         Decimal  @db.Decimal(18, 2)
-  unit          String
-
-  effectiveFrom DateTime  @map("effective_from") @db.Date
-  effectiveTo   DateTime? @map("effective_to") @db.Date
-
-  createdAt     DateTime @map("created_at")
-
-  service Service @relation(fields: [serviceId], references: [id])
-  tiers   ServicePriceTier[]
-
-  @@index([serviceId])
-  @@index([effectiveFrom, effectiveTo])
-  @@map("service_price")
-}
-
-model ServiceRequirement {
-  id                  String        @id @default(uuid()) @db.Uuid
-  serviceId           String        @map("service_id") @db.Uuid
-  additionalServiceId String        @map("additional_service_id") @db.Uuid
-  status              ServiceStatus
-
-  service           Service @relation("MainService", fields: [serviceId], references: [id])
-  additionalService Service @relation("AdditionalService", fields: [additionalServiceId], references: [id])
-
-  @@unique([serviceId, additionalServiceId])
-  @@index([additionalServiceId])
-  @@map("service_requirement")
-}
-
-model ServicePriceTier {
-  id             String   @id @default(uuid()) @db.Uuid
-  servicePriceId String   @map("service_price_id") @db.Uuid
-
-  fromValue      Decimal? @map("from_value") @db.Decimal(18, 2)
-  toValue        Decimal? @map("to_value") @db.Decimal(18, 2)
-  price          Decimal  @db.Decimal(18, 2)
-
-  servicePrice ServicePrice @relation(fields: [servicePriceId], references: [id])
-
-  @@index([servicePriceId])
-  @@map("service_price_tier")
-}
-
-model ServiceImage {
-  id           String   @id @default(uuid()) @db.Uuid
-  serviceId    String   @map("service_id") @db.Uuid
-  imageUrl     String   @map("image_url")
-  displayOrder Int      @map("display_order")
-  createdAt    DateTime @map("created_at")
-
-  service Service @relation(fields: [serviceId], references: [id])
-
-  @@index([serviceId, displayOrder])
-  @@map("service_image")
-}
-
-model Property {
-  id           String         @id @default(uuid()) @db.Uuid
-  providerId   String         @map("provider_id") @db.Uuid
-
-  propertyName String         @map("property_name")
-  description  String?
-
-  address      String
-  latitude     Decimal        @db.Decimal(9, 6)
-  longitude    Decimal        @map("longtitude") @db.Decimal(10, 6)
-
-  status       PropertyStatus
-
-  createdAt    DateTime       @map("created_at")
-  updatedAt    DateTime       @map("updated_at")
-
-  blocks       Block[]
-  roomTypes    RoomType[]
-
-  @@index([providerId])
-  @@map("property")
-}
-
-model Block {
-  id         String         @id @default(uuid()) @db.Uuid
-  propertyId String         @map("property_id") @db.Uuid
-  blockName  String         @map("block_name")
-  status     PropertyStatus
-
-  createdAt  DateTime       @map("created_at")
-  updatedAt  DateTime       @map("updated_at")
-
-  property Property @relation(fields: [propertyId], references: [id])
-  floors   Floor[]
-
-  @@index([propertyId])
-  @@map("block")
-}
-
-model Floor {
-  id        String         @id @default(uuid()) @db.Uuid
-  blockId   String         @map("block_id") @db.Uuid
-  floorName String         @map("floor_name")
-  status    PropertyStatus
-
-  createdAt DateTime       @map("created_at")
-  updatedAt DateTime       @map("updated_at")
-
-  block Block @relation(fields: [blockId], references: [id])
-  rooms Room[]
-
-  @@index([blockId])
-  @@map("floor")
-}
-
-model RoomType {
-  id           String         @id @default(uuid()) @db.Uuid
-  propertyId   String         @map("property_id") @db.Uuid
-
-  typeName     String         @map("type_name")
-  area         Decimal        @db.Decimal(10, 2)
-  maxOccupancy Int            @map("max_occupancy")
-  description  String?
-
-  status       RoomTypeStatus
-
-  createdAt    DateTime       @map("created_at")
-  updatedAt    DateTime       @map("updated_at")
-
-  property Property @relation(fields: [propertyId], references: [id])
-  services Service[]
-  rooms    Room[]
-
-  @@index([propertyId])
-  @@map("room_type")
-}
-
-model Room {
-  id         String     @id @default(uuid()) @db.Uuid
-  roomTypeId String     @map("room_type_id") @db.Uuid
-  floorId    String?    @map("floor_id") @db.Uuid
-
-  roomNumber String     @map("room_number")
-  status     RoomStatus
-
-  createdAt  DateTime   @map("created_at")
-  updatedAt  DateTime   @map("updated_at")
-
-  roomType RoomType @relation(fields: [roomTypeId], references: [id])
-  floor    Floor?   @relation(fields: [floorId], references: [id])
-
-  @@index([roomTypeId])
-  @@index([floorId])
-  @@map("room")
 }

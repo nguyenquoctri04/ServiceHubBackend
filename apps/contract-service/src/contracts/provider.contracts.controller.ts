@@ -33,8 +33,8 @@ export class ProviderContractsController {
     return this.providerContractsService.cancelContract(payload.providerId, payload.contractId, payload.dto?.reason);
   }
 
-  @MessagePattern({ cmd: 'provider.customers.find' })
-  async findCustomers(@Payload() payload: { providerId: string; query: any }) {
+  @MessagePattern({ cmd: ProviderContractPatterns.CUSTOMERS_FIND })
+  async findCustomers(@Payload() payload: { providerId: string; query?: Record<string, unknown> }) {
     return this.providerContractsService.findContracts({ providerId: payload.providerId, ...payload.query });
   }
 

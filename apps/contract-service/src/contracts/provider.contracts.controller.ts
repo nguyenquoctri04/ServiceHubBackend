@@ -38,6 +38,11 @@ export class ProviderContractsController {
     return this.providerContractsService.terminateContract(payload.providerId, payload.contractId, payload.dto?.reason);
   }
 
+  @MessagePattern({ cmd: 'provider.customers.find' })
+  async findCustomers(@Payload() payload: { providerId: string; query: any }) {
+    return this.providerContractsService.findContracts({ providerId: payload.providerId, ...payload.query });
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.FIND })
   async findContracts(@Payload() payload: { providerId: string; status?: string; page?: string; limit?: string }) {
     return this.providerContractsService.findContracts(payload);

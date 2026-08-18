@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { ProviderRpcSummary } from './dto/provider-rpc-summary.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
+import { CreateProviderDto } from './dto/create-provider.dto';
 
 @Injectable()
 export class ProvidersService {
@@ -173,5 +174,66 @@ export class ProvidersService {
     });
   }
 
+
+  /**
+   * Get all provider profiles belonging to an identity.
+   * Returns a compact list suitable for workspace-switcher UI.
+   */
+  async getMyProviders(identityId: string) {
+    this.logger.log(`Fetching all providers for identityId: ${identityId}`);
+    return this.prisma.provider.findMany({
+      where: { identityId },
+      select: {
+        id: true,
+        providerName: true,
+        logoUrl: true,
+        providerType: true,
+        status: true,
+        address: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Register a new provider profile under an existing identity.
+   * providerType and businessType are required enum values from the schema.
+   */
+  async createProvider(identityId: string, dto: CreateProviderDto) {
+    this.logger.log(`Creating new provider for identityId: ${identityId}, name: ${dto.providerName}`);
+
+    // Ensure identity exists before creating a provider
+    const identity = await this.prisma.identity.findUnique({
+      where: { id: identityId },
+    });
+
+    if (!identity) {
+      throw new RpcException({ status: 404, message: 'Identity not found' });
+    }
+
+    const now = new Date();
+    const provider = await this.prisma.provider.create({
+      data: {
+        identityId,
+        providerName: dto.providerName,
+        providerType: dto.providerType,
+        businessType: dto.businessType ?? 'INDIVIDUAL',
+        address: dto.address,
+        status: 'PENDING',
+        createdAt: now,
+        updatedAt: now,
+      },
+      select: {
+        id: true,
+        providerName: true,
+        logoUrl: true,
+        providerType: true,
+        status: true,
+        address: true,
+      },
+    });
+
+    return provider;
+  }
 
 }

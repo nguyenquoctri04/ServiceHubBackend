@@ -339,9 +339,7 @@ export class ProviderContractsService {
    * Retrieves all templates for a provider.
    */
   async findTemplates(providerId: string): Promise<ContractTemplate[]> {
-    return this.prisma.contractTemplate.findMany({
-      where: { providerId }
-    });
+    return this.prisma.contractTemplate.findMany();
   }
 
   /**

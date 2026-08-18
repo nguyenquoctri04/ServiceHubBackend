@@ -27,7 +27,7 @@ export class InvoicesService {
       throw new RpcException('Contract Service timeout or failed');
     }
 
-    const contractIds = contractsRes?.data?.map((c: any) => c.id) || [];
+    const contractIds = (Array.isArray(contractsRes) ? contractsRes : contractsRes?.data || []).map((c: any) => c.id);
     if (contractIds.length === 0) {
       return { data: [], total: 0, page: query.page || 1, limit: query.limit || 10 };
     }

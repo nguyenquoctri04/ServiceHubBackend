@@ -8,6 +8,7 @@ import {
   Put,
   Query,
   UseGuards,
+  BadRequestException,
   Headers,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
@@ -34,11 +35,13 @@ import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
 import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
+import { CreateProviderDto } from './dto/create-provider.dto';
 
 export interface CurrentUserPayload {
   id: string;
   email: string;
   role: string;
+  providerId?: string;
 }
 
 @Controller('api/provider')
@@ -50,6 +53,7 @@ export class ProviderController {
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
     private readonly providerCache: ProviderCacheService,
   ) {}
@@ -243,6 +247,11 @@ export class ProviderController {
     return this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId });
   }
 
+  @Get('catalog/properties/:id/rooms')
+  getRoomsByProperty(@Param('id') propertyId: string) {
+    return this.proxy.send(this.catalogClient, { cmd: 'catalog.properties.findAllRooms' }, { propertyId });
+  }
+
   @Get('catalog/properties/:id/blocks')
   getBlocksByProperty(@Param('id') propertyId: string) {
     return this.proxy.send(this.catalogClient, { cmd: 'catalog.blocks.find' }, { propertyId });
@@ -375,7 +384,46 @@ export class ProviderController {
   @Get('billing/invoices')
   async getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
     const providerId = await this.providerCache.resolveProviderId(user.id);
-    return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query });
+    const invoicesResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query });
+    const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
+    
+    if (!invoicesResp || !invoicesResp.data) return invoicesResp;
+
+    const mappedData = invoicesResp.data.map((inv: any) => {
+      const contract = contracts?.find((c: any) => c.id === inv.contractId);
+      return {
+        id: inv.id,
+        invoice_number: inv.invoiceNumber,
+        customer_id: contract?.customerId || '',
+        customer_name: contract?.customerName || 'Dịch vụ lẻ',
+        contract_id: inv.contractId,
+        room_name: contract?.roomName || 'Không xác định',
+        billing_period_start: inv.billingPeriodStart,
+        billing_period_end: inv.billingPeriodEnd,
+        due_date: inv.dueDate,
+        total: inv.total,
+        status: inv.status,
+        created_at: inv.createdAt,
+        updated_at: inv.updatedAt,
+        items: inv.items?.map((item: any) => ({
+          id: item.id,
+          description: item.description,
+          amount: item.amount,
+          type: item.type
+        })),
+        payments: inv.payments?.map((p: any) => ({
+          id: p.id,
+          invoice_id: p.invoiceId,
+          payment_method: p.paymentMethod,
+          status: p.status,
+          paid_at: p.paidAt,
+          note: p.note,
+          created_at: p.createdAt,
+        }))
+      };
+    });
+
+    return { ...invoicesResp, data: mappedData };
   }
 
   @Post('billing/invoices/:id/pay')
@@ -398,6 +446,53 @@ export class ProviderController {
   async getMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: MeterQueryDto) {
     const providerId = await this.providerCache.resolveProviderId(user.id);
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_FIND }, { providerId, ...query });
+  }
+
+  @Get('billing/meters/grouped')
+  async getGroupedMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: any) {
+    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const { propertyId, month, year } = query;
+    if (!propertyId) throw new BadRequestException('propertyId is required');
+
+    // 1. Fetch rooms for property
+    const rooms = await this.proxy.send(this.catalogClient, { cmd: 'catalog.properties.findAllRooms' }, { propertyId });
+    // 2. Fetch active contracts for provider
+    const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
+    // 3. Fetch all meters for provider
+    const metersResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_FIND }, { providerId, limit: 1000 });
+    const allMeters = metersResp?.data || [];
+
+    const occupied: any[] = [];
+    const vacant: any[] = [];
+
+    (rooms || []).forEach((room: any) => {
+      const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
+      const roomMeters = allMeters.filter((m: any) => m.roomId === room.id);
+      
+      const card = {
+        roomId: room.id,
+        roomName: room.roomNumber,
+        contractId: activeContract?.id || null,
+        meters: roomMeters.map((m: any) => ({
+          meter: {
+            id: m.id,
+            serviceId: m.serviceId || '',
+            serviceName: m.serviceType === 'ELECTRICITY' ? 'Điện' : (m.serviceType === 'WATER' ? 'Nước' : m.serviceType),
+            unit: m.serviceType === 'ELECTRICITY' ? 'kWh' : (m.serviceType === 'WATER' ? 'm3' : '')
+          },
+          currentReading: null, // Depending on requirements, we can fetch readings for month/year here
+          previousReading: null,
+        }))
+      };
+
+      if (activeContract) {
+        occupied.push(card);
+      } else {
+        vacant.push(card);
+      }
+    });
+
+    return { occupied, vacant };
   }
 
   @Post('billing/meters/readings')
@@ -458,6 +553,106 @@ export class ProviderController {
       this.billingClient, 
       { cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM }, 
       { providerId, recordedBy: user.id, dto }
+    );
+  }
+
+  // --- WORKSPACE / PROVIDER REGISTRATION ---
+
+  /**
+   * Lấy danh sách tất cả provider workspaces của user hiện tại.
+   * Dùng cho workspace-switcher ở top bar.
+   */
+  @Get('my-providers')
+  getMyProviders(@CurrentUser() user: CurrentUserPayload) {
+    return this.proxy.send(
+      this.identityClient,
+      { cmd: 'providers.getMyProviders' },
+      { identityId: user.id },
+    );
+  }
+
+  /**
+   * Đăng ký một provider workspace mới cho user hiện tại.
+   */
+  @Post('register')
+  registerProvider(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateProviderDto,
+  ) {
+    return this.proxy.send(
+      this.identityClient,
+      { cmd: 'providers.create' },
+      { identityId: user.id, dto },
+    );
+  }
+
+  // --- NOTIFICATIONS ---
+
+  /**
+   * Lấy danh sách thông báo IN_APP của user (lọc theo workspace hiện tại nếu có).
+   */
+  @Get('notifications')
+  async getNotifications(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = user.providerId;
+    return this.proxy.send(
+      this.notificationClient,
+      { cmd: 'notifications.getUserNotifications' },
+      { userId: user.id, providerId },
+    );
+  }
+
+  /**
+   * Đánh dấu tất cả thông báo là đã đọc.
+   */
+  @Put('notifications/read-all')
+  async markAllNotificationsRead(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = user.providerId;
+    return this.proxy.send(
+      this.notificationClient,
+      { cmd: 'notifications.markAllRead' },
+      { userId: user.id, providerId },
+    );
+  }
+
+  /**
+   * Đánh dấu một thông báo cụ thể là đã đọc.
+   * Kiểm tra ownership trong NotificationsService để tránh IDOR.
+   */
+  @Put('notifications/:id/read')
+  async markNotificationRead(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') notificationId: string,
+  ) {
+    return this.proxy.send(
+      this.notificationClient,
+      { cmd: 'notifications.markRead' },
+      { notificationId, userId: user.id },
+    );
+  }
+
+  // --- VIOLATION ACTIONS ---
+
+  /**
+   * Xử lý một vi phạm: tạo action record và tuỳ chọn đóng case.
+   */
+  @Post('violations/:id/actions')
+  async handleViolationAction(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') violationCaseId: string,
+    @Body() dto: { actionType: string; description: string; resolveViolation: boolean },
+  ) {
+    const providerId = await this.providerCache.resolveProviderId(user.id);
+    return this.proxy.send(
+      this.contractClient,
+      { cmd: 'provider.violations.handleAction' },
+      {
+        providerId,
+        violationCaseId,
+        actionType: dto.actionType,
+        description: dto.description,
+        performedBy: user.id,
+        resolveViolation: dto.resolveViolation,
+      },
     );
   }
 }

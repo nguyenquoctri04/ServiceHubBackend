@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ViolationTargetType, AppealStatus } from '@prisma/client-contract';
+import { ViolationTargetType, AppealStatus, ViolationActionType } from '@prisma/client-contract';
 import { ViolationType } from '@app/common';
 
 @Injectable()
@@ -33,6 +33,7 @@ export class ViolationsService {
     return cases.map(c => ({
       id: c.id,
       contractId: c.contractId,
+      contractNumber: c.contract?.contractNumber || '',
       roomName: '', 
       propertyName: '',
       customerName: '',
@@ -82,5 +83,47 @@ export class ViolationsService {
     });
 
     return { success: true, appeal };
+  }
+
+  /**
+   * Xử lý một vi phạm: tạo ViolationAction và tuỳ chọn chuyển status sang RESOLVED.
+   * Kiểm tra quyền: violation phải thuộc về providerId được truyền vào để tránh IDOR.
+   */
+  async handleAction(data: {
+    providerId: string;
+    violationCaseId: string;
+    actionType: string;
+    description: string;
+    performedBy: string;
+    resolveViolation: boolean;
+  }) {
+    const violation = await this.prisma.violationCase.findFirst({
+      where: { id: data.violationCaseId, providerId: data.providerId },
+    });
+
+    if (!violation) {
+      throw new Error('Violation case not found or access denied');
+    }
+
+    const now = new Date();
+
+    const action = await this.prisma.violationAction.create({
+      data: {
+        violationCaseId: data.violationCaseId,
+        performedBy: data.performedBy,
+        actionType: data.actionType as ViolationActionType,
+        reason: data.description,
+        createdAt: now,
+      },
+    });
+
+    if (data.resolveViolation) {
+      await this.prisma.violationCase.update({
+        where: { id: data.violationCaseId },
+        data: { status: 'RESOLVED', updatedAt: now },
+      });
+    }
+
+    return { success: true, action };
   }
 }

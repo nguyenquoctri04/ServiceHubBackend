@@ -3,6 +3,7 @@ import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { ProvidersService } from './providers.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
+import { CreateProviderDto } from './dto/create-provider.dto';
 
 @Controller()
 export class ProvidersController {
@@ -53,5 +54,24 @@ export class ProvidersController {
     return this.providersService.addLegalDocument(payload.identityId, payload.dto);
   }
 
+  /**
+   * Lấy danh sách tất cả providers thuộc một identity (dùng cho workspace switcher).
+   * Caller: API Gateway → GET /api/provider/my-providers
+   */
+  @MessagePattern({ cmd: 'providers.getMyProviders' })
+  async getMyProviders(@Payload('identityId') identityId: string) {
+    return this.providersService.getMyProviders(identityId);
+  }
+
+  /**
+   * Đăng ký một provider mới dưới identity hiện tại.
+   * Caller: API Gateway → POST /api/provider/register
+   */
+  @MessagePattern({ cmd: 'providers.create' })
+  async createProvider(
+    @Payload() payload: { identityId: string; dto: CreateProviderDto },
+  ) {
+    return this.providersService.createProvider(payload.identityId, payload.dto);
+  }
 
 }

@@ -40,7 +40,10 @@ export class CustomerServicesService {
         );
     }
 
-    async getDetail(serviceId: string, customerId: string | null): Promise<ServiceDetailData | null> {
+    async getDetail(
+        serviceId: string,
+        customerId: string | null,
+    ): Promise<ServiceDetailData | null> {
         return this.secureRpc.send(
             this.catalogClient,
             { cmd: CustomerPatterns.GET_SERVICE_DETAIL },

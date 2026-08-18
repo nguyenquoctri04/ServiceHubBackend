@@ -2,6 +2,7 @@ import { Controller } from "@nestjs/common";
 import { CustomerContractsService } from "./customer.contracts.service";
 import { MessagePattern, Payload } from "@nestjs/microservices";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
+import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 
 @Controller()
 export class CustomerContractsController {
@@ -72,5 +73,33 @@ export class CustomerContractsController {
             payload.items,
             payload.customerId,
         );
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.CREATE_SERVICE_BOOKING })
+    async createServiceBooking(
+        @Payload()
+        command: CreateServiceBookingCommand,
+    ) {
+        console.log(command.servicePriceId);
+        return this.service.createServiceBooking(command);
+    }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.GET_CONTRACT_FILE_HASH_FOR_SIGNING,
+    })
+    async getContractFileHashForSigning(
+        @Payload() payload: { contractFileId: string; identityId: string },
+    ) {
+        return this.service.getContractFileHashForSigning(
+            payload.contractFileId,
+            payload.identityId,
+        );
+    }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.GET_CONTRACT_FILE_HASH_FOR_VERIFY,
+    })
+    async getContractFileHashForVerify(input: { contractFileId: string }) {
+        return this.service.getContractFileHashForVerify(input.contractFileId);
     }
 }

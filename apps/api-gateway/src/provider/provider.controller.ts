@@ -558,12 +558,6 @@ export class ProviderController {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId, contractId, dto });
   }
 
-  @Post('contracts/:id/terminate')
-  async terminateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
-    const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMINATE }, { providerId, contractId, dto });
-  }
-
   // --- VIOLATIONS MODULE ---
 
   @Get('violations')

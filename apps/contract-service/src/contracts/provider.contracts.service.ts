@@ -298,24 +298,6 @@ export class ProviderContractsService {
   }
 
   /**
-   * Terminates an active contract.
-   */
-  async terminateContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
-    this.logger.log(`Terminating contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
-    
-    if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
-    if (existing.status !== ContractStatus.ACTIVE) {
-      throw new RpcException({ statusCode: 400, message: 'Only active contracts can be terminated' });
-    }
-
-    return this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: ContractStatus.TERMINATED, updatedAt: new Date() }
-    });
-  }
-
-  /**
    * Enriches contract data by fetching external references (Customer, Services).
    */
   private async enrichContractData(contract: Contract & { services?: any[], terms?: any[] }): Promise<EnrichedContract> {

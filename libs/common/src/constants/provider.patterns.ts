@@ -4,7 +4,6 @@ export class ProviderContractPatterns {
   public static readonly SEND = 'contracts.send';
   public static readonly REVOKE = 'contracts.revoke';
   public static readonly CANCEL = 'contracts.cancel';
-  public static readonly TERMINATE = 'contracts.terminate';
   public static readonly FIND = 'contracts.find';
   public static readonly FIND_ONE = 'contracts.findOne';
   public static readonly FIND_BY_IDS = 'contracts.findByIds';

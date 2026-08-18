@@ -14,8 +14,13 @@ export class ProvidersController {
    * Caller: API Gateway (provider.controller.ts) → GET /api/provider/profile
    */
   @MessagePattern({ cmd: 'providers.getProfile' })
-  async getProfile(@Payload('identityId') identityId: string) {
-    return this.providersService.getProviderProfile(identityId);
+  async getProfile(
+    @Payload() payload: { identityId: string; providerId?: string },
+  ) {
+    return this.providersService.getProviderProfile(
+      payload.identityId,
+      payload.providerId,
+    );
   }
 
   /**
@@ -24,9 +29,18 @@ export class ProvidersController {
    */
   @MessagePattern({ cmd: 'providers.updateProfile' })
   async updateProfile(
-    @Payload() payload: { identityId: string; dto: UpdateProviderProfileDto },
+    @Payload()
+    payload: {
+      identityId: string;
+      providerId?: string;
+      dto: UpdateProviderProfileDto;
+    },
   ) {
-    return this.providersService.updateProviderProfile(payload.identityId, payload.dto);
+    return this.providersService.updateProviderProfile(
+      payload.identityId,
+      payload.dto,
+      payload.providerId,
+    );
   }
 
   /**
@@ -45,13 +59,36 @@ export class ProvidersController {
   }
 
   /**
+   * Xác nhận provider trong JWT thuộc identity đang đăng nhập.
+   * Chỉ API Gateway sử dụng để scope workspace hiện hành.
+   */
+  @MessagePattern({ cmd: 'providers.getByIdForIdentity' })
+  async getProviderByIdForIdentity(
+    @Payload() payload: { identityId: string; providerId: string },
+  ) {
+    return this.providersService.getProviderByIdForIdentity(
+      payload.identityId,
+      payload.providerId,
+    );
+  }
+
+  /**
    * Thêm giấy tờ pháp lý.
    */
   @MessagePattern({ cmd: 'providers.addLegalDocument' })
   async addLegalDocument(
-    @Payload() payload: { identityId: string; dto: CreateLegalDocumentDto },
+    @Payload()
+    payload: {
+      identityId: string;
+      providerId?: string;
+      dto: CreateLegalDocumentDto;
+    },
   ) {
-    return this.providersService.addLegalDocument(payload.identityId, payload.dto);
+    return this.providersService.addLegalDocument(
+      payload.identityId,
+      payload.dto,
+      payload.providerId,
+    );
   }
 
   /**

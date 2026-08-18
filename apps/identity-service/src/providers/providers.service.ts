@@ -20,11 +20,11 @@ export class ProvidersService {
    * Get the entire Provider profile along with legal documents.
    * Search by identityId (foreign key from Identity table).
    */
-  async getProviderProfile(identityId: string) {
+  async getProviderProfile(identityId: string, providerId?: string) {
     this.logger.log(`Fetching provider profile for identityId: ${identityId}`);
 
     const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
       include: { 
         legalDocuments: true,
         identity: {
@@ -64,12 +64,16 @@ export class ProvidersService {
    * Update Provider profile information.
    * Only nullable fields are allowed to be updated - cannot update providerType, status, identityId.
    */
-  async updateProviderProfile(identityId: string, dto: UpdateProviderProfileDto) {
+  async updateProviderProfile(
+    identityId: string,
+    dto: UpdateProviderProfileDto,
+    providerId?: string,
+  ) {
     this.logger.log(`Updating provider profile for identityId: ${identityId}`);
 
     // Ensure Provider exists before update
     const existing = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
     });
 
     if (!existing) {
@@ -143,13 +147,33 @@ export class ProvidersService {
   }
 
   /**
+   * Authorize an active provider workspace against the caller's identity.
+   * A missing record deliberately returns null so the gateway can map it to 403.
+   */
+  async getProviderByIdForIdentity(identityId: string, providerId: string) {
+    return this.prisma.provider.findFirst({
+      where: {
+        id: providerId,
+        identityId,
+      },
+      select: {
+        id: true,
+      },
+    });
+  }
+
+  /**
    * Add a new legal document for Provider.
    */
-  async addLegalDocument(identityId: string, dto: CreateLegalDocumentDto) {
+  async addLegalDocument(
+    identityId: string,
+    dto: CreateLegalDocumentDto,
+    providerId?: string,
+  ) {
     this.logger.log(`Adding legal document for identityId: ${identityId}`);
 
     const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
     });
 
     if (!provider) {

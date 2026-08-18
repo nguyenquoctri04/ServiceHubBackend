@@ -3,43 +3,81 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { PropertiesService } from './properties.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
+import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
 
 @Controller()
 export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) { }
 
-  @MessagePattern({ cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS })
-  async getRoomsByIds(@Payload() roomIds: string[]) {
-    return this.propertiesService.getRoomsByIds(roomIds);
-  }
-
-  @MessagePattern({ cmd: ProviderContractPatterns.PROPERTIES_FIND })
+  @MessagePattern({ cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER })
   async getProperties(@Payload() data: { providerId: string }) {
     return this.propertiesService.getProperties(data.providerId);
   }
 
-  @MessagePattern({ cmd: 'catalog.blocks.find' })
-  async getBlocks(@Payload() data: { propertyId: string }) {
-    return this.propertiesService.getBlocks(data.propertyId);
+  @MessagePattern({ cmd: CatalogPatterns.PROPERTY_CREATE })
+  async createProperty(
+    @Payload()
+    data: {
+      providerId: string;
+      dto: {
+        propertyName: string;
+        address: string;
+        latitude: number;
+        longitude: number;
+        description?: string;
+        status?: 'ACTIVE' | 'INACTIVE';
+      };
+    },
+  ) {
+    return this.propertiesService.createProperty(data.providerId, data.dto);
   }
 
-  @MessagePattern({ cmd: 'catalog.floors.find' })
-  async getFloors(@Payload() data: { blockId: string }) {
-    return this.propertiesService.getFloors(data.blockId);
+  @MessagePattern({ cmd: CatalogPatterns.PROPERTY_UPDATE })
+  async updateProperty(@Payload() data: { providerId: string; propertyId: string; dto: any }) {
+    return this.propertiesService.updateProperty(data.providerId, data.propertyId, data.dto);
   }
 
-  @MessagePattern({ cmd: 'catalog.rooms.find' })
-  async getRooms(@Payload() data: { floorId: string }) {
-    return this.propertiesService.getRooms(data.floorId);
+  @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
+  async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
+    return this.propertiesService.getPropertyById(data.providerId, data.propertyId);
   }
 
-  @MessagePattern({ cmd: 'catalog.properties.findAllRooms' })
-  async getAllRooms(@Payload() data: { propertyId: string }) {
-    return this.propertiesService.getAllRooms(data.propertyId);
+  @MessagePattern({ cmd: CatalogPatterns.BLOCKS_FIND_BY_PROPERTY })
+  async getBlocks(@Payload() data: { providerId: string; propertyId: string }) {
+    return this.propertiesService.getBlocks(data.providerId, data.propertyId);
   }
 
-  @MessagePattern({ cmd: 'catalog.rooms.count' })
+  @MessagePattern({ cmd: CatalogPatterns.FLOORS_FIND_BY_BLOCK })
+  async getFloors(@Payload() data: { providerId: string; blockId: string }) {
+    return this.propertiesService.getFloors(data.providerId, data.blockId);
+  }
+
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_FLOOR })
+  async getRooms(@Payload() data: { providerId: string; floorId: string }) {
+    return this.propertiesService.getRooms(data.providerId, data.floorId);
+  }
+
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY })
+  async getAllRooms(@Payload() data: { providerId: string; propertyId: string }) {
+    return this.propertiesService.getAllRooms(data.providerId, data.propertyId);
+  }
+
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_IDS })
+  async getRoomsByIds(@Payload() roomIds: string[]) {
+    return this.propertiesService.getRoomsByIds(roomIds);
+  }
+
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_COUNT_BY_PROVIDER })
   async countRooms(@Payload() data: { providerId: string }) {
     return this.propertiesService.countRooms(data.providerId);
+  }
+
+  @MessagePattern({
+    cmd: CatalogPatterns.ROOM_TYPES_FIND_BY_PROPERTY,
+  })
+  async getRoomTypes(
+    @Payload() data: { providerId: string; propertyId: string },
+  ) {
+    return this.propertiesService.getRoomTypes(data.providerId, data.propertyId);
   }
 }

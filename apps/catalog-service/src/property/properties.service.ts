@@ -1,9 +1,61 @@
 import { Injectable } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class PropertiesService {
   constructor(private readonly prisma: PrismaService) { }
+
+  async createProperty(
+    providerId: string,
+    dto: {
+      propertyName: string;
+      address: string;
+      latitude: number;
+      longitude: number;
+      description?: string;
+      status?: 'ACTIVE' | 'INACTIVE';
+    },
+  ) {
+    const now = new Date();
+    return this.prisma.property.create({
+      data: {
+        providerId,
+        propertyName: dto.propertyName.trim(),
+        address: dto.address.trim(),
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        description: dto.description?.trim() || null,
+        status: dto.status ?? 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
+  async updateProperty(
+    providerId: string,
+    propertyId: string,
+    dto: {
+      propertyName?: string; address?: string; latitude?: number; longitude?: number;
+      description?: string; status?: 'ACTIVE' | 'INACTIVE';
+    },
+  ) {
+    const data = {
+      ...(dto.propertyName !== undefined && { propertyName: dto.propertyName.trim() }),
+      ...(dto.address !== undefined && { address: dto.address.trim() }),
+      ...(dto.latitude !== undefined && { latitude: dto.latitude }),
+      ...(dto.longitude !== undefined && { longitude: dto.longitude }),
+      ...(dto.description !== undefined && { description: dto.description.trim() || null }),
+      ...(dto.status !== undefined && { status: dto.status }),
+      updatedAt: new Date(),
+    };
+    const result = await this.prisma.property.updateMany({
+      where: { id: propertyId, providerId }, data,
+    });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Property not found' });
+    return this.getPropertyById(providerId, propertyId);
+  }
 
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
@@ -71,31 +123,47 @@ export class PropertiesService {
     });
   }
 
-  async getBlocks(propertyId: string) {
+  async getBlocks(providerId: string, propertyId: string) {
     return this.prisma.block.findMany({
-      where: { propertyId }
+      where: {
+        propertyId,
+        property: { providerId },
+      },
     });
   }
 
-  async getFloors(blockId: string) {
+  async getFloors(providerId: string, blockId: string) {
     return this.prisma.floor.findMany({
-      where: { blockId }
+      where: {
+        blockId,
+        block: {
+          property: { providerId },
+        },
+      },
     });
   }
 
-  async getRooms(floorId: string) {
+  async getRooms(providerId: string, floorId: string) {
     return this.prisma.room.findMany({
-      where: { floorId },
-      include: { roomType: true }
+      where: {
+        floorId,
+        floor: {
+          block: {
+            property: { providerId },
+          },
+        },
+      },
+      include: { roomType: true },
     });
   }
 
-  async getAllRooms(propertyId: string) {
+  async getAllRooms(providerId: string, propertyId: string) {
     return this.prisma.room.findMany({
       where: {
         floor: {
           block: {
-            propertyId
+            propertyId,
+            property: { providerId },
           }
         }
       },
@@ -103,6 +171,12 @@ export class PropertiesService {
         floor: true,
         roomType: true
       }
+    });
+  }
+
+  async getPropertyById(providerId: string, propertyId: string) {
+    return this.prisma.property.findFirst({
+      where: { id: propertyId, providerId },
     });
   }
 
@@ -117,6 +191,18 @@ export class PropertiesService {
           }
         }
       }
+    });
+  }
+
+  async getRoomTypes(providerId: string, propertyId: string) {
+    return this.prisma.roomType.findMany({
+      where: {
+        propertyId,
+        property: { providerId },
+      },
+      orderBy: {
+        typeName: 'asc',
+      },
     });
   }
 }

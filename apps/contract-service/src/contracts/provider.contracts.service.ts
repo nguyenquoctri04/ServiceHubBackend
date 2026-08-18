@@ -164,7 +164,7 @@ export class ProviderContractsService {
    */
   async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<Contract> {
     this.logger.log(`Updating contract: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) {
       throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -191,7 +191,7 @@ export class ProviderContractsService {
    */
   async sendContract(providerId: string, contractId: string): Promise<Contract> {
     this.logger.log(`Sending contract for signature: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.DRAFT) {
@@ -209,7 +209,7 @@ export class ProviderContractsService {
    */
   async revokeContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Revoking contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.PENDING_SIGNATURE) {
@@ -227,7 +227,7 @@ export class ProviderContractsService {
    */
   async cancelContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Cancelling contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
 
     return this.prisma.contract.update({
@@ -241,7 +241,7 @@ export class ProviderContractsService {
    */
   async terminateContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Terminating contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.ACTIVE) {
@@ -325,7 +325,7 @@ export class ProviderContractsService {
    */
   async findOneContract(providerId: string, contractId: string): Promise<EnrichedContract> {
     this.logger.log(`Fetching contract details for ID: ${contractId}`);
-    const contract = await this.prisma.contract.findUnique({
+    const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
       include: { services: true, terms: true }
     });
@@ -339,7 +339,12 @@ export class ProviderContractsService {
    * Retrieves all templates for a provider.
    */
   async findTemplates(providerId: string): Promise<ContractTemplate[]> {
-    return this.prisma.contractTemplate.findMany();
+    return this.prisma.contractTemplate.findMany({
+      where: {
+        OR: [{ providerId }, { providerId: null }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /**
@@ -347,7 +352,10 @@ export class ProviderContractsService {
    */
   async findTemplate(providerId: string, templateId: string): Promise<ContractTemplate> {
     const template = await this.prisma.contractTemplate.findFirst({
-      where: { id: templateId, providerId }
+      where: {
+        id: templateId,
+        OR: [{ providerId }, { providerId: null }],
+      }
     });
     if (!template) throw new RpcException({ statusCode: 404, message: 'Template not found' });
     return template;

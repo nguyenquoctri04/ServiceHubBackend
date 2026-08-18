@@ -26,6 +26,7 @@ import { ServiceQueryDto } from './dto/service-query.dto';
 import { CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto } from './dto/contract.dto';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
+import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
 import { IdempotencyGuard } from '@app/common/guards/idempotency.guard';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
@@ -36,6 +37,7 @@ import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-conf
 import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
+import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 
 export interface CurrentUserPayload {
   id: string;
@@ -64,22 +66,23 @@ export class ProviderController {
    * Gateway only acts as a proxy, containing no business logic.
    */
   @Get('profile')
-  getProfile(@CurrentUser() user: CurrentUserPayload) {
+  async getProfile(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
       { cmd: 'providers.getProfile' },
-      { identityId: user.id },
+      { identityId: user.id, providerId },
     );
   }
 
   @Get('statistics')
   async getStatistics(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     const [properties, contracts, invoices, roomCount, violations, meterStats] = await Promise.allSettled([
-      this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId }),
+      this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId }),
       this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 100 }),
       this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query: { limit: 100 } }),
-      this.proxy.send(this.catalogClient, { cmd: 'catalog.rooms.count' }, { providerId }),
+      this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOMS_COUNT_BY_PROVIDER }, { providerId }),
       this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId }),
       this.proxy.send(this.billingClient, { cmd: 'billing.meters.dashboardStats' }, { providerId }),
     ]);
@@ -102,62 +105,23 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Query('propertyId') propertyId?: string
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
 
     let targetPropertyId = propertyId;
     if (!targetPropertyId) {
-      const properties = await this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId });
+      const properties = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId });
       if (!properties || properties.length === 0) {
         return [];
       }
       targetPropertyId = properties[0].id;
     }
 
-    const rooms = await this.proxy.send(this.catalogClient, { cmd: 'catalog.properties.findAllRooms' }, { propertyId: targetPropertyId });
-    const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
-    const invoices = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query: { limit: 1000 } });
-    const violations = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId });
-
-    const result = (rooms || []).map((room: any) => {
-      const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
-      
-      if (!activeContract) {
-        return {
-          id: room.id,
-          roomNumber: room.roomNumber,
-          status: 'EMPTY',
-          floorId: room.floorId,
-          floorName: room.floor?.floorName
-        };
-      }
-
-      const contractViolations = violations?.filter((v: any) => v.contractId === activeContract.id && v.status === 'REPORTED');
-      const hasViolation = contractViolations && contractViolations.length > 0;
-
-      const contractInvoices = invoices?.data?.filter((inv: any) => inv.contractId === activeContract.id && (inv.status === 'UNPAID' || inv.status === 'OVERDUE'));
-      const hasDebt = contractInvoices && contractInvoices.length > 0;
-      const debtAmount = hasDebt ? contractInvoices.reduce((acc: number, inv: any) => acc + Number(inv.total), 0) : 0;
-
-      let status = 'PAID';
-      if (hasViolation) {
-        status = 'ISSUE';
-      } else if (hasDebt) {
-        status = 'DEBT';
-      }
-
-      return {
-        id: room.id,
-        roomNumber: room.roomNumber,
-        status,
-        tenantName: activeContract.customerName,
-        debtAmount,
-        issueCount: contractViolations?.length || 0,
-        floorId: room.floorId,
-        floorName: room.floor?.floorName
-      };
-    });
-
-    return result;
+    const rooms = await this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY },
+      { providerId, propertyId: targetPropertyId },
+    );
+    return this.aggregateRoomData(providerId, rooms || []);
   }
 
   /**
@@ -165,14 +129,15 @@ export class ProviderController {
    * DTO is validated at Gateway before proxying to Identity Service.
    */
   @Put('profile')
-  updateProfile(
+  async updateProfile(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: UpdateProviderProfileDto,
   ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
       { cmd: 'providers.updateProfile' },
-      { identityId: user.id, dto },
+      { identityId: user.id, providerId, dto },
     );
   }
 
@@ -180,14 +145,15 @@ export class ProviderController {
    * Upload/Add new Legal Document.
    */
   @Post('legal-documents')
-  addLegalDocument(
+  async addLegalDocument(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateLegalDocumentDto,
   ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
       { cmd: 'providers.addLegalDocument' },
-      { identityId: user.id, dto },
+      { identityId: user.id, providerId, dto },
     );
   }
 
@@ -201,7 +167,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: ServiceQueryDto,
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
       { cmd: 'services.find' },
@@ -217,7 +183,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') serviceId: string,
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
       { cmd: 'services.findOne' },
@@ -233,7 +199,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateServiceDto,
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
       { cmd: 'services.create' },
@@ -243,95 +209,217 @@ export class ProviderController {
 
   @Get('catalog/properties')
   async getProperties(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
-    return this.proxy.send(this.catalogClient, { cmd: ProviderContractPatterns.PROPERTIES_FIND }, { providerId });
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId });
+  }
+
+  @Post('catalog/properties')
+  async createProperty(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreatePropertyDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.PROPERTY_CREATE },
+      { providerId, dto },
+    );
+  }
+
+  @Get('catalog/properties/:id')
+  async getPropertyById(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.PROPERTY_FIND_BY_ID },
+      { providerId, propertyId },
+    );
+  }
+
+  @Put('catalog/properties/:id')
+  async updateProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string, @Body() dto: UpdatePropertyDto) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_UPDATE }, { providerId, propertyId, dto });
   }
 
   @Get('catalog/properties/:id/rooms')
-  getRoomsByProperty(@Param('id') propertyId: string) {
-    return this.proxy.send(this.catalogClient, { cmd: 'catalog.properties.findAllRooms' }, { propertyId });
+  async getRoomsByProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    const rooms = await this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY },
+      { providerId, propertyId },
+    );
+    return this.aggregateRoomData(providerId, rooms || []);
   }
 
   @Get('catalog/properties/:id/blocks')
-  getBlocksByProperty(@Param('id') propertyId: string) {
-    return this.proxy.send(this.catalogClient, { cmd: 'catalog.blocks.find' }, { propertyId });
+  async getBlocksByProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.BLOCKS_FIND_BY_PROPERTY },
+      { providerId, propertyId },
+    );
+  }
+
+  @Get('catalog/properties/:id/room-types')
+  async getRoomTypesByProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOM_TYPES_FIND_BY_PROPERTY },
+      { providerId, propertyId },
+    );
   }
 
   @Get('catalog/blocks/:id/floors')
-  getFloorsByBlock(@Param('id') blockId: string) {
-    return this.proxy.send(this.catalogClient, { cmd: 'catalog.floors.find' }, { blockId });
+  async getFloorsByBlock(@CurrentUser() user: CurrentUserPayload, @Param('id') blockId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.FLOORS_FIND_BY_BLOCK },
+      { providerId, blockId },
+    );
   }
 
   @Get('catalog/floors/:id/rooms')
-  getRoomsByFloor(@Param('id') floorId: string) {
-    return this.proxy.send(this.catalogClient, { cmd: 'catalog.rooms.find' }, { floorId });
+  async getRoomsByFloor(@CurrentUser() user: CurrentUserPayload, @Param('id') floorId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    const rooms = await this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOMS_FIND_BY_FLOOR },
+      { providerId, floorId },
+    );
+    return this.aggregateRoomData(providerId, rooms || []);
+  }
+
+  private async aggregateRoomData(providerId: string, rooms: any[]) {
+    if (!rooms || rooms.length === 0) return [];
+
+    const [contracts, invoicesRes, violations] = await Promise.all([
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query: { limit: 1000 } }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId })
+    ]);
+
+    const invoices = invoicesRes?.data || [];
+
+    return rooms.map((room: any) => {
+      const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
+
+      let rentStatus = 'EMPTY';
+      let debtAmount = 0;
+      let issueCount = 0;
+
+      if (activeContract) {
+        rentStatus = 'RENTED';
+
+        const contractViolations = violations?.filter((v: any) => v.contractId === activeContract.id && v.status === 'REPORTED');
+        issueCount = contractViolations?.length || 0;
+
+        const contractInvoices = invoices.filter((inv: any) => inv.contractId === activeContract.id && (inv.status === 'UNPAID' || inv.status === 'OVERDUE'));
+        const hasDebt = contractInvoices && contractInvoices.length > 0;
+        debtAmount = hasDebt ? contractInvoices.reduce((acc: number, inv: any) => acc + Number(inv.total), 0) : 0;
+
+        if (issueCount > 0) {
+          rentStatus = 'ISSUE';
+        } else if (hasDebt) {
+          rentStatus = 'DEBT';
+        }
+      }
+
+      return {
+        id: room.id,
+        roomNumber: room.roomNumber,
+        roomType: room.roomType ? {
+          id: room.roomType.id,
+          typeName: room.roomType.typeName
+        } : undefined,
+        rentStatus,
+        tenant: activeContract ? {
+          id: activeContract.customerId,
+          name: activeContract.customerName,
+          phone: activeContract.customerPhone
+        } : undefined,
+        debtAmount,
+        contract: activeContract ? {
+          id: activeContract.id,
+          contractNumber: activeContract.contractNumber,
+          endDate: activeContract.endDate
+        } : undefined,
+        // Include floor info if present for dashboard compatibility
+        floorId: room.floorId,
+        floorName: room.floor?.floorName
+      };
+    });
   }
 
   // --- CONTRACT MODULE ---
 
   @Get('contract-templates')
   async getContractTemplates(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TEMPLATES_FIND }, { providerId });
   }
 
   @Get('contract-templates/:id')
   async getContractTemplateDetail(@CurrentUser() user: CurrentUserPayload, @Param('id') templateId: string) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TEMPLATES_FIND_ONE }, { providerId, templateId });
   }
 
   @Get('contract-terms')
   async getContractTerms(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMS_FIND }, { providerId });
   }
 
   @Get('contracts')
   async getContracts(@CurrentUser() user: CurrentUserPayload, @Query() query: ContractQueryDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, ...query });
   }
 
   @Get('contracts/:id')
   async getContractById(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId });
   }
 
   @Post('contracts')
   async createContract(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateContractDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CREATE }, { providerId, dto });
   }
 
   @Put('contracts/:id')
   async updateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: UpdateContractDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.UPDATE }, { providerId, contractId, dto });
   }
 
   @Post('contracts/:id/send')
   async sendContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SEND }, { providerId, contractId });
   }
 
   @Post('contracts/:id/revoke')
   async revokeContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.REVOKE }, { providerId, contractId, dto });
   }
 
   @Post('contracts/:id/cancel')
   async cancelContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId, contractId, dto });
   }
 
   @Post('contracts/:id/terminate')
   async terminateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.TERMINATE }, { providerId, contractId, dto });
   }
 
@@ -339,7 +427,7 @@ export class ProviderController {
 
   @Get('violations')
   async getViolations(@CurrentUser() user: CurrentUserPayload, @Query('status') status?: string) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, status });
   }
 
@@ -349,7 +437,7 @@ export class ProviderController {
     @Param('id') violationCaseId: string,
     @Body() dto: { reason: string }
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient,
       { cmd: 'provider.violations.appeals.create' },
@@ -361,7 +449,7 @@ export class ProviderController {
 
   @Get('customers')
   async getCustomers(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId });
   }
 
@@ -371,7 +459,7 @@ export class ProviderController {
     @Param('id') customerId: string,
     @Body() dto: { reason: string }
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient, 
       { cmd: 'provider.customers.block' }, 
@@ -383,7 +471,7 @@ export class ProviderController {
 
   @Get('billing/invoices')
   async getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     const invoicesResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query });
     const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
     
@@ -434,7 +522,7 @@ export class ProviderController {
     @Body() dto: PayInvoiceDto,
     @Headers('idempotency-key') idempotencyKey: string
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.billingClient, 
       { cmd: ProviderBillingPatterns.INVOICES_PAY }, 
@@ -444,18 +532,22 @@ export class ProviderController {
 
   @Get('billing/meters')
   async getMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: MeterQueryDto) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_FIND }, { providerId, ...query });
   }
 
   @Get('billing/meters/grouped')
   async getGroupedMeters(@CurrentUser() user: CurrentUserPayload, @Query() query: any) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     const { propertyId, month, year } = query;
     if (!propertyId) throw new BadRequestException('propertyId is required');
 
     // 1. Fetch rooms for property
-    const rooms = await this.proxy.send(this.catalogClient, { cmd: 'catalog.properties.findAllRooms' }, { propertyId });
+    const rooms = await this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.ROOMS_FIND_BY_PROPERTY },
+      { providerId, propertyId },
+    );
     // 2. Fetch active contracts for provider
     const contracts = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 1000 });
     // 3. Fetch all meters for provider
@@ -500,7 +592,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateMeterReadingDto
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.billingClient, 
       { cmd: ProviderBillingPatterns.METERS_READING_CREATE }, 
@@ -513,7 +605,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: OcrMeterDto
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_OCR }, { providerId, dto });
   }
 
@@ -522,7 +614,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: OcrConfirmDto
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.billingClient, 
       { cmd: ProviderBillingPatterns.METERS_OCR_CONFIRM }, 
@@ -535,7 +627,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: ExcelImportPreviewDto
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.billingClient, 
       { cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW }, 
@@ -548,7 +640,7 @@ export class ProviderController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: ExcelImportConfirmDto
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.billingClient, 
       { cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM }, 
@@ -593,7 +685,7 @@ export class ProviderController {
    */
   @Get('notifications')
   async getNotifications(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = user.providerId;
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.notificationClient,
       { cmd: 'notifications.getUserNotifications' },
@@ -606,7 +698,7 @@ export class ProviderController {
    */
   @Put('notifications/read-all')
   async markAllNotificationsRead(@CurrentUser() user: CurrentUserPayload) {
-    const providerId = user.providerId;
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.notificationClient,
       { cmd: 'notifications.markAllRead' },
@@ -641,7 +733,7 @@ export class ProviderController {
     @Param('id') violationCaseId: string,
     @Body() dto: { actionType: string; description: string; resolveViolation: boolean },
   ) {
-    const providerId = await this.providerCache.resolveProviderId(user.id);
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient,
       { cmd: 'provider.violations.handleAction' },

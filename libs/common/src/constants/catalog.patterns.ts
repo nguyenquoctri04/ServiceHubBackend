@@ -5,6 +5,7 @@ export const CatalogPatterns = {
     PROPERTY_DELETE: 'catalog.property.delete',
     PROPERTIES_FIND_BY_PROVIDER: 'catalog.properties.findByProvider',
 
+    BLOCK_CREATE: 'catalog.block.create',
     BLOCKS_FIND_BY_PROPERTY: 'catalog.blocks.findByProperty',
 
     FLOORS_FIND_BY_BLOCK: 'catalog.floors.findByBlock',

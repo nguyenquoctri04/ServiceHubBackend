@@ -43,3 +43,13 @@ export class UpdatePropertyDto {
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
 }
+
+export class CreateBlockDto {
+  @IsString()
+  @MaxLength(100)
+  blockName: string;
+
+  @IsOptional()
+  @IsIn(['ACTIVE', 'INACTIVE'])
+  status?: 'ACTIVE' | 'INACTIVE';
+}

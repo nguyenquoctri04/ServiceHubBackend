@@ -42,6 +42,18 @@ export class PropertiesController {
     return this.propertiesService.deleteProperty(data.providerId, data.propertyId);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.BLOCK_CREATE })
+  async createBlock(
+    @Payload()
+    data: {
+      providerId: string;
+      propertyId: string;
+      dto: { blockName: string; status?: 'ACTIVE' | 'INACTIVE' };
+    },
+  ) {
+    return this.propertiesService.createBlock(data.providerId, data.propertyId, data.dto);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.PROPERTY_FIND_BY_ID })
   async getPropertyById(@Payload() data: { providerId: string; propertyId: string }) {
     return this.propertiesService.getPropertyById(data.providerId, data.propertyId);

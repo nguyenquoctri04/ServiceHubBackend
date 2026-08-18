@@ -38,7 +38,7 @@ import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-conf
 import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
-import { CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
+import { CreateBlockDto, CreatePropertyDto, UpdatePropertyDto } from './dto/property.dto';
 
 export interface CurrentUserPayload {
   id: string;
@@ -247,6 +247,20 @@ export class ProviderController {
   async deleteProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_DELETE }, { providerId, propertyId });
+  }
+
+  @Post('catalog/properties/:id/blocks')
+  async createBlock(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') propertyId: string,
+    @Body() dto: CreateBlockDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: CatalogPatterns.BLOCK_CREATE },
+      { providerId, propertyId, dto },
+    );
   }
 
   @Get('catalog/properties/:id/rooms')

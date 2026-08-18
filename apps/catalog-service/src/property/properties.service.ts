@@ -67,6 +67,31 @@ export class PropertiesService {
     return { success: true };
   }
 
+  async createBlock(
+    providerId: string,
+    propertyId: string,
+    dto: { blockName: string; status?: 'ACTIVE' | 'INACTIVE' },
+  ) {
+    const property = await this.prisma.property.findFirst({
+      where: { id: propertyId, providerId },
+      select: { id: true },
+    });
+    if (!property) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy bất động sản.' });
+    }
+
+    const now = new Date();
+    return this.prisma.block.create({
+      data: {
+        propertyId: property.id,
+        blockName: dto.blockName.trim(),
+        status: dto.status ?? 'ACTIVE',
+        createdAt: now,
+        updatedAt: now,
+      },
+    });
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

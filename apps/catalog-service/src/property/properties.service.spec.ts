@@ -71,4 +71,25 @@ describe('PropertiesService', () => {
       error: { message: 'Không thể xóa bất động sản đang có khu nhà hoặc phòng.' },
     });
   });
+
+  it('creates a block only under a property owned by the active provider', async () => {
+    prisma.property = { findFirst: jest.fn().mockResolvedValue({ id: 'property-1' }) };
+    prisma.block = { create: jest.fn().mockResolvedValue({ id: 'block-1' }) };
+
+    await service.createBlock('provider-1', 'property-1', { blockName: 'Khu A' });
+
+    expect(prisma.block.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ propertyId: 'property-1', blockName: 'Khu A', status: 'ACTIVE' }),
+    });
+  });
+
+  it('rejects block creation when the property belongs to another provider', async () => {
+    prisma.property = { findFirst: jest.fn().mockResolvedValue(null) };
+    prisma.block = { create: jest.fn() };
+
+    await expect(service.createBlock('provider-1', 'property-2', { blockName: 'Khu A' })).rejects.toMatchObject({
+      error: { message: 'Không tìm thấy bất động sản.' },
+    });
+    expect(prisma.block.create).not.toHaveBeenCalled();
+  });
 });

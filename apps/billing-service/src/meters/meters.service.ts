@@ -41,7 +41,7 @@ export class MetersService {
     return { value };
   }
 
-  private async fetchValidationContext(data: { roomId?: string; contractId?: string; meterId: string }) {
+  private async fetchValidationContext(providerId: string, data: { roomId?: string; contractId?: string; meterId: string }) {
     // 1 RPC call to either Catalog or Contract based on which ID is provided
     let room = null;
     let contract = null;
@@ -55,6 +55,7 @@ export class MetersService {
         );
         room = roomsMap[data.roomId];
         if (!room) throw new RpcException(new NotFoundException('Room not found'));
+        if (room.floor?.block?.property?.providerId !== providerId) throw new RpcException(new NotFoundException('Room not found'));
       } catch (err) {
         throw new RpcException('Catalog Service failed');
       }
@@ -67,12 +68,13 @@ export class MetersService {
         );
         contract = contractsMap[data.contractId];
         if (!contract) throw new RpcException(new NotFoundException('Contract not found'));
+        if (contract.providerId !== providerId) throw new RpcException(new NotFoundException('Contract not found'));
       } catch (err) {
         throw new RpcException('Contract Service failed');
       }
     }
 
-    const meter = await this.prisma.meter.findUnique({ where: { id: data.meterId } });
+    const meter = await this.prisma.meter.findFirst({ where: { id: data.meterId, providerId, status: 'ACTIVE' } });
     if (!meter) throw new RpcException(new NotFoundException('Meter not found'));
 
     return { room, contract, meter };
@@ -85,6 +87,8 @@ export class MetersService {
     const reading = await this.prisma.meterReading.create({
       data: {
         meterId: meter.id,
+        roomId: data.roomId ?? null,
+        contractId: data.contractId ?? null,
         value: data.value,
         source,
         imgUrl: data.imgUrl,
@@ -102,11 +106,11 @@ export class MetersService {
   }
 
   async createMeterReading(providerId: string, data: ExcelRowDto | any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT') {
-    const context = await this.fetchValidationContext(data);
+    const context = await this.fetchValidationContext(providerId, data);
     return this.createMeterReadingCore(providerId, data, recordedBy, source, context);
   }
 
-  async previewImport(rows: ExcelRowDto[]) {
+  async previewImport(providerId: string, rows: ExcelRowDto[]) {
     const roomIds = [...new Set(rows.map(r => r.roomId).filter(Boolean))];
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
@@ -121,8 +125,8 @@ export class MetersService {
 
       if (!row.meterId) { isValid = false; errors.push('Missing meterId'); }
       if (!row.roomId && !row.contractId) { isValid = false; errors.push('Missing roomId or contractId'); }
-      if (row.roomId && !roomsMap[row.roomId]) { isValid = false; errors.push('Invalid roomId'); }
-      if (row.contractId && !contractsMap[row.contractId]) { isValid = false; errors.push('Invalid contractId'); }
+      if (row.roomId && (!roomsMap[row.roomId] || roomsMap[row.roomId].floor?.block?.property?.providerId !== providerId)) { isValid = false; errors.push('Invalid roomId'); }
+      if (row.contractId && (!contractsMap[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) { isValid = false; errors.push('Invalid contractId'); }
       
       return { row, isValid, errors };
     });
@@ -148,8 +152,8 @@ export class MetersService {
     // 3. Process each row with pre-fetched context (Partial Success)
     const promises = rows.map(async row => {
       if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
-      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found`);
-      if (row.contractId && !contractsMap[row.contractId]) throw new Error(`Contract ${row.contractId} not found`);
+      if (row.roomId && (!roomsMap[row.roomId] || roomsMap[row.roomId].floor?.block?.property?.providerId !== providerId)) throw new Error(`Room ${row.roomId} not found`);
+      if (row.contractId && (!contractsMap[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found`);
 
       const context = {
         meter: metersMap[row.meterId],

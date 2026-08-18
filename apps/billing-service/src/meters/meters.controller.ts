@@ -34,7 +34,7 @@ export class MetersController {
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW })
   async previewImport(@Payload() payload: { providerId: string; rows: ExcelRowDto[] }) {
-    return this.service.previewImport(payload.rows);
+    return this.service.previewImport(payload.providerId, payload.rows);
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM })

@@ -115,6 +115,14 @@ export class CreateRoomTypeDto {
   status?: 'ACTIVE' | 'INACTIVE';
 }
 
+export class UpdateRoomTypeDto {
+  @IsOptional() @IsString() @MaxLength(100) typeName?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0.01) area?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxOccupancy?: number;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
+  @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
+}
+
 export class CreateRoomDto {
   @IsUUID()
   roomTypeId: string;

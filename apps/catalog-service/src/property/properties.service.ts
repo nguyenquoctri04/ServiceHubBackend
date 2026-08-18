@@ -267,6 +267,38 @@ export class PropertiesService {
     });
   }
 
+  async updateRoomType(providerId: string, roomTypeId: string, dto: {
+    typeName?: string; area?: number; maxOccupancy?: number; description?: string; status?: 'ACTIVE' | 'INACTIVE';
+  }) {
+    const result = await this.prisma.roomType.updateMany({
+      where: { id: roomTypeId, property: { providerId } },
+      data: {
+        ...(dto.typeName !== undefined && { typeName: dto.typeName.trim() }),
+        ...(dto.area !== undefined && { area: dto.area }),
+        ...(dto.maxOccupancy !== undefined && { maxOccupancy: dto.maxOccupancy }),
+        ...(dto.description !== undefined && { description: dto.description.trim() || null }),
+        ...(dto.status !== undefined && { status: dto.status }),
+        updatedAt: new Date(),
+      },
+    });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy loại phòng.' });
+    return this.prisma.roomType.findFirst({ where: { id: roomTypeId, property: { providerId } } });
+  }
+
+  async deleteRoomType(providerId: string, roomTypeId: string) {
+    const ownership = { id: roomTypeId, property: { providerId } };
+    const [roomCount, serviceCount] = await Promise.all([
+      this.prisma.room.count({ where: { roomTypeId, roomType: { property: { providerId } } } }),
+      this.prisma.service.count({ where: { roomTypeId, providerId } }),
+    ]);
+    if (roomCount > 0 || serviceCount > 0) {
+      throw new RpcException({ statusCode: 409, message: 'Không thể xóa loại phòng đang được phòng hoặc dịch vụ sử dụng.' });
+    }
+    const result = await this.prisma.roomType.deleteMany({ where: ownership });
+    if (result.count !== 1) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy loại phòng.' });
+    return { success: true };
+  }
+
   async getRoomsByIds(roomIds: string[]) {
     const rooms = await this.prisma.room.findMany({
       where: { id: { in: roomIds } },

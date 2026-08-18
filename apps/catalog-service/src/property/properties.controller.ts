@@ -104,6 +104,16 @@ export class PropertiesController {
     return this.propertiesService.createRoomType(data.providerId, data.propertyId, data.dto);
   }
 
+  @MessagePattern({ cmd: CatalogPatterns.ROOM_TYPE_UPDATE })
+  async updateRoomType(@Payload() data: { providerId: string; roomTypeId: string; dto: any }) {
+    return this.propertiesService.updateRoomType(data.providerId, data.roomTypeId, data.dto);
+  }
+
+  @MessagePattern({ cmd: CatalogPatterns.ROOM_TYPE_DELETE })
+  async deleteRoomType(@Payload() data: { providerId: string; roomTypeId: string }) {
+    return this.propertiesService.deleteRoomType(data.providerId, data.roomTypeId);
+  }
+
   @MessagePattern({ cmd: CatalogPatterns.ROOM_CREATE })
   async createRoom(
     @Payload()

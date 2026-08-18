@@ -39,7 +39,7 @@ import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-conf
 import { MeterQueryDto, ExcelImportPreviewDto } from './dto/meter.dto';
 import { ProviderCacheService } from './provider-cache.service';
 import { CreateProviderDto } from './dto/create-provider.dto';
-import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, CreateRoomDto, CreateRoomTypeDto, UpdateBlockDto, UpdateFloorDto, UpdatePropertyDto } from './dto/property.dto';
+import { CreateBlockDto, CreateFloorDto, CreatePropertyDto, CreateRoomDto, CreateRoomTypeDto, UpdateBlockDto, UpdateFloorDto, UpdatePropertyDto, UpdateRoomTypeDto } from './dto/property.dto';
 
 export interface CurrentUserPayload {
   id: string;
@@ -338,6 +338,18 @@ export class ProviderController {
       { cmd: CatalogPatterns.ROOM_TYPE_CREATE },
       { providerId, propertyId, dto },
     );
+  }
+
+  @Put('catalog/room-types/:id')
+  async updateRoomType(@CurrentUser() user: CurrentUserPayload, @Param('id') roomTypeId: string, @Body() dto: UpdateRoomTypeDto) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_UPDATE }, { providerId, roomTypeId, dto });
+  }
+
+  @Delete('catalog/room-types/:id')
+  async deleteRoomType(@CurrentUser() user: CurrentUserPayload, @Param('id') roomTypeId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_DELETE }, { providerId, roomTypeId });
   }
 
   @Post('catalog/rooms')

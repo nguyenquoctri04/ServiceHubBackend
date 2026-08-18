@@ -181,4 +181,13 @@ describe('PropertiesService', () => {
       where: { id: 'floor-1', block: { property: { providerId: 'provider-1' } } },
     }));
   });
+
+  it('refuses to delete a room type that is still referenced by a service', async () => {
+    prisma.room = { count: jest.fn().mockResolvedValue(0) };
+    prisma.service = { count: jest.fn().mockResolvedValue(1) };
+
+    await expect(service.deleteRoomType('provider-1', 'type-1')).rejects.toMatchObject({
+      error: { message: 'Không thể xóa loại phòng đang được phòng hoặc dịch vụ sử dụng.' },
+    });
+  });
 });

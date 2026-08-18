@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
-import { RpcException } from '@nestjs/microservices';
+import { Inject, Injectable } from '@nestjs/common';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
-import { ViolationType } from '@app/common';
+import { SecureRpcService, ViolationType } from '@app/common';
 
 @Injectable()
 export class ViolationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
+  ) {}
 
   async findByProvider(providerId: string, actorId: string, status?: string) {
     const where: any = {
@@ -108,7 +112,7 @@ export class ViolationsService {
     createRestriction?: boolean;
   }) {
     const now = new Date();
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const violation = await tx.violationCase.findFirst({
         where: { id: data.violationCaseId, providerId: data.providerId, reportedBy: data.performedBy, status: 'REPORTED' },
         include: { contract: { select: { id: true, customerId: true, status: true } } },
@@ -129,5 +133,13 @@ export class ViolationsService {
       if (data.resolveViolation || terminates) await tx.violationCase.update({ where: { id: violation.id }, data: { status: 'RESOLVED', updatedAt: now } });
       return { success: true, action, contractId: violation.contractId, customerId: violation.contract.customerId, terminated: terminates };
     }, { isolationLevel: 'Serializable' });
+    if (result.terminated) {
+      await this.secureRpc.send(this.notificationClient, { cmd: 'notifications.createInApp' }, {
+        userId: result.customerId, providerId: data.providerId,
+        title: 'Hợp đồng đã bị chấm dứt',
+        content: 'Nhà cung cấp đã chấm dứt hợp đồng do vi phạm. Vui lòng xem chi tiết hợp đồng và liên hệ nhà cung cấp nếu cần.',
+      });
+    }
+    return result;
   }
 }

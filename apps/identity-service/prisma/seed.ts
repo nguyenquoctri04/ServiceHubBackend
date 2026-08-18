@@ -66,7 +66,7 @@ const IDS = {
 async function main() {
   console.log('🌱 Seeding identity service...');
   const now = new Date();
-  const passwordHash = await bcrypt.hash('123456789', 10);
+  const passwordHash = await bcrypt.hash('123', 10);
 
   // ROLES
   const roles = [
@@ -255,7 +255,7 @@ async function main() {
       { id: '52000000-0000-0000-0000-000000000002', providerId: IDS.providers.PROVIDER_2, documentType: 'BUSINESS_LICENSE', documentName: 'Giấy phép kinh doanh', documentNumber: 'BL-CLEAN-001', fileUrl: 'https://placehold.co/1000x700?text=Business+License', issueDate: new Date('2024-02-01'), verificationStatus: 'VERIFIED', verifiedBy: IDS.identities.ADMIN, verifiedAt: now, note: 'Đã xác minh', createdAt: now },
       { id: '52000000-0000-0000-0000-000000000003', providerId: IDS.providers.PROVIDER_3, documentType: 'BUSINESS_LICENSE', documentName: 'Giấy phép kinh doanh', documentNumber: 'BL-FIX-001', fileUrl: 'https://placehold.co/1000x700?text=Business+License', issueDate: new Date('2024-03-01'), verificationStatus: 'VERIFIED', verifiedBy: IDS.identities.ADMIN, verifiedAt: now, note: 'Đã xác minh', createdAt: now },
       { id: '52000000-0000-0000-0000-000000000004', providerId: IDS.providers.PROVIDER_TRI, documentType: 'OTHER', documentName: 'Hồ sơ đăng ký dịch vụ', documentNumber: 'BL-TRI-001', fileUrl: 'https://placehold.co/1000x700?text=Provider+Document', issueDate: new Date('2025-01-01'), verificationStatus: 'VERIFIED', verifiedBy: IDS.identities.ADMIN, verifiedAt: now, note: 'Đã xác minh', createdAt: now },
-      
+
       // Edge cases documents
       { id: '52000000-0000-0000-0000-000000000005', providerId: IDS.providers.PROVIDER_PENDING, documentType: 'BUSINESS_LICENSE', documentName: 'Giấy phép chờ duyệt', documentNumber: 'BL-PEN-001', fileUrl: 'https://placehold.co/1000x700?text=Pending+Doc', issueDate: new Date('2026-01-01'), verificationStatus: 'PENDING', verifiedBy: null, verifiedAt: null, note: null, createdAt: now },
       { id: '52000000-0000-0000-0000-000000000006', providerId: IDS.providers.PROVIDER_REJECTED, documentType: 'BUSINESS_LICENSE', documentName: 'Giấy phép giả mạo', documentNumber: 'BL-REJ-001', fileUrl: 'https://placehold.co/1000x700?text=Rejected+Doc', issueDate: new Date('2026-01-01'), verificationStatus: 'REJECTED', verifiedBy: IDS.identities.ADMIN, verifiedAt: now, note: 'Giấy tờ giả mạo, mờ không rõ', createdAt: now },

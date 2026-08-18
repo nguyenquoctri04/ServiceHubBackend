@@ -53,6 +53,8 @@ enum RoomTypeStatus {
 
 enum RoomStatus {
   ACTIVE
+  OCCUPIED
+  MAINTENANCE
   INACTIVE
 }
 
@@ -73,7 +75,7 @@ model Service {
   status             ServiceStatus
   address            String
   latitude           Decimal     @db.Decimal(9, 6)
-  longitude          Decimal     @map("longtitude") @db.Decimal(10, 6)
+  longitude          Decimal     @map("longitude") @db.Decimal(10, 6)
 
   requiresPrepayment Boolean     @default(false) @map("requires_prepayment")
   requiresContract   Boolean     @default(false) @map("requires_contract")
@@ -212,7 +214,7 @@ model Property {
 
   address      String
   latitude     Decimal        @db.Decimal(9, 6)
-  longitude    Decimal        @map("longtitude") @db.Decimal(10, 6)
+  longitude    Decimal        @map("longitude") @db.Decimal(10, 6)
 
   status       PropertyStatus
 

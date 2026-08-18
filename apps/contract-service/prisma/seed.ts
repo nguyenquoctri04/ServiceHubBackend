@@ -116,7 +116,7 @@ async function main() {
   await prisma.contractTemplate.createMany({
     data: [
       {
-        id: IDS.templates.TEMPLATE_ROOM, providerId: null, name: "Hợp đồng thuê phòng trọ (Tiêu chuẩn)", description: "Mẫu hợp đồng thuê phòng trọ tiêu chuẩn, dựa trên Luật Nhà ở.",
+        id: IDS.templates.TEMPLATE_ROOM, providerId: null, name: "Hợp đồng thuê phòng trọ", description: "Mẫu hợp đồng thuê phòng trọ tiêu chuẩn, dựa trên Luật Nhà ở.",
         content: { title: "HỢP ĐỒNG THUÊ PHÒNG TRỌ", sections: ["Thông tin các bên", "Đặc điểm tài sản thuê", "Giá thuê & Thanh toán", "Quyền và Nghĩa vụ", "Chấm dứt hợp đồng", "Cam kết chung"] },
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
@@ -161,7 +161,7 @@ async function main() {
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
       {
-        id: IDS.templates.TEMPLATE_SERVICE_FITOUT, providerId: null, name: "Thỏa thuận thi công nội thất (Fit-out)", description: "Cam kết thi công sửa chữa, làm nội thất căn hộ an toàn.",
+        id: IDS.templates.TEMPLATE_SERVICE_FITOUT, providerId: null, name: "Thỏa thuận thi công nội thất", description: "Cam kết thi công sửa chữa, làm nội thất căn hộ an toàn.",
         content: { title: "THỎA THUẬN THI CÔNG SỬA CHỮA CĂN HỘ", sections: ["Thông tin Chủ hộ & Nhà thầu", "Phạm vi công việc & Bản vẽ", "Tiền cọc đảm bảo", "Nội quy thi công (PCCC, Giờ giấc, Tiếng ồn)", "Bồi thường hư hại"] },
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
@@ -171,7 +171,7 @@ async function main() {
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
       {
-        id: IDS.templates.TEMPLATE_SERVICE_FOOD, providerId: null, name: "Hợp đồng cung cấp Suất ăn / Catering", description: "Cung cấp suất ăn định kỳ (cơm tháng) hoặc đặt tiệc tận nơi.",
+        id: IDS.templates.TEMPLATE_SERVICE_FOOD, providerId: null, name: "Hợp đồng cung cấp Suất ăn", description: "Cung cấp suất ăn định kỳ (cơm tháng) hoặc đặt tiệc tận nơi.",
         content: { title: "HỢP ĐỒNG CUNG CẤP DỊCH VỤ ĂN UỐNG", sections: ["Thông tin các bên", "Thực đơn & Đơn giá", "Giao nhận & Thời gian", "Cam kết Vệ sinh An toàn Thực phẩm", "Xử lý sự cố & Bồi thường y tế"] },
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
@@ -181,7 +181,7 @@ async function main() {
         status: "ACTIVE", createdAt: now, updatedAt: now
       },
       {
-        id: IDS.templates.TEMPLATE_SERVICE_OTHER, providerId: null, name: "Hợp đồng Cung cấp Dịch vụ (Mẫu chung)", description: "Mẫu hợp đồng linh hoạt dành cho các loại hình dịch vụ khác chưa phân loại.",
+        id: IDS.templates.TEMPLATE_SERVICE_OTHER, providerId: null, name: "Hợp đồng Cung cấp Dịch vụ", description: "Mẫu hợp đồng linh hoạt dành cho các loại hình dịch vụ khác chưa phân loại.",
         content: { title: "HỢP ĐỒNG CUNG CẤP DỊCH VỤ", sections: ["Thông tin các bên", "Nội dung công việc & Tiêu chuẩn nghiệm thu", "Phí dịch vụ & Phương thức thanh toán", "Quyền lợi và Trách nhiệm", "Bồi thường thiệt hại & Giải quyết tranh chấp"] },
         status: "ACTIVE", createdAt: now, updatedAt: now
       },

@@ -23,6 +23,7 @@ import { GatewayProxyService } from '../proxy/gateway-proxy.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
 import { CreateContractDto, UpdateContractDto, ContractActionDto, ContractQueryDto } from './dto/contract.dto';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
@@ -176,6 +177,12 @@ export class ProviderController {
     );
   }
 
+  @Get('catalog/service-categories')
+  async getServiceCategories(@CurrentUser() user: CurrentUserPayload) {
+    await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.catalogClient, { cmd: 'services.categories.find' }, {});
+  }
+
   /**
    * Get details of a specific service
    */
@@ -205,6 +212,20 @@ export class ProviderController {
       this.catalogClient,
       { cmd: 'services.create' },
       { providerId, dto },
+    );
+  }
+
+  @Put('catalog/services/:id')
+  async updateService(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') serviceId: string,
+    @Body() dto: UpdateServiceDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.catalogClient,
+      { cmd: 'services.update' },
+      { providerId, serviceId, dto },
     );
   }
 

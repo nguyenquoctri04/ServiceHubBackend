@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
 import { Prisma } from '@prisma/client-catalog';
 import { SecureRpcService } from '@app/common';
 import { ServiceQueryDto } from './dto/service-query.dto';
@@ -68,6 +69,13 @@ export class ServicesService {
 
     // 3. Save to Database (Prisma Transaction)
     return this.executeCreateServiceTransaction(providerId, dto, finalAddress, finalLat, finalLng);
+  }
+
+  async findCategories() {
+    return this.prisma.category.findMany({
+      select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   // --- Private Helper Methods for Clean Code ---
@@ -150,6 +158,7 @@ export class ServicesService {
     finalLng: number
   ) {
     return this.prisma.$transaction(async (tx) => {
+      await this.validateServiceReferences(tx, providerId, dto.categoryId, dto.roomTypeId, dto.requiredServiceIds);
       // Create Billing Rule from DTO
       const rule = await tx.serviceBillingRule.create({
         data: {
@@ -192,9 +201,26 @@ export class ServicesService {
               unit: p.unit,
               effectiveFrom: new Date(),
               createdAt: new Date(),
+              tiers: p.tiers?.length
+                ? { create: p.tiers.map((tier) => ({
+                  fromValue: tier.fromValue,
+                  toValue: tier.toValue ?? null,
+                  price: tier.price,
+                })) }
+                : undefined,
             }
           });
         }
+      }
+
+      if (dto.requiredServiceIds?.length) {
+        await tx.serviceRequirement.createMany({
+          data: dto.requiredServiceIds.map((additionalServiceId) => ({
+            serviceId: service.id,
+            additionalServiceId,
+            status: 'ACTIVE',
+          })),
+        });
       }
 
       if (dto.images && dto.images.length > 0) {
@@ -238,7 +264,17 @@ export class ServicesService {
           prices: {
             orderBy: { createdAt: 'desc' },
             take: 1,
+            include: { tiers: { orderBy: { fromValue: 'asc' } } },
           },
+          billingRule: {
+            select: {
+              calculationMethod: true,
+              billingFrequency: true,
+              billingIntervalValue: true,
+              billingIntervalUnit: true,
+            },
+          },
+          requirements: { select: { additionalServiceId: true } },
           images: {
             orderBy: { displayOrder: 'asc' },
             take: 1,
@@ -256,13 +292,14 @@ export class ServicesService {
   }
 
   async findOneService(providerId: string, serviceId: string) {
-    const service = await this.prisma.service.findUnique({
+    const service = await this.prisma.service.findFirst({
       where: { id: serviceId, providerId },
       include: {
         category: true,
         billingRule: true,
         prices: {
           orderBy: { createdAt: 'desc' },
+          include: { tiers: { orderBy: { fromValue: 'asc' } } },
         },
         images: {
           orderBy: { displayOrder: 'asc' },
@@ -280,6 +317,134 @@ export class ServicesService {
     }
 
     return service;
+  }
+
+  async updateService(providerId: string, serviceId: string, dto: UpdateServiceDto) {
+    const existing = await this.prisma.service.findFirst({
+      where: { id: serviceId, providerId },
+      select: { id: true, address: true, billingRuleId: true },
+    });
+    if (!existing) {
+      throw new RpcException({ status: 404, message: 'Service not found' });
+    }
+
+    let latitude: number | undefined;
+    let longitude: number | undefined;
+    if (dto.address !== undefined && dto.address !== existing.address) {
+      const providerInfo = await this.validateAndGetProviderInfo(providerId);
+      if (providerInfo.providerType === 'EXTERNAL_SERVICE') {
+        const location = await this.validateServiceLocation(dto.address, false);
+        if (location) {
+          latitude = location.lat;
+          longitude = location.lng;
+        }
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.validateServiceReferences(tx, providerId, dto.categoryId, dto.roomTypeId, dto.requiredServiceIds, serviceId);
+
+      if (dto.billingRule) {
+        await tx.serviceBillingRule.update({
+          where: { id: existing.billingRuleId },
+          data: {
+            ...dto.billingRule,
+            billingIntervalValue: dto.billingRule.billingIntervalValue ?? 1,
+            updatedAt: new Date(),
+          },
+        });
+      }
+
+      await tx.service.update({
+        where: { id: serviceId },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name.trim() }),
+          ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+          ...(dto.serviceType !== undefined && { serviceType: dto.serviceType }),
+          ...(dto.description !== undefined && { description: dto.description.trim() || null }),
+          ...(dto.address !== undefined && { address: dto.address.trim() }),
+          ...(latitude !== undefined && { latitude }),
+          ...(longitude !== undefined && { longitude }),
+          ...(dto.roomTypeId !== undefined && { roomTypeId: dto.roomTypeId }),
+          ...(dto.requiresPrepayment !== undefined && { requiresPrepayment: dto.requiresPrepayment }),
+          ...(dto.requiresContract !== undefined && { requiresContract: dto.requiresContract }),
+          ...(dto.status !== undefined && { status: dto.status }),
+          updatedAt: new Date(),
+        },
+      });
+
+      if (dto.prices?.length) {
+        for (const price of dto.prices) {
+          await tx.servicePrice.create({
+            data: {
+              serviceId,
+              createdBy: providerId,
+              price: price.price,
+              unit: price.unit.trim(),
+              effectiveFrom: new Date(),
+              createdAt: new Date(),
+              tiers: price.tiers?.length
+                ? { create: price.tiers.map((tier) => ({
+                  fromValue: tier.fromValue,
+                  toValue: tier.toValue ?? null,
+                  price: tier.price,
+                })) }
+                : undefined,
+            },
+          });
+        }
+      }
+
+      if (dto.requiredServiceIds !== undefined) {
+        await tx.serviceRequirement.deleteMany({ where: { serviceId } });
+        if (dto.requiredServiceIds.length) {
+          await tx.serviceRequirement.createMany({
+            data: dto.requiredServiceIds.map((additionalServiceId) => ({
+              serviceId,
+              additionalServiceId,
+              status: 'ACTIVE',
+            })),
+          });
+        }
+      }
+    });
+
+    return this.findOneService(providerId, serviceId);
+  }
+
+  private async validateServiceReferences(
+    tx: Prisma.TransactionClient,
+    providerId: string,
+    categoryId?: string,
+    roomTypeId?: string,
+    requiredServiceIds?: string[],
+    serviceId?: string,
+  ) {
+    if (categoryId) {
+      const category = await tx.category.findUnique({ where: { id: categoryId }, select: { id: true } });
+      if (!category) throw new RpcException({ status: 400, message: 'Danh mục dịch vụ không hợp lệ.' });
+    }
+
+    if (roomTypeId) {
+      const roomType = await tx.roomType.findFirst({
+        where: { id: roomTypeId, property: { providerId } },
+        select: { id: true },
+      });
+      if (!roomType) throw new RpcException({ status: 400, message: 'Loại phòng không thuộc nhà cung cấp.' });
+    }
+
+    if (requiredServiceIds !== undefined) {
+      const uniqueIds = [...new Set(requiredServiceIds)];
+      if (uniqueIds.length !== requiredServiceIds.length || (serviceId && uniqueIds.includes(serviceId))) {
+        throw new RpcException({ status: 400, message: 'Dịch vụ đính kèm không hợp lệ.' });
+      }
+      if (uniqueIds.length) {
+        const matched = await tx.service.count({ where: { id: { in: uniqueIds }, providerId } });
+        if (matched !== uniqueIds.length) {
+          throw new RpcException({ status: 400, message: 'Dịch vụ đính kèm không thuộc nhà cung cấp.' });
+        }
+      }
+    }
   }
 
   async getServiceById(id: string) {

@@ -21,7 +21,17 @@ describe('ServicesService', () => {
       $transaction: jest.fn((cb) => cb(prismaService)),
       service: {
         create: jest.fn().mockResolvedValue({ id: 'service-1' }),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        update: jest.fn(),
       },
+      category: {
+        findMany: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({ id: 'cat-1' }),
+      },
+      roomType: { findFirst: jest.fn() },
+      serviceRequirement: { createMany: jest.fn(), deleteMany: jest.fn() },
       servicePrice: {
         create: jest.fn(),
       },
@@ -68,6 +78,33 @@ describe('ServicesService', () => {
 
   it('should be defined', () => {
     expect(service).toBeDefined();
+  });
+
+  it('chỉ trả về danh mục từ nguồn dữ liệu thật theo thứ tự tên', async () => {
+    prismaService.category.findMany.mockResolvedValue([{ id: 'cat-1', name: 'Điện' }]);
+
+    await expect(service.findCategories()).resolves.toEqual([{ id: 'cat-1', name: 'Điện' }]);
+    expect(prismaService.category.findMany).toHaveBeenCalledWith({
+      select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' },
+    });
+  });
+
+  it('không cho cập nhật dịch vụ không thuộc provider đang hoạt động', async () => {
+    prismaService.service.findFirst.mockResolvedValue(null);
+
+    await expect(service.updateService('provider-1', 'service-1', { name: 'Tên mới' }))
+      .rejects.toThrow(RpcException);
+    expect(prismaService.service.update).not.toHaveBeenCalled();
+  });
+
+  it('tìm chi tiết dịch vụ bằng điều kiện id và providerId', async () => {
+    prismaService.service.findFirst.mockResolvedValue(null);
+
+    await expect(service.findOneService('provider-1', 'service-1')).rejects.toThrow(RpcException);
+    expect(prismaService.service.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'service-1', providerId: 'provider-1' },
+    }));
   });
 
   it('Nhánh 1: Loại PROPERTY_MANAGER -> Không chạy logic tính khoảng cách', async () => {

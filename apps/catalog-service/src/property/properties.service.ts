@@ -1,30 +1,40 @@
 import { Injectable } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
+import { LocationService } from '../location/location.service';
 
 @Injectable()
 export class PropertiesService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly locationService: LocationService,
+  ) { }
+
+  private async resolveCoordinates(address: string) {
+    const normalizedAddress = address.trim();
+    const coordinates = await this.locationService.geocode(normalizedAddress);
+    if (!coordinates) {
+      throw new RpcException({ statusCode: 422, message: 'Không thể xác định tọa độ từ địa chỉ bất động sản.' });
+    }
+    return { address: normalizedAddress, latitude: coordinates.lat, longitude: coordinates.lng };
+  }
 
   async createProperty(
     providerId: string,
     dto: {
       propertyName: string;
       address: string;
-      latitude: number;
-      longitude: number;
       description?: string;
       status?: 'ACTIVE' | 'INACTIVE';
     },
   ) {
+    const location = await this.resolveCoordinates(dto.address);
     const now = new Date();
     return this.prisma.property.create({
       data: {
         providerId,
         propertyName: dto.propertyName.trim(),
-        address: dto.address.trim(),
-        latitude: dto.latitude,
-        longitude: dto.longitude,
+        ...location,
         description: dto.description?.trim() || null,
         status: dto.status ?? 'ACTIVE',
         createdAt: now,
@@ -37,15 +47,14 @@ export class PropertiesService {
     providerId: string,
     propertyId: string,
     dto: {
-      propertyName?: string; address?: string; latitude?: number; longitude?: number;
+      propertyName?: string; address?: string;
       description?: string; status?: 'ACTIVE' | 'INACTIVE';
     },
   ) {
+    const location = dto.address === undefined ? undefined : await this.resolveCoordinates(dto.address);
     const data = {
       ...(dto.propertyName !== undefined && { propertyName: dto.propertyName.trim() }),
-      ...(dto.address !== undefined && { address: dto.address.trim() }),
-      ...(dto.latitude !== undefined && { latitude: dto.latitude }),
-      ...(dto.longitude !== undefined && { longitude: dto.longitude }),
+      ...(location !== undefined && location),
       ...(dto.description !== undefined && { description: dto.description.trim() || null }),
       ...(dto.status !== undefined && { status: dto.status }),
       updatedAt: new Date(),

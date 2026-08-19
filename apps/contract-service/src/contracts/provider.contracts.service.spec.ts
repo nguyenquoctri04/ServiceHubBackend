@@ -14,7 +14,7 @@ describe('ProviderContractsService.findContracts', () => {
     const secureRpc = {
       send: jest.fn((_: unknown, pattern: { cmd: string }) => {
         switch (pattern.cmd) {
-          case 'provider.identities.batch': return Promise.resolve([{ id: 'customer-1', email: 'customer@example.com', phone: '0900000000' }]);
+          case 'provider.identities.batch': return Promise.resolve([{ id: 'customer-1', fullName: 'Nguyễn Văn A', email: 'customer@example.com', phone: '0900000000' }]);
           case 'catalog.rooms.findByIdsForProvider': return Promise.resolve([{ id: 'room-1', roomNumber: 'A-101' }]);
           case 'services.prices.findForProvider': return Promise.resolve([{ id: 'price-1', price: 150000, service: { name: 'Internet' } }]);
           default: return Promise.resolve(null);
@@ -25,7 +25,7 @@ describe('ProviderContractsService.findContracts', () => {
 
     await expect(service.findContracts({ providerId: 'provider-1', page: 1, limit: 10 })).resolves.toEqual([
       expect.objectContaining({
-        customerName: 'customer@example.com',
+        customerName: 'Nguyễn Văn A',
         customerPhone: '0900000000',
         roomName: 'A-101',
         services: [expect.objectContaining({ serviceName: 'Internet', price: 150000 })],
@@ -43,6 +43,8 @@ describe('ProviderContractsService.findContracts', () => {
     const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any);
 
     await expect(service.hasRoomReferences('provider-1', 'room-1')).resolves.toEqual({ hasReferences: true });
-    expect(prisma.contract.count).toHaveBeenCalledWith({ where: { providerId: 'provider-1', roomId: 'room-1' } });
+    expect(prisma.contract.count).toHaveBeenCalledWith({
+      where: { providerId: 'provider-1', roomId: 'room-1', status: { in: ['DRAFT', 'PENDING_SIGNATURE', 'ACTIVE'] } },
+    });
   });
 });

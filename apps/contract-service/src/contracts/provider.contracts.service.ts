@@ -43,6 +43,7 @@ export interface ContractQueryPayload {
 
 export interface CustomerIdentity {
   id: string;
+  fullName?: string | null;
   email?: string;
   phone?: string;
 }
@@ -351,7 +352,7 @@ export class ProviderContractsService {
       const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
       return {
         ...contract,
-        customerName: customer?.email || customer?.phone || 'Khách hàng',
+        customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
         customerPhone: customer?.phone || '',
         roomName: room?.roomNumber || 'Chưa xếp phòng',
         services: contract.services.map((service) => {
@@ -488,7 +489,7 @@ export class ProviderContractsService {
       const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
       return [contract.id, {
         ...contract,
-        customerName: identity?.email || identity?.phone || 'Khách hàng',
+        customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
         roomName: room?.roomNumber || 'Chưa xếp phòng',
       }];
     }));
@@ -510,14 +511,20 @@ export class ProviderContractsService {
       const customer = identitiesById.get(contract.customerId);
       return {
         ...contract,
-        customerName: customer?.email || customer?.phone || 'Khách hàng',
+        customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
         customerPhone: customer?.phone || '',
       };
     });
   }
 
   async hasRoomReferences(providerId: string, roomId: string) {
-    const count = await this.prisma.contract.count({ where: { providerId, roomId } });
+    const count = await this.prisma.contract.count({
+      where: {
+        providerId,
+        roomId,
+        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.ACTIVE] },
+      },
+    });
     return { hasReferences: count > 0 };
   }
 
@@ -555,7 +562,7 @@ export class ProviderContractsService {
       return {
         ...restriction,
         status: restriction.endAt ? 'LIFTED' : 'ACTIVE',
-        customerName: identity?.email || identity?.phone || 'Khách hàng',
+        customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
         customerPhone: identity?.phone || '',
       };
     });

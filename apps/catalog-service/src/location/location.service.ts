@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
 import Redis from 'ioredis';
 import { DistanceMatrixProvider } from './providers/distance-matrix.provider';
 
@@ -37,6 +38,10 @@ export class LocationService {
     return address.trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
+  private getGeocodeCacheKey(normalizedAddress: string): string {
+    return `geocode:${createHash('sha256').update(normalizedAddress).digest('hex')}`;
+  }
+
   /**
    * Geocode địa chỉ ra tọa độ, có sử dụng Redis Cache (Fail-open).
    */
@@ -44,14 +49,14 @@ export class LocationService {
     if (!address) return null;
 
     const normalizedAddress = this.normalizeAddress(address);
-    const cacheKey = `geocode:${normalizedAddress}`;
+    const cacheKey = this.getGeocodeCacheKey(normalizedAddress);
 
     // 1. Try Cache
     if (this.redisClient && this.redisClient.status === 'ready') {
       try {
         const cached = await this.redisClient.get(cacheKey);
         if (cached) {
-          this.logger.log(`Geocode cache HIT for: ${normalizedAddress}`);
+          this.logger.log('Geocode cache HIT');
           return JSON.parse(cached);
         }
       } catch (error) {
@@ -60,7 +65,7 @@ export class LocationService {
     }
 
     // 2. Call API
-    this.logger.log(`Geocode cache MISS, calling API for: ${normalizedAddress}`);
+    this.logger.log('Geocode cache MISS');
     const location = await this.distanceMatrixProvider.geocode(address);
 
     // 3. Save Cache

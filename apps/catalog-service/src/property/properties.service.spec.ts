@@ -5,7 +5,8 @@ describe('PropertiesService', () => {
     room: { findMany: jest.fn() },
   } as any;
 
-  const service = new PropertiesService(prisma);
+  const locationService = { geocode: jest.fn() };
+  const service = new PropertiesService(prisma, locationService as any);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -43,13 +44,12 @@ describe('PropertiesService', () => {
   });
 
   it('sets the provider from trusted server context when creating a property', async () => {
+    locationService.geocode.mockResolvedValue({ lat: 10.7769, lng: 106.7009 });
     prisma.property = { create: jest.fn().mockResolvedValue({ id: 'property-1' }) };
 
     await service.createProperty('provider-1', {
       propertyName: 'Khu nhà A',
       address: 'Quận 1, TP. Hồ Chí Minh',
-      latitude: 10.7769,
-      longitude: 106.7009,
     });
 
     expect(prisma.property.create).toHaveBeenCalledWith({
@@ -59,6 +59,32 @@ describe('PropertiesService', () => {
         status: 'ACTIVE',
       }),
     });
+  });
+
+  it('derives coordinates from the submitted address instead of accepting client coordinates', async () => {
+    locationService.geocode.mockResolvedValue({ lat: 10.7769, lng: 106.7009 });
+    prisma.property = { create: jest.fn().mockResolvedValue({ id: 'property-1' }) };
+
+    await service.createProperty('provider-1', {
+      propertyName: 'Khu nhà A',
+      address: 'Quận 1, TP. Hồ Chí Minh',
+    });
+
+    expect(locationService.geocode).toHaveBeenCalledWith('Quận 1, TP. Hồ Chí Minh');
+    expect(prisma.property.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ latitude: 10.7769, longitude: 106.7009 }),
+    });
+  });
+
+  it('does not save a property when its address cannot be geocoded', async () => {
+    locationService.geocode.mockResolvedValue(null);
+    prisma.property = { create: jest.fn() };
+
+    await expect(service.createProperty('provider-1', {
+      propertyName: 'Khu nhà A',
+      address: 'Địa chỉ không xác định',
+    })).rejects.toMatchObject({ error: { message: 'Không thể xác định tọa độ từ địa chỉ bất động sản.' } });
+    expect(prisma.property.create).not.toHaveBeenCalled();
   });
 
   it('updates only a property owned by the active provider', async () => {

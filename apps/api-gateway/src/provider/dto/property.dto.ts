@@ -2,8 +2,6 @@ import { Type } from 'class-transformer';
 import {
   IsIn,
   IsInt,
-  IsLatitude,
-  IsLongitude,
   IsNumber,
   IsOptional,
   IsString,
@@ -21,14 +19,6 @@ export class CreatePropertyDto {
   @MaxLength(500)
   address: string;
 
-  @Type(() => Number)
-  @IsLatitude()
-  latitude: number;
-
-  @Type(() => Number)
-  @IsLongitude()
-  longitude: number;
-
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -42,8 +32,6 @@ export class CreatePropertyDto {
 export class UpdatePropertyDto {
   @IsOptional() @IsString() @MaxLength(200) propertyName?: string;
   @IsOptional() @IsString() @MaxLength(500) address?: string;
-  @IsOptional() @Type(() => Number) @IsLatitude() latitude?: number;
-  @IsOptional() @Type(() => Number) @IsLongitude() longitude?: number;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
 }
@@ -124,10 +112,12 @@ export class UpdateRoomTypeDto {
 }
 
 export class CreateRoomDto {
-  @IsUUID()
+  // PostgreSQL accepts UUID-shaped identifiers without an RFC version. Existing
+  // seed data uses that form, so preserve shape validation without rejecting it.
+  @IsUUID('loose')
   roomTypeId: string;
 
-  @IsUUID()
+  @IsUUID('loose')
   floorId: string;
 
   @IsString()
@@ -140,8 +130,8 @@ export class CreateRoomDto {
 }
 
 export class UpdateRoomDto {
-  @IsOptional() @IsUUID() floorId?: string;
-  @IsOptional() @IsUUID() roomTypeId?: string;
+  @IsOptional() @IsUUID('loose') floorId?: string;
+  @IsOptional() @IsUUID('loose') roomTypeId?: string;
   @IsOptional() @IsString() @MaxLength(100) roomNumber?: string;
   @IsOptional() @IsIn(['ACTIVE', 'MAINTENANCE']) status?: 'ACTIVE' | 'MAINTENANCE';
 }

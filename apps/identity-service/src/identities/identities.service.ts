@@ -62,9 +62,23 @@ export class IdentitiesService {
         email: true,
         phone: true,
         status: true,
-        isEkycVerified: true
-      }
+        isEkycVerified: true,
+        verifications: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            documents: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { fullName: true },
+            },
+          },
+        },
+      },
     });
-    return identities;
+    return identities.map(({ verifications, ...identity }) => ({
+      ...identity,
+      fullName: verifications[0]?.documents[0]?.fullName ?? null,
+    }));
   }
 }

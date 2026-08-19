@@ -16,7 +16,7 @@ export class MeterQueryDto {
 }
 
 export class GroupedMeterQueryDto {
-  @IsUUID()
+  @IsUUID('loose')
   propertyId: string;
 
   @Type(() => Number)

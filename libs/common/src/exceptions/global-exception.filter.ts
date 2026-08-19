@@ -52,9 +52,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     if (ctxType === 'rpc') {
-      const errorPayload = exception instanceof HttpException
-        ? exception.getResponse()
-        : (exception instanceof Error ? exception.message : exception);
+      const errorPayload = exception instanceof RpcException
+        ? exception.getError()
+        : exception instanceof HttpException
+          ? exception.getResponse()
+          : (exception instanceof Error ? exception.message : exception);
         
       return throwError(() => errorPayload);
     }

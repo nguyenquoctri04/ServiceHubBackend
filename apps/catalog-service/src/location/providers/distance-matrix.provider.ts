@@ -17,8 +17,9 @@ export class DistanceMatrixProvider implements GeocodingProvider, DistanceProvid
 
   private extractCoordinates(data: unknown): { lat: number; lng: number } | null {
     if (!data || typeof data !== 'object') return null;
-    const result = (data as { status?: unknown; results?: unknown }).results;
-    if ((data as { status?: unknown }).status !== 'OK' || !Array.isArray(result) || result.length === 0) return null;
+    const payload = data as { status?: unknown; results?: unknown; result?: unknown };
+    const result = payload.results ?? payload.result;
+    if (payload.status !== 'OK' || !Array.isArray(result) || result.length === 0) return null;
 
     const location = (result[0] as { geometry?: { location?: unknown } })?.geometry?.location;
     if (!location || typeof location !== 'object') return null;
@@ -47,7 +48,7 @@ export class DistanceMatrixProvider implements GeocodingProvider, DistanceProvid
 
         const location = this.extractCoordinates(await response.json());
         if (!location) {
-          this.logger.warn('Geocoding API returned an invalid location payload');
+          this.logger.warn('Geocoding API returned no usable coordinates');
           return null;
         }
         return location;

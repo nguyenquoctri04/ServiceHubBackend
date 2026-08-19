@@ -19,6 +19,16 @@ describe('DistanceMatrixProvider.geocode', () => {
     await expect(provider.geocode('Quận 1, TP. Hồ Chí Minh')).resolves.toEqual({ lat: 10.7769, lng: 106.7009 });
   });
 
+  it('supports the documented legacy result collection without relaxing coordinate validation', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'OK', result: [{ geometry: { location: { lat: 10.7769, lng: 106.7009 } } }] }),
+    }) as unknown as typeof fetch;
+    const provider = new DistanceMatrixProvider(config as any);
+
+    await expect(provider.geocode('Quận 1, TP. Hồ Chí Minh')).resolves.toEqual({ lat: 10.7769, lng: 106.7009 });
+  });
+
   it('rejects malformed geocoding payloads before they can reach persistence', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,

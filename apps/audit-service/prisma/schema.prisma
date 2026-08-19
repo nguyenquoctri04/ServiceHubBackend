@@ -8,6 +8,27 @@ datasource db {
   url      = env("AUDIT_DATABASE_URL")
 }
 
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  userId      String?     @map("user_id") @db.Uuid
+  serviceName String?     @map("service_name")
+  action      AuditAction
+  entityType  String      @map("entity_type")
+  entityId    String?     @map("entity_id") @db.Uuid
+  oldData     Json?       @map("old_data")
+  newData     Json?       @map("new_data")
+  ipAddress   String?     @map("ip_address")
+  userAgent   String?     @map("user_agent")
+  description String?
+  createdAt   DateTime    @map("created_at")
+
+  @@index([userId])
+  @@index([serviceName])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
 enum AuditAction {
   LOGIN
   LOGIN_FAILED
@@ -33,40 +54,11 @@ enum AuditAction {
   UPDATE_ROOM
   DELETE_ROOM
   SEND_NOTIFICATION
+  OTHER
   CREATE_VIOLATION
   RESOLVE_VIOLATION
   RESTRICT_CUSTOMER
   CREATE_APPEAL
   REVIEW_APPEAL
   SWITCH_PROVIDER_PROFILE
-  OTHER
-}
-
-model AuditLog {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> identity-service
-  userId String? @map("user_id") @db.Uuid
-
-  serviceName String?     @map("service_name")
-  action      AuditAction
-
-  entityType String  @map("entity_type")
-  entityId   String? @map("entity_id") @db.Uuid
-
-  oldData Json? @map("old_data")
-  newData Json? @map("new_data")
-
-  ipAddress String? @map("ip_address")
-  userAgent String? @map("user_agent")
-
-  description String?
-
-  createdAt DateTime @map("created_at")
-
-  @@index([userId])
-  @@index([serviceName])
-  @@index([entityType, entityId])
-  @@index([createdAt])
-  @@map("audit_log")
 }

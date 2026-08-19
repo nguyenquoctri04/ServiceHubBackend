@@ -37,7 +37,6 @@ export class AuthController {
     };
   }
 
-  @UseGuards(AuthThrottleGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {

@@ -1,6 +1,8 @@
 # ==============================================================================
 # SERVICEHUB BACKEND — .gitignore
 # ==============================================================================
+db.txt
+prompt.txt
 
 # ------------------------------------------------------------------------------
 # Environment Variables (BÍ MẬT — TUYỆT ĐỐI KHÔNG COMMIT)
@@ -95,3 +97,7 @@ desktop.ini
 *.seed
 *.pid.lock
 docs
+
+# Hướng dẫn/tài liệu cục bộ phục vụ agent, không thuộc mã nguồn triển khai.
+AGENTS.md
+project_document.md

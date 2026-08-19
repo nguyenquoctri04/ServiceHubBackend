@@ -8,6 +8,113 @@ datasource db {
   url      = env("BILLING_DATABASE_URL")
 }
 
+model ServiceUsage {
+  id              String       @id @default(uuid()) @db.Uuid
+  billingPeriodId String?      @map("billing_period_id") @db.Uuid
+  startReadingId  String       @map("start_reading_id") @db.Uuid
+  endReadingId    String       @map("end_reading_id") @db.Uuid
+  createdAt       DateTime     @map("created_at")
+  endReading      MeterReading @relation("UsageEndReading", fields: [endReadingId], references: [id])
+  startReading    MeterReading @relation("UsageStartReading", fields: [startReadingId], references: [id])
+
+  @@index([billingPeriodId])
+  @@index([startReadingId])
+  @@index([endReadingId])
+  @@map("service_usage")
+}
+
+model Meter {
+  id         String         @id @default(uuid()) @db.Uuid
+  providerId String         @map("provider_id") @db.Uuid
+  serviceId  String         @map("service") @db.Uuid
+  name       String
+  unit       String
+  status     MeterStatus
+  createdAt  DateTime       @map("created_at")
+  updatedAt  DateTime       @map("updated_at")
+  readings   MeterReading[]
+
+  @@index([providerId])
+  @@index([serviceId])
+  @@map("meter")
+}
+
+model MeterReading {
+  id          String         @id @default(uuid()) @db.Uuid
+  roomId      String?        @map("room_id") @db.Uuid
+  contractId  String?        @map("contract_id") @db.Uuid
+  meterId     String         @map("meter_id") @db.Uuid
+  recordedBy  String         @map("recorded_by") @db.Uuid
+  value       Decimal        @db.Decimal(18, 2)
+  imgUrl      String?        @map("img_url")
+  source      ReadingSource
+  status      ReadingStatus  @default(VALID)
+  createdAt   DateTime       @map("created_at")
+  updatedAt   DateTime       @map("updated_at")
+  meter       Meter          @relation(fields: [meterId], references: [id])
+  usagesEnd   ServiceUsage[] @relation("UsageEndReading")
+  usagesStart ServiceUsage[] @relation("UsageStartReading")
+
+  @@index([meterId, createdAt])
+  @@index([roomId])
+  @@index([contractId])
+  @@index([recordedBy])
+  @@map("meter_reading")
+}
+
+model Invoice {
+  id              String        @id @default(uuid()) @db.Uuid
+  invoiceNumber   String        @unique @map("invoice_number")
+  customerId      String?       @map("customer_id") @db.Uuid
+  contractId      String?       @map("contract_id") @db.Uuid
+  billingPeriodId String?       @map("billing_period_id") @db.Uuid
+  providerId      String        @map("provider_id") @db.Uuid
+  total           Decimal       @db.Decimal(18, 2)
+  status          InvoiceStatus
+  createdAt       DateTime      @map("created_at")
+  updatedAt       DateTime      @map("updated_at")
+  items           InvoiceItem[]
+  payments        Payment[]
+
+  @@index([customerId])
+  @@index([contractId])
+  @@index([billingPeriodId])
+  @@index([providerId])
+  @@index([providerId, status])
+  @@index([status])
+  @@map("invoice")
+}
+
+model InvoiceItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  invoiceId      String   @map("invoice_id") @db.Uuid
+  servicePriceId String?  @map("service_price_id") @db.Uuid
+  quantity       Decimal  @db.Decimal(18, 2)
+  unit           String
+  unitPrice      Decimal  @map("unit_price") @db.Decimal(18, 2)
+  amount         Decimal  @db.Decimal(18, 2)
+  createdAt      DateTime @map("created_at")
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@index([servicePriceId])
+  @@map("invoice_item")
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  invoiceId     String        @map("invoice_id") @db.Uuid
+  paymentMethod PaymentMethod @map("payment_method")
+  paymentLinkId String?       @unique @map("payment_link_id")
+  status        PaymentStatus
+  paidAt        DateTime?     @map("paid_at")
+  createdAt     DateTime      @map("created_at")
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id])
+
+  @@index([invoiceId])
+  @@map("payment")
+}
+
 enum MeterStatus {
   ACTIVE
   INACTIVE
@@ -39,146 +146,4 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
-}
-
-model ServiceUsage {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> contract-management-service
-  billingPeriodId String? @map("billing_period_id") @db.Uuid
-
-  startReadingId String @map("start_reading_id") @db.Uuid
-  endReadingId   String @map("end_reading_id") @db.Uuid
-
-  createdAt DateTime @map("created_at")
-
-  startReading MeterReading @relation("UsageStartReading", fields: [startReadingId], references: [id])
-
-  endReading MeterReading @relation("UsageEndReading", fields: [endReadingId], references: [id])
-
-  @@index([billingPeriodId])
-  @@index([startReadingId])
-  @@index([endReadingId])
-  @@map("service_usage")
-}
-
-model Meter {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> service-catalog-service
-  providerId String       @map("provider_id") @db.Uuid
-  serviceId String       @map("service") @db.Uuid
-
-  name   String
-  unit   String
-  status MeterStatus
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  readings MeterReading[]
-
-  @@index([providerId])
-  @@index([serviceId])
-  @@map("meter")
-}
-
-model MeterReading {
-  id String @id @default(uuid()) @db.Uuid
-
-  // Cross-service references
-  roomId     String? @map("room_id") @db.Uuid
-  contractId String? @map("contract_id") @db.Uuid
-
-  meterId String @map("meter_id") @db.Uuid
-
-  // Cross-service reference -> identity/provider
-  recordedBy String @map("recorded_by") @db.Uuid
-
-  value  Decimal @db.Decimal(18, 2)
-  imgUrl String? @map("img_url")
-
-  source ReadingSource
-  status ReadingStatus @default(VALID)
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  meter Meter @relation(fields: [meterId], references: [id])
-
-  usagesStart ServiceUsage[] @relation("UsageStartReading")
-  usagesEnd   ServiceUsage[] @relation("UsageEndReading")
-
-  @@index([meterId, createdAt])
-  @@index([roomId])
-  @@index([contractId])
-  @@index([recordedBy])
-  @@map("meter_reading")
-}
-
-model Invoice {
-  id            String @id @default(uuid()) @db.Uuid
-  invoiceNumber String @unique @map("invoice_number")
-
-  // Cross-service references
-  customerId      String? @map("customer_id") @db.Uuid
-  contractId      String? @map("contract_id") @db.Uuid
-  billingPeriodId String? @map("billing_period_id") @db.Uuid
-  providerId      String @map("provider_id") @db.Uuid
-
-  total  Decimal       @db.Decimal(18, 2)
-  status InvoiceStatus
-
-  createdAt DateTime @map("created_at")
-  updatedAt DateTime @map("updated_at")
-
-  items    InvoiceItem[]
-  payments Payment[]
-
-  @@index([customerId])
-  @@index([contractId])
-  @@index([billingPeriodId])
-  @@index([providerId])
-  @@index([providerId, status])
-  @@index([status])
-  @@map("invoice")
-}
-
-model InvoiceItem {
-  id        String @id @default(uuid()) @db.Uuid
-  invoiceId String @map("invoice_id") @db.Uuid
-
-  // Cross-service reference -> service-catalog-service
-  servicePriceId String? @map("service_price_id") @db.Uuid
-
-  quantity  Decimal @db.Decimal(18, 2)
-  unit      String
-  unitPrice Decimal @map("unit_price") @db.Decimal(18, 2)
-  amount    Decimal @db.Decimal(18, 2)
-
-  createdAt DateTime @map("created_at")
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
-
-  @@index([invoiceId])
-  @@index([servicePriceId])
-  @@map("invoice_item")
-}
-
-model Payment {
-  id        String @id @default(uuid()) @db.Uuid
-  invoiceId String @map("invoice_id") @db.Uuid
-
-  paymentMethod PaymentMethod @map("payment_method")
-  paymentLinkId String?       @unique @map("payment_link_id")
-
-  status PaymentStatus
-
-  paidAt    DateTime? @map("paid_at")
-  createdAt DateTime  @map("created_at")
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id])
-
-  @@index([invoiceId])
-  @@map("payment")
 }

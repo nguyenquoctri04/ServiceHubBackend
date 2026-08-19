@@ -9,33 +9,43 @@ datasource db {
 }
 
 model GnupgKey {
-  id         String   @id @default(uuid()) @db.Uuid
+  id                  String              @id @default(uuid()) @db.Uuid
+  identityId          String              @map("identity_id") @db.Uuid
+  keyId               String              @map("key_id")
+  fingerprint         String              @unique
+  publicKey           String              @map("public_key")
+  encryptedPrivateKey String
+  encryptionSalt      String
+  encryptionIv        String
+  encryptionAuthTag   String
+  encryptionVersion   Int                 @default(1)
+  algorithm           String
+  status              GnupgKeyStatus
+  createdAt           DateTime            @default(now()) @map("created_at")
+  expiresAt           DateTime?           @map("expires_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  signatures          ContractSignature[]
 
-  // Cross-service reference -> identity-service
-  identityId String?  @map("identity_id") @db.Uuid
-
-  publicKey  String?  @map("public_key")
-  privateKey String?  @map("private_key")
-
-  createdAt  DateTime @map("create_at")
-
-  signatures ContractSignature[]
-
-  @@index([identityId])
-  @@map("gnupg_key")
+  @@map("gnupg_keys")
 }
 
 model ContractSignature {
   id             String   @id @default(uuid()) @db.Uuid
-
-  // Cross-service reference -> contract-management-service
   contractFileId String   @map("contract_file_id") @db.Uuid
-
   gnupgKeyId     String   @map("gnupg_key_id") @db.Uuid
-
+  signatureFile  String   @map("signature_file")
+  signatureHash  String   @map("signature_hash")
+  signedAt       DateTime @map("signed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
   gnupgKey       GnupgKey @relation(fields: [gnupgKeyId], references: [id])
 
   @@index([contractFileId])
   @@index([gnupgKeyId])
-  @@map("contract_signature")
+  @@map("contract_signatures")
+}
+
+enum GnupgKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
 }

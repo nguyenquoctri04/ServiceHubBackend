@@ -64,6 +64,7 @@ export class IdentitiesService {
         status: true,
         isEkycVerified: true,
         verifications: {
+          where: { verifiedAt: { not: null } },
           orderBy: { createdAt: 'desc' },
           take: 1,
           select: {

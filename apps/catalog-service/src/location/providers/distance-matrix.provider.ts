@@ -15,6 +15,19 @@ export class DistanceMatrixProvider implements GeocodingProvider, DistanceProvid
     this.distanceApiKey = this.configService.get<string>('DISTANCE_MATRIX_FAST_API_KEY') || '';
   }
 
+  private extractCoordinates(data: unknown): { lat: number; lng: number } | null {
+    if (!data || typeof data !== 'object') return null;
+    const result = (data as { status?: unknown; results?: unknown }).results;
+    if ((data as { status?: unknown }).status !== 'OK' || !Array.isArray(result) || result.length === 0) return null;
+
+    const location = (result[0] as { geometry?: { location?: unknown } })?.geometry?.location;
+    if (!location || typeof location !== 'object') return null;
+    const { lat, lng } = location as { lat?: unknown; lng?: unknown };
+    if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { lat, lng };
+  }
+
   async geocode(address: string): Promise<{ lat: number; lng: number } | null> {
     if (!this.geocodeApiKey) {
       this.logger.warn('GEOCODING_FAST_API_KEY is not configured');
@@ -24,25 +37,23 @@ export class DistanceMatrixProvider implements GeocodingProvider, DistanceProvid
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
+      try {
+        const url = `https://api.distancematrix.ai/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${this.geocodeApiKey}`;
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          this.logger.warn(`Geocoding API failed with status: ${response.status}`);
+          return null;
+        }
 
-      const url = `https://api.distancematrix.ai/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${this.geocodeApiKey}`;
-      
-      const response = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        this.logger.warn(`Geocoding API failed with status: ${response.status}`);
-        return null;
+        const location = this.extractCoordinates(await response.json());
+        if (!location) {
+          this.logger.warn('Geocoding API returned an invalid location payload');
+          return null;
+        }
+        return location;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json();
-      if (data.status !== 'OK' || !data.results || data.results.length === 0) {
-        this.logger.warn(`Geocoding API returned status: ${data.status}`);
-        return null;
-      }
-
-      const location = data.results[0].geometry.location;
-      return { lat: location.lat, lng: location.lng };
     } catch (error) {
       this.logger.error(`Geocoding failed: ${error.message}`);
       return null; // Fail-open strategy

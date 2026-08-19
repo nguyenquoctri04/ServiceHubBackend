@@ -33,7 +33,9 @@ export class GroupedMeterQueryDto {
 }
 
 export class DashboardRoomsQueryDto {
-  @IsUUID() @IsOptional()
+  // PostgreSQL UUID columns do not require a specific RFC UUID version. Keep the
+  // full UUID shape validation while accepting existing, versionless seed IDs.
+  @IsUUID('loose') @IsOptional()
   propertyId?: string;
 }
 

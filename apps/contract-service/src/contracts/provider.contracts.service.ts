@@ -669,4 +669,17 @@ export class ProviderContractsService {
       return { success: true, violationCase };
     }, { isolationLevel: 'Serializable' });
   }
+
+  async getDashboardStats(providerId: string) {
+    const [activeContracts, pendingRequests] = await Promise.all([
+      this.prisma.contract.count({
+        where: { providerId, status: 'ACTIVE' }
+      }),
+      this.prisma.contract.count({
+        where: { providerId, status: 'PENDING_SIGNATURE' }
+      })
+    ]);
+
+    return { activeContracts, pendingRequests };
+  }
 }

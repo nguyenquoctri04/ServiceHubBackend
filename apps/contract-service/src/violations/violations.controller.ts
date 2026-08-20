@@ -12,6 +12,11 @@ export class ViolationsController {
     return this.service.findByProvider(data.providerId, data.actorId, data.status, data.contractIds);
   }
 
+  @MessagePattern({ cmd: 'provider.violations.count' })
+  async countViolations(@Payload() data: { providerId: string, status?: string }) {
+    return this.service.countByProvider(data.providerId, data.status);
+  }
+
   @MessagePattern({ cmd: 'provider.violations.create' })
   async createReport(@Payload() data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
     return this.service.createReport(data);

@@ -80,23 +80,27 @@ export class ProviderController {
   @Get('statistics')
   async getStatistics(@CurrentUser() user: CurrentUserPayload) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    const [properties, contracts, invoices, roomCount, violations, meterStats] = await Promise.allSettled([
+    const [properties, contractStats, invoiceStats, roomCount, violationCount, meterStats] = await Promise.allSettled([
       this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, limit: 100 }),
-      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query: { limit: 100 } }),
+      this.proxy.send(this.contractClient, { cmd: 'contract.dashboardStats' }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.dashboardStats' }, { providerId }),
       this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOMS_COUNT_BY_PROVIDER }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: 'provider.violations.count' }, { providerId, status: 'REPORTED' }),
       this.proxy.send(this.billingClient, { cmd: 'billing.meters.dashboardStats' }, { providerId }),
     ]);
 
     const meters = meterStats.status === 'fulfilled' ? meterStats.value : { totalMeters: 0, recordedMeters: 0 };
+    const contracts = contractStats.status === 'fulfilled' ? contractStats.value : { activeContracts: 0, pendingRequests: 0 };
+    const invoices = invoiceStats.status === 'fulfilled' ? invoiceStats.value : { monthlyRevenue: 0, unpaidRevenue: 0 };
 
     return {
       properties: properties.status === 'fulfilled' ? properties.value : [],
-      contracts: contracts.status === 'fulfilled' ? contracts.value : [],
-      invoices: invoices.status === 'fulfilled' ? invoices.value : { data: [], total: 0 },
       roomCount: roomCount.status === 'fulfilled' ? roomCount.value : 0,
-      violationCount: violations.status === 'fulfilled' ? (violations.value as any[]).filter(v => v.status === 'REPORTED').length : 0,
+      activeContracts: contracts.activeContracts,
+      pendingRequests: contracts.pendingRequests,
+      monthlyRevenue: invoices.monthlyRevenue,
+      unpaidRevenue: invoices.unpaidRevenue,
+      violationCount: violationCount.status === 'fulfilled' ? violationCount.value : 0,
       totalMeters: meters?.totalMeters || 0,
       recordedMeters: meters?.recordedMeters || 0,
     };

@@ -23,4 +23,9 @@ export class InvoicesController {
   async payInvoice(@Payload() payload: { providerId: string; invoiceId: string; dto: PayInvoiceDto; idempotencyKey: string }) {
     return this.service.payInvoice(payload.providerId, payload.invoiceId, payload.dto, payload.idempotencyKey);
   }
+
+  @MessagePattern({ cmd: 'billing.invoices.dashboardStats' })
+  async getDashboardStats(@Payload() payload: { providerId: string }) {
+    return this.service.getDashboardStats(payload.providerId);
+  }
 }

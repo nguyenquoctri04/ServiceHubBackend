@@ -103,4 +103,9 @@ export class ProviderContractsController {
   async getContractsByIds(@Payload() contractIds: string[]) {
     return this.providerContractsService.getContractsByIds(contractIds);
   }
+
+  @MessagePattern({ cmd: 'contract.dashboardStats' })
+  async getDashboardStats(@Payload() payload: { providerId: string }) {
+    return this.providerContractsService.getDashboardStats(payload.providerId);
+  }
 }

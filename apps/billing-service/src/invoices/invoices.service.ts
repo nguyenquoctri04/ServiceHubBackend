@@ -58,6 +58,37 @@ export class InvoicesService {
     ));
   }
 
+  async getDashboardStats(providerId: string) {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const [monthlyInvoices, unpaidInvoices] = await Promise.all([
+      this.prisma.invoice.aggregate({
+        where: {
+          providerId,
+          createdAt: {
+            gte: startOfMonth,
+            lte: endOfMonth
+          }
+        },
+        _sum: { total: true }
+      }),
+      this.prisma.invoice.aggregate({
+        where: {
+          providerId,
+          status: { in: ['UNPAID', 'OVERDUE'] }
+        },
+        _sum: { total: true }
+      })
+    ]);
+
+    return {
+      monthlyRevenue: Number(monthlyInvoices._sum.total ?? 0),
+      unpaidRevenue: Number(unpaidInvoices._sum.total ?? 0)
+    };
+  }
+
   async payInvoice(providerId: string, invoiceId: string, dto: PayInvoiceDto, idempotencyKey: string) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, providerId },

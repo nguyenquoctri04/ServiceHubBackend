@@ -59,14 +59,26 @@ export class ViolationsService {
         description: a.reason || '',
         createdAt: a.createdAt
       })),
-      appeals: c.appeals.map(a => ({
-        id: a.id,
-        reason: a.reason,
-        status: a.status,
-        createdAt: a.createdAt,
-        resolutionNote: a.resolutionNote
+      appeals: c.appeals.map(ap => ({
+        id: ap.id,
+        reason: ap.reason,
+        status: ap.status,
+        resolutionNote: ap.resolutionNote,
+        createdAt: ap.createdAt
       }))
     }));
+  }
+
+  async countByProvider(providerId: string, status?: string): Promise<number> {
+    const where: any = {
+      contract: {
+        providerId
+      }
+    };
+    if (status) {
+      where.status = status;
+    }
+    return this.prisma.violationCase.count({ where });
   }
 
   async createAppeal(data: { providerId: string; violationCaseId: string; reason: string; appellantId: string }) {

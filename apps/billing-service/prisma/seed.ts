@@ -1,279 +1,146 @@
-import { PrismaClient } from "@prisma/client-billing";
+import { InvoiceStatus, PrismaClient } from "@prisma/client-billing";
 
 const prisma = new PrismaClient();
 
-const IDS = {
-  meters: {
-    ELECTRIC: "80000000-0000-0000-0000-000000000001",
-    WATER: "80000000-0000-0000-0000-000000000002",
-  },
+const meterId = (n: number) => `80000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const readingId = (n: number) => `81000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const usageId = (n: number) => `82000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const invoiceId = (n: number) => `83000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const invoiceItemId = (n: number) => `84000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const paymentId = (n: number) => `85000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const contractId = (n: number) => `70000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const periodId = (n: number) => `71000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const roomId = (n: number) => `6b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const serviceId = (n: number) => `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const servicePriceId = (n: number) => `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 
-  readings: {
-    ELECTRIC_START: "81000000-0000-0000-0000-000000000001",
-    ELECTRIC_END: "81000000-0000-0000-0000-000000000002",
-    WATER_START: "81000000-0000-0000-0000-000000000003",
-    WATER_END: "81000000-0000-0000-0000-000000000004",
-  },
-
-  usages: {
-    ELECTRIC: "82000000-0000-0000-0000-000000000001",
-    WATER: "82000000-0000-0000-0000-000000000002",
-  },
-
-  invoices: {
-    INVOICE_1: "83000000-0000-0000-0000-000000000001",
-    INVOICE_2: "83000000-0000-0000-0000-000000000002",
-  },
-
-  invoiceItems: {
-    ITEM_1: "84000000-0000-0000-0000-000000000001",
-    ITEM_2: "84000000-0000-0000-0000-000000000002",
-    ITEM_3: "84000000-0000-0000-0000-000000000003",
-  },
-
-  payments: {
-    PAYMENT_1: "85000000-0000-0000-0000-000000000001",
-  },
-};
-
-const USERS = {
-  CUSTOMER: "30000000-0000-0000-0000-000000000008",
-  PROVIDER: "30000000-0000-0000-0000-000000000009",
-};
-
-const CONTRACTS = {
-  CONTRACT_1: "70000000-0000-0000-0000-000000000001",
-  PERIOD_1: "72000000-0000-0000-0000-000000000001",
-  ROOM_101: "66000000-0000-0000-0000-000000000001",
-};
-
-const CATALOG = {
-  ELECTRIC: "62000000-0000-0000-0000-000000000005",
-  WATER: "62000000-0000-0000-0000-000000000006",
-  ROOM_RENT: "63000000-0000-0000-0000-000000000001",
-  CLEANING: "63000000-0000-0000-0000-000000000002",
-};
+const now = new Date();
 
 async function main() {
-  console.log("🌱 Seeding billing service...");
+    // 1. CLEAR OLD DEV SEEDS
+    await prisma.payment.deleteMany();
+    await prisma.invoiceItem.deleteMany();
+    await prisma.invoice.deleteMany();
+    await prisma.serviceUsage.deleteMany();
+    await prisma.meterReading.deleteMany();
+    await prisma.meter.deleteMany();
 
-  const now = new Date();
+    // Housing providers: 1, 2, 3, 12, 13, 16
+    const housingProviders = [1, 2, 3, 12, 13, 16];
 
-  // =========================================================
-  // METERS
-  // =========================================================
+    // 2. METERS
+    const meters = [];
+    for (let i = 0; i < 30; i++) {
+        const prov = housingProviders[i % housingProviders.length];
+        // Electricity
+        meters.push({ id: meterId(i * 2 + 1), providerId: providerId(prov), serviceId: serviceId(i * 3 + 2), name: `Điện sinh hoạt BĐS ${i+1}`, unit: "kWh", status: "ACTIVE" as const, createdAt: now, updatedAt: now });
+        // Water
+        meters.push({ id: meterId(i * 2 + 2), providerId: providerId(prov), serviceId: serviceId(i * 3 + 3), name: `Nước sinh hoạt BĐS ${i+1}`, unit: "m³", status: "ACTIVE" as const, createdAt: now, updatedAt: now });
+    }
+    await prisma.meter.createMany({ data: meters, skipDuplicates: true });
 
-  await prisma.meter.createMany({
-    data: [
-      {
-        id: IDS.meters.ELECTRIC,
-        providerId: USERS.PROVIDER,
-        serviceId: CATALOG.ELECTRIC,
-        name: "Điện",
-        unit: "kWh",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.meters.WATER,
-        providerId: USERS.PROVIDER,
-        serviceId: CATALOG.WATER,
-        name: "Nước",
-        unit: "m3",
-        status: "ACTIVE",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
+    // 3. GENERATE INVOICES (3 Invoices per contract for 150 contracts = 450 invoices)
+    const readings = [];
+    const usages = [];
+    const invoices = [];
+    const invoiceItems = [];
+    const payments = [];
 
-  // =========================================================
-  // METER READINGS
-  // =========================================================
+    let readingIdx = 1;
+    let usageIdx = 1;
+    let invoiceIdx = 1;
+    let itemIdx = 1;
+    let paymentIdx = 1;
 
-  await prisma.meterReading.createMany({
-    data: [
-      {
-        id: IDS.readings.ELECTRIC_START,
-        roomId: CONTRACTS.ROOM_101,
-        contractId: CONTRACTS.CONTRACT_1,
-        meterId: IDS.meters.ELECTRIC,
-        recordedBy: USERS.PROVIDER,
-        value: 1200,
-        source: "MANUAL",
-        status: "VALID",
-        createdAt: new Date("2026-08-01"),
-        updatedAt: new Date("2026-08-01"),
-      },
-      {
-        id: IDS.readings.ELECTRIC_END,
-        roomId: CONTRACTS.ROOM_101,
-        contractId: CONTRACTS.CONTRACT_1,
-        meterId: IDS.meters.ELECTRIC,
-        recordedBy: USERS.PROVIDER,
-        value: 1350,
-        source: "IMAGE",
-        imgUrl: "https://placehold.co/800x600?text=Electric+Meter",
-        status: "VALID",
-        createdAt: new Date("2026-08-31"),
-        updatedAt: new Date("2026-08-31"),
-      },
-      {
-        id: IDS.readings.WATER_START,
-        roomId: CONTRACTS.ROOM_101,
-        contractId: CONTRACTS.CONTRACT_1,
-        meterId: IDS.meters.WATER,
-        recordedBy: USERS.PROVIDER,
-        value: 100,
-        source: "MANUAL",
-        status: "VALID",
-        createdAt: new Date("2026-08-01"),
-        updatedAt: new Date("2026-08-01"),
-      },
-      {
-        id: IDS.readings.WATER_END,
-        roomId: CONTRACTS.ROOM_101,
-        contractId: CONTRACTS.CONTRACT_1,
-        meterId: IDS.meters.WATER,
-        recordedBy: USERS.PROVIDER,
-        value: 112,
-        source: "IMAGE",
-        imgUrl: "https://placehold.co/800x600?text=Water+Meter",
-        status: "VALID",
-        createdAt: new Date("2026-08-31"),
-        updatedAt: new Date("2026-08-31"),
-      },
-    ],
-    skipDuplicates: true,
-  });
+    for (let c = 0; c < 150; c++) {
+        const cId = contractId(c + 1);
+        const custId = userId(101 + (c % 50));
+        const propIdx = c % 30;
+        const provId = providerId(housingProviders[propIdx % housingProviders.length]);
+        const rId = roomId((c % 1200) + 1);
 
-  // =========================================================
-  // SERVICE USAGE
-  // =========================================================
+        const housingServiceIdx = propIdx * 3 + 1;
+        const elecServiceIdx = propIdx * 3 + 2;
+        const waterServiceIdx = propIdx * 3 + 3;
 
-  await prisma.serviceUsage.createMany({
-    data: [
-      {
-        id: IDS.usages.ELECTRIC,
-        billingPeriodId: CONTRACTS.PERIOD_1,
-        startReadingId: IDS.readings.ELECTRIC_START,
-        endReadingId: IDS.readings.ELECTRIC_END,
-        createdAt: now,
-      },
-      {
-        id: IDS.usages.WATER,
-        billingPeriodId: CONTRACTS.PERIOD_1,
-        startReadingId: IDS.readings.WATER_START,
-        endReadingId: IDS.readings.WATER_END,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
+        let lastElec = 1200 + c * 50;
+        let lastWater = 100 + c * 10;
 
-  // =========================================================
-  // INVOICES
-  // =========================================================
+        for (let m = 0; m < 3; m++) {
+            // M = 0 (Tháng trước), M = 1 (Tháng này), M = 2 (Chưa thanh toán)
+            const monthOffset = -2 + m; // 2 months ago, 1 month ago, current month
+            const invoiceDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 5);
+            
+            const elecUsage = 80 + Math.floor(Math.random() * 50); // 80 - 130 kWh
+            const waterUsage = 10 + Math.floor(Math.random() * 5); // 10 - 15 m3
+            
+            // Readings
+            const startElecId = readingId(readingIdx++);
+            const endElecId = readingId(readingIdx++);
+            const startWaterId = readingId(readingIdx++);
+            const endWaterId = readingId(readingIdx++);
 
-  await prisma.invoice.createMany({
-    data: [
-      {
-        id: IDS.invoices.INVOICE_1,
-        invoiceNumber: "INV-2026-0001",
-        customerId: USERS.CUSTOMER,
-        contractId: CONTRACTS.CONTRACT_1,
-        billingPeriodId: CONTRACTS.PERIOD_1,
-        providerId: USERS.PROVIDER,
-        total: 5750000,
-        status: "UNPAID",
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: IDS.invoices.INVOICE_2,
-        invoiceNumber: "INV-2026-0002",
-        customerId: "30000000-0000-0000-0000-000000000002",
-        contractId: "70000000-0000-0000-0000-000000000002",
-        billingPeriodId: "72000000-0000-0000-0000-000000000002",
-        providerId: USERS.PROVIDER,
-        total: 5000000,
-        status: "PAID",
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
+            readings.push({ id: startElecId, roomId: rId, contractId: cId, meterId: meterId(propIdx * 2 + 1), recordedBy: userId(1), value: lastElec, source: "MANUAL" as const, status: "VALID" as const, createdAt: invoiceDate, updatedAt: invoiceDate });
+            lastElec += elecUsage;
+            readings.push({ id: endElecId, roomId: rId, contractId: cId, meterId: meterId(propIdx * 2 + 1), recordedBy: userId(1), value: lastElec, source: "IMAGE" as const, status: "VALID" as const, createdAt: invoiceDate, updatedAt: invoiceDate });
+            
+            readings.push({ id: startWaterId, roomId: rId, contractId: cId, meterId: meterId(propIdx * 2 + 2), recordedBy: userId(1), value: lastWater, source: "MANUAL" as const, status: "VALID" as const, createdAt: invoiceDate, updatedAt: invoiceDate });
+            lastWater += waterUsage;
+            readings.push({ id: endWaterId, roomId: rId, contractId: cId, meterId: meterId(propIdx * 2 + 2), recordedBy: userId(1), value: lastWater, source: "IMAGE" as const, status: "VALID" as const, createdAt: invoiceDate, updatedAt: invoiceDate });
 
-  // =========================================================
-  // INVOICE ITEMS
-  // =========================================================
+            // Usage
+            usages.push({ id: usageId(usageIdx++), billingPeriodId: periodId(c * 12 + m + 1), startReadingId: startElecId, endReadingId: endElecId, createdAt: invoiceDate });
+            usages.push({ id: usageId(usageIdx++), billingPeriodId: periodId(c * 12 + m + 1), startReadingId: startWaterId, endReadingId: endWaterId, createdAt: invoiceDate });
 
-  await prisma.invoiceItem.createMany({
-    data: [
-      {
-        id: IDS.invoiceItems.ITEM_1,
-        invoiceId: IDS.invoices.INVOICE_1,
-        servicePriceId: CATALOG.ROOM_RENT,
-        quantity: 1,
-        unit: "MONTH",
-        unitPrice: 5000000,
-        amount: 5000000,
-        createdAt: now,
-      },
-      {
-        id: IDS.invoiceItems.ITEM_2,
-        invoiceId: IDS.invoices.INVOICE_1,
-        servicePriceId: CATALOG.CLEANING,
-        quantity: 2,
-        unit: "HOUR",
-        unitPrice: 80000,
-        amount: 160000,
-        createdAt: now,
-      },
-      {
-        id: IDS.invoiceItems.ITEM_3,
-        invoiceId: IDS.invoices.INVOICE_1,
-        servicePriceId: null,
-        quantity: 150,
-        unit: "kWh",
-        unitPrice: 3933.33,
-        amount: 590000,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
+            // Invoice
+            const rentPrice = 4000000 + (propIdx % 5) * 1500000;
+            const elecPrice = elecUsage * 3800;
+            const waterPrice = waterUsage * 20000;
+            const total = rentPrice + elecPrice + waterPrice;
+            const invStatus = m === 2 ? "UNPAID" : "PAID";
 
-  // =========================================================
-  // PAYMENT
-  // =========================================================
+            const invId = invoiceId(invoiceIdx++);
+            invoices.push({
+                id: invId,
+                invoiceNumber: `INV-2026-${String(invoiceIdx).padStart(5, "0")}`,
+                customerId: custId,
+                contractId: cId,
+                billingPeriodId: periodId(c * 12 + m + 1),
+                providerId: provId,
+                total,
+                status: invStatus as InvoiceStatus,
+                createdAt: invoiceDate,
+                updatedAt: invoiceDate
+            });
 
-  await prisma.payment.createMany({
-    data: [
-      {
-        id: IDS.payments.PAYMENT_1,
-        invoiceId: IDS.invoices.INVOICE_2,
-        paymentMethod: "CARD",
-        paymentLinkId: "PAYLINK-2026-0001",
-        status: "SUCCESS",
-        paidAt: now,
-        createdAt: now,
-      },
-    ],
-    skipDuplicates: true,
-  });
+            // Invoice Items
+            invoiceItems.push({ id: invoiceItemId(itemIdx++), invoiceId: invId, servicePriceId: servicePriceId(housingServiceIdx * 2 - 1), quantity: 1, unit: "tháng", unitPrice: rentPrice, amount: rentPrice, createdAt: invoiceDate });
+            invoiceItems.push({ id: invoiceItemId(itemIdx++), invoiceId: invId, servicePriceId: servicePriceId(elecServiceIdx * 2 - 1), quantity: elecUsage, unit: "kWh", unitPrice: 3800, amount: elecPrice, createdAt: invoiceDate });
+            invoiceItems.push({ id: invoiceItemId(itemIdx++), invoiceId: invId, servicePriceId: servicePriceId(waterServiceIdx * 2 - 1), quantity: waterUsage, unit: "m³", unitPrice: 20000, amount: waterPrice, createdAt: invoiceDate });
 
-  console.log("✅ Billing seed completed.");
+            // Payment
+            if (invStatus === "PAID") {
+                payments.push({
+                    id: paymentId(paymentIdx++), invoiceId: invId, paymentMethod: "CARD" as const,
+                    paymentLinkId: `PAY-${invId.substring(invId.length - 8)}`, status: "SUCCESS" as const,
+                    paidAt: new Date(invoiceDate.getTime() + 86400000 * 2), createdAt: invoiceDate
+                });
+            }
+        }
+    }
+
+    // Chunking to prevent insert errors
+    for (let i = 0; i < readings.length; i += 1000) await prisma.meterReading.createMany({ data: readings.slice(i, i + 1000), skipDuplicates: true });
+    for (let i = 0; i < usages.length; i += 1000) await prisma.serviceUsage.createMany({ data: usages.slice(i, i + 1000), skipDuplicates: true });
+    for (let i = 0; i < invoices.length; i += 500) await prisma.invoice.createMany({ data: invoices.slice(i, i + 500), skipDuplicates: true });
+    for (let i = 0; i < invoiceItems.length; i += 1000) await prisma.invoiceItem.createMany({ data: invoiceItems.slice(i, i + 1000), skipDuplicates: true });
+    for (let i = 0; i < payments.length; i += 500) await prisma.payment.createMany({ data: payments.slice(i, i + 500), skipDuplicates: true });
+
+    console.log(`Đã seed billing-service: ${meters.length} meters, ${readings.length} readings, ${invoices.length} invoices, ${payments.length} payments.`);
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+    .catch(console.error)
+    .finally(() => prisma.$disconnect());

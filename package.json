@@ -33,7 +33,8 @@
     "seed:contract": "npx tsx apps/contract-service/prisma/seed.ts",
     "seed:billing": "npx tsx apps/billing-service/prisma/seed.ts",
     "seed:notification": "npx tsx apps/notification-service/prisma/seed.ts",
-    "seed": "npm run seed:identity && npm run seed:catalog && npm run seed:contract && npm run seed:billing && npm run seed:notification"
+    "seed:audit": "npx tsx apps/audit-service/prisma/seed.ts",
+    "seed": "npm run seed:identity && npm run seed:catalog && npm run seed:contract && npm run seed:billing && npm run seed:notification && npm run seed:audit"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

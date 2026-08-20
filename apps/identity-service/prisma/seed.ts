@@ -1,45 +1,7 @@
 import { PrismaClient } from "@prisma/client-identity";
 import * as bcrypt from "bcrypt";
-import { randomUUID } from "crypto";
 
 const prisma = new PrismaClient();
-
-const IDS = {
-    identities: {
-        ADMIN: "30000000-0000-0000-0000-000000000001",
-        CUSTOMER_1: "30000000-0000-0000-0000-000000000002",
-        CUSTOMER_2: "30000000-0000-0000-0000-000000000003",
-        CUSTOMER_3: "30000000-0000-0000-0000-000000000004",
-        PROVIDER_1: "30000000-0000-0000-0000-000000000005",
-        PROVIDER_2: "30000000-0000-0000-0000-000000000006",
-        PROVIDER_3: "30000000-0000-0000-0000-000000000007",
-        CUSTOMER_TRI: "30000000-0000-0000-0000-000000000008",
-        PROVIDER_TRI: "30000000-0000-0000-0000-000000000009",
-        PROVIDER_PENDING: "30000000-0000-0000-0000-000000000010",
-        PROVIDER_REJECTED: "30000000-0000-0000-0000-000000000011",
-        PROVIDER_SUSPENDED: "30000000-0000-0000-0000-000000000012",
-        PROVIDER_EXPIRED: "30000000-0000-0000-0000-000000000013",
-        PROVIDER_NO_IMAGES: "30000000-0000-0000-0000-000000000014",
-    },
-    providers: {
-        PROVIDER_1: "40000000-0000-0000-0000-000000000001",
-        PROVIDER_2: "40000000-0000-0000-0000-000000000002",
-        PROVIDER_3: "40000000-0000-0000-0000-000000000003",
-        PROVIDER_TRI: "40000000-0000-0000-0000-000000000004",
-        PROVIDER_PENDING: "40000000-0000-0000-0000-000000000005",
-        PROVIDER_REJECTED: "40000000-0000-0000-0000-000000000006",
-        PROVIDER_SUSPENDED: "40000000-0000-0000-0000-000000000007",
-        PROVIDER_EXPIRED: "40000000-0000-0000-0000-000000000008",
-        PROVIDER_NO_IMAGES: "40000000-0000-0000-0000-000000000009",
-    },
-    verifications: {
-        CUSTOMER_1: "50000000-0000-0000-0000-000000000001",
-        PROVIDER_1: "50000000-0000-0000-0000-000000000002",
-        PROVIDER_2: "50000000-0000-0000-0000-000000000003",
-        PROVIDER_TRI: "50000000-0000-0000-0000-000000000004",
-        PROVIDER_REJECTED: "50000000-0000-0000-0000-000000000005",
-    },
-} as const;
 
 const roleIds = {
     ADMIN: "31000000-0000-0000-0000-000000000001",
@@ -47,419 +9,288 @@ const roleIds = {
     PROVIDER: "31000000-0000-0000-0000-000000000003",
 };
 
+const permissionId = (n: number) => `32000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const verificationId = (n: number) => `50000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const identityDocumentId = (n: number) => `51000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const providerLegalDocumentId = (n: number) => `52000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+
 const now = new Date();
+
+// Data arrays for generation
+const firstNames = ["Anh", "Bình", "Cường", "Dung", "Dương", "Hải", "Hào", "Hoa", "Hoàng", "Hùng", "Hương", "Linh", "Lan", "Mai", "Minh", "Nga", "Ngọc", "Nhi", "Phát", "Phương", "Quân", "Quang", "Thảo", "Thắng", "Thành", "Thu", "Trang", "Trí", "Tuấn", "Tùng"];
+const lastNames = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý"];
+const middleNamesM = ["Văn", "Hữu", "Đức", "Công", "Quang", "Minh", "Thế", "Đình"];
+const middleNamesF = ["Thị", "Ngọc", "Thanh", "Bích", "Thu", "Phương", "Hồng"];
+
+function randomName(isMale: boolean) {
+    const last = lastNames[Math.floor(Math.random() * lastNames.length)];
+    const middle = isMale ? middleNamesM[Math.floor(Math.random() * middleNamesM.length)] : middleNamesF[Math.floor(Math.random() * middleNamesF.length)];
+    const first = firstNames[Math.floor(Math.random() * firstNames.length)];
+    return `${last} ${middle} ${first}`;
+}
+
+const providerData = [
+    { name: "Nhà trọ Vinhomes Central Park", company: "Công ty CP BĐS Vinhomes", desc: "Quản lý và cho thuê căn hộ Vinhomes Central Park", type: "PROPERTY_MANAGER", address: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM" },
+    { name: "Ký túc xá Cỏ May", company: "Công ty TNHH MTV Cỏ May", desc: "Ký túc xá cao cấp dành cho sinh viên", type: "PROPERTY_MANAGER", address: "Khu đô thị Đại học Quốc gia, TP. Thủ Đức, TP.HCM" },
+    { name: "Căn hộ dịch vụ CityHouse", company: "Công ty CP Dịch vụ CityHouse", desc: "Chuỗi căn hộ dịch vụ cao cấp", type: "PROPERTY_MANAGER", address: "17 Phạm Ngọc Thạch, Phường Võ Thị Sáu, Quận 3, TP.HCM" },
+    { name: "Vệ sinh Hoàn Mỹ", company: "Công ty TNHH Vệ Sinh Hoàn Mỹ", desc: "Dịch vụ vệ sinh công nghiệp và dân dụng", type: "EXTERNAL_SERVICE", address: "25 Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM" },
+    { name: "Điện nước Minh Trí", company: "Hộ kinh doanh Minh Trí", desc: "Thi công và sửa chữa điện nước tại nhà", type: "EXTERNAL_SERVICE", address: "142 Âu Cơ, Phường 9, Tân Bình, TP.HCM" },
+    { name: "Suất ăn công nghiệp Tâm Phát", company: "Công ty CP Suất ăn Tâm Phát", desc: "Cung cấp suất ăn văn phòng, công nghiệp", type: "EXTERNAL_SERVICE", address: "Lô B2, KCN Tân Bình, Tân Phú, TP.HCM" },
+    { name: "Dịch vụ giặt ủi Sakura", company: "Công ty TNHH Giặt ủi Sakura", desc: "Giặt sấy lấy liền, giặt ủi công nghiệp", type: "EXTERNAL_SERVICE", address: "88 Nơ Trang Long, Phường 14, Bình Thạnh, TP.HCM" },
+    { name: "Bảo vệ Hoàng Long", company: "Công ty TNHH Dịch vụ Bảo vệ Hoàng Long", desc: "Dịch vụ bảo vệ chuyên nghiệp 24/7", type: "EXTERNAL_SERVICE", address: "155 Điện Biên Phủ, Phường 15, Bình Thạnh, TP.HCM" },
+    { name: "Nội thất Xinh", company: "Công ty CP Kiến trúc và Nội thất Xinh", desc: "Thi công, lắp đặt và sửa chữa nội thất", type: "EXTERNAL_SERVICE", address: "200 Ba Tháng Hai, Phường 12, Quận 10, TP.HCM" },
+    { name: "Điện lạnh Á Châu", company: "Công ty TNHH Dịch vụ Điện Lạnh Á Châu", desc: "Lắp đặt, vệ sinh, sửa chữa máy lạnh", type: "EXTERNAL_SERVICE", address: "450 Nguyễn Thị Minh Khai, Quận 3, TP.HCM" },
+    { name: "Chuyển nhà Thành Hưng", company: "Công ty CP Tập đoàn Thành Hưng", desc: "Dịch vụ chuyển nhà trọn gói", type: "EXTERNAL_SERVICE", address: "1A Đường 22, Phường Linh Đông, TP. Thủ Đức, TP.HCM" },
+    { name: "Nhà ở xã hội EHome", company: "Công ty CP Đầu tư Nam Long", desc: "Chuỗi nhà ở giá rẻ EHome", type: "PROPERTY_MANAGER", address: "KDC Nam Long, Phường Phước Long B, TP. Thủ Đức, TP.HCM" },
+    { name: "Masteri Property", company: "Công ty CP Masterise Homes", desc: "Quản lý căn hộ Masteri Thảo Điền, Masteri An Phú", type: "PROPERTY_MANAGER", address: "159 Xa Lộ Hà Nội, Thảo Điền, TP. Thủ Đức, TP.HCM" },
+    { name: "Dọn dẹp JupViec", company: "Công ty CP JupViec.vn", desc: "Dịch vụ giúp việc theo giờ", type: "EXTERNAL_SERVICE", address: "Tòa nhà 27B Nguyễn Đình Chiểu, Đa Kao, Quận 1, TP.HCM" },
+    { name: "Dịch vụ diệt côn trùng Rentokil", company: "Công ty TNHH Rentokil Initial Việt Nam", desc: "Dịch vụ kiểm soát côn trùng dịch hại", type: "EXTERNAL_SERVICE", address: "Lầu 3, Tòa nhà Hà Đô, Tân Bình, TP.HCM" },
+    { name: "Hệ thống chung cư Eco Green", company: "Công ty CP Đầu tư Xây dựng Xuân Mai", desc: "Quản lý khu chung cư Eco Green Sài Gòn", type: "PROPERTY_MANAGER", address: "Nguyễn Văn Linh, Tân Thuận Tây, Quận 7, TP.HCM" },
+    { name: "Sửa khóa nhanh 24/7", company: "Hộ kinh doanh Sửa khóa 24h", desc: "Mở khóa, làm chìa, thay ổ khóa các loại", type: "EXTERNAL_SERVICE", address: "230 Quang Trung, Phường 10, Gò Vấp, TP.HCM" },
+    { name: "Camera quan sát Đạt Phát", company: "Công ty TNHH Đạt Phát Camera", desc: "Lắp đặt và bảo trì camera an ninh", type: "EXTERNAL_SERVICE", address: "123 Lũy Bán Bích, Tân Thới Hòa, Tân Phú, TP.HCM" },
+    { name: "Internet Viettel Post", company: "Tổng Công ty Viễn thông Viettel", desc: "Lắp đặt internet cáp quang sinh viên", type: "EXTERNAL_SERVICE", address: "285 Cách Mạng Tháng Tám, Quận 10, TP.HCM" },
+    { name: "Giao nước uống Aqua", company: "Đại lý Nước suối AquaWater", desc: "Giao bình nước 20L tận phòng", type: "EXTERNAL_SERVICE", address: "55 Lạc Long Quân, Phường 3, Quận 11, TP.HCM" }
+];
 
 async function main() {
     const passwordHash = await bcrypt.hash("123456", 10);
 
+    // 1. ROLES
     await prisma.role.createMany({
         data: [
-            {
-                id: roleIds.ADMIN,
-                name: "QUẢN TRỊ VIÊN",
-                description: "Tài khoản quản trị hệ thống",
-                createdAt: now,
-                updatedAt: now,
-            },
-            {
-                id: roleIds.CUSTOMER,
-                name: "KHÁCH HÀNG",
-                description: "Người sử dụng dịch vụ",
-                createdAt: now,
-                updatedAt: now,
-            },
-            {
-                id: roleIds.PROVIDER,
-                name: "NHÀ CUNG CẤP",
-                description: "Đơn vị cung cấp dịch vụ",
-                createdAt: now,
-                updatedAt: now,
-            },
+            { id: roleIds.ADMIN, name: "QUẢN TRỊ VIÊN", description: "Tài khoản quản trị hệ thống", createdAt: now, updatedAt: now },
+            { id: roleIds.CUSTOMER, name: "KHÁCH HÀNG", description: "Người sử dụng dịch vụ", createdAt: now, updatedAt: now },
+            { id: roleIds.PROVIDER, name: "NHÀ CUNG CẤP", description: "Đơn vị cung cấp dịch vụ", createdAt: now, updatedAt: now },
         ],
         skipDuplicates: true,
     });
 
-    const accounts = [
-        [
-            IDS.identities.ADMIN,
-            "admin@servicehub.vn",
-            "0900000001",
-            roleIds.ADMIN,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.CUSTOMER_1,
-            "khachhang1@servicehub.vn",
-            "0900000002",
-            roleIds.CUSTOMER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.CUSTOMER_2,
-            "khachhang2@servicehub.vn",
-            "0900000003",
-            roleIds.CUSTOMER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.CUSTOMER_3,
-            "khachhang3@servicehub.vn",
-            "0900000004",
-            roleIds.CUSTOMER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_1,
-            "nhacungcap1@servicehub.vn",
-            "0900000005",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_2,
-            "nhacungcap2@servicehub.vn",
-            "0900000006",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_3,
-            "nhacungcap3@servicehub.vn",
-            "0900000007",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.CUSTOMER_TRI,
-            "trikhachhang@servicehub.vn",
-            "0900000008",
-            roleIds.CUSTOMER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_TRI,
-            "trinhacungcap@servicehub.vn",
-            "0900000009",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_PENDING,
-            "nhacungcapcho@servicehub.vn",
-            "0900000010",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_REJECTED,
-            "nhacungcapbiuchoi@servicehub.vn",
-            "0900000011",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_SUSPENDED,
-            "nhacungcapbitamdung@servicehub.vn",
-            "0900000012",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_EXPIRED,
-            "nhacungcaphethan@servicehub.vn",
-            "0900000013",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
-        [
-            IDS.identities.PROVIDER_NO_IMAGES,
-            "nhacungcapkhonganh@servicehub.vn",
-            "0900000014",
-            roleIds.PROVIDER,
-            "ACTIVE",
-        ],
+    // 2. PERMISSIONS
+    const permissions = [
+        ["identity.read", "identity", "read", "Xem thông tin danh tính"],
+        ["identity.manage", "identity", "manage", "Quản lý thông tin danh tính"],
+        ["provider.read", "provider", "read", "Xem hồ sơ nhà cung cấp"],
+        ["provider.manage", "provider", "manage", "Quản lý hồ sơ nhà cung cấp"],
+        ["catalog.read", "catalog", "read", "Xem danh mục và dịch vụ"],
+        ["catalog.manage", "catalog", "manage", "Quản lý danh mục và dịch vụ"],
+        ["contract.read", "contract", "read", "Xem hợp đồng"],
+        ["contract.manage", "contract", "manage", "Tạo và quản lý hợp đồng"],
+        ["billing.read", "billing", "read", "Xem hóa đơn"],
+        ["billing.manage", "billing", "manage", "Quản lý hóa đơn và thanh toán"],
+        ["notification.read", "notification", "read", "Xem thông báo"],
+        ["notification.manage", "notification", "manage", "Gửi và quản lý thông báo"],
+        ["audit.read", "audit", "read", "Xem nhật ký kiểm toán"],
+        ["system.manage", "system", "manage", "Quản trị hệ thống"],
     ] as const;
 
-    await prisma.identity.createMany({
-        data: accounts.map(([id, email, phone, roleId, status]) => ({
-            id,
-            email,
-            phone,
-            passwordHash,
-            roleId,
-            status: status as "ACTIVE",
-            isEkycVerified:
-                id !== IDS.identities.PROVIDER_PENDING &&
-                id !== IDS.identities.PROVIDER_REJECTED,
-            createdAt: now,
-            updatedAt: now,
+    await prisma.permission.createMany({
+        data: permissions.map(([code, resource, action, description], index) => ({
+            id: permissionId(index + 1), code, resource, action, description, createdAt: now,
         })),
         skipDuplicates: true,
     });
 
-    const providers = [
-        [
-            "PROVIDER_1",
-            "Nhà trọ An Bình",
-            "Công ty TNHH An Bình",
-            "Quản lý nhà trọ, căn hộ và dịch vụ tiện ích",
-            "0901000001",
-            "contact@anbinh.vn",
-            "ACTIVE",
-            "PROPERTY_MANAGER",
+    const allPermissionIds = permissions.map((_, index) => permissionId(index + 1));
+    const providerPermissionIds = [3, 4, 5, 6, 7, 8, 9, 10, 11].map(permissionId);
+    const customerPermissionIds = [1, 3, 5, 7, 9, 11].map(permissionId);
+    
+    await prisma.rolePermission.createMany({
+        data: [
+            ...allPermissionIds.map((permissionId) => ({ roleId: roleIds.ADMIN, permissionId })),
+            ...providerPermissionIds.map((permissionId) => ({ roleId: roleIds.PROVIDER, permissionId })),
+            ...customerPermissionIds.map((permissionId) => ({ roleId: roleIds.CUSTOMER, permissionId })),
         ],
-        [
-            "PROVIDER_2",
-            "Dịch vụ Gia Hân",
-            "Hộ kinh doanh Gia Hân",
-            "Dịch vụ vệ sinh và chăm sóc nhà ở",
-            "0901000002",
-            "lienhe@giahan.vn",
-            "ACTIVE",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_3",
-            "Bếp Nhà Việt",
-            "Công ty TNHH Bếp Nhà Việt",
-            "Cung cấp suất ăn gia đình và văn phòng",
-            "0901000003",
-            "hello@bepnhaviet.vn",
-            "ACTIVE",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_TRI",
-            "Trí Sửa Chữa",
-            "Hộ kinh doanh Trí Sửa Chữa",
-            "Sửa chữa điện nước và thiết bị gia dụng",
-            "0901000004",
-            "tri@suachua.vn",
-            "ACTIVE",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_PENDING",
-            "Dịch vụ Minh Tâm",
-            "Hộ kinh doanh Minh Tâm",
-            "Đơn vị đang chờ xét duyệt",
-            "0901000005",
-            "minhtam@servicehub.vn",
-            "PENDING",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_REJECTED",
-            "Dịch vụ Hoàng Long",
-            "Hộ kinh doanh Hoàng Long",
-            "Hồ sơ đăng ký chưa đạt yêu cầu",
-            "0901000006",
-            "hoanglong@servicehub.vn",
-            "PENDING",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_SUSPENDED",
-            "Nhà ở Phúc An",
-            "Công ty TNHH Phúc An",
-            "Nhà cung cấp đang bị tạm ngưng",
-            "0901000007",
-            "phucan@servicehub.vn",
-            "SUSPENDED",
-            "PROPERTY_MANAGER",
-        ],
-        [
-            "PROVIDER_EXPIRED",
-            "Dịch vụ Việt Thành",
-            "Công ty TNHH Việt Thành",
-            "Nhà cung cấp có hồ sơ hết hạn",
-            "0901000008",
-            "vietthanh@servicehub.vn",
-            "ACTIVE",
-            "EXTERNAL_SERVICE",
-        ],
-        [
-            "PROVIDER_NO_IMAGES",
-            "Dịch vụ Thanh Bình",
-            "Hộ kinh doanh Thanh Bình",
-            "Nhà cung cấp dùng để kiểm thử không có ảnh",
-            "0901000009",
-            "thanhbinh@servicehub.vn",
-            "ACTIVE",
-            "EXTERNAL_SERVICE",
-        ],
-    ] as const;
+        skipDuplicates: true,
+    });
+
+    // 3. IDENTITIES
+    // Admin (1)
+    const adminIdentity = { id: userId(1), email: "admin@servicehub.vn", phone: "0900000001", passwordHash, roleId: roleIds.ADMIN, status: "ACTIVE" as const, isEkycVerified: true, createdAt: now, updatedAt: now };
+    
+    // Customers (101 -> 150) - 50 customers
+    const customerIdentities = Array.from({ length: 50 }, (_, i) => ({
+        id: userId(101 + i),
+        email: `khachhang${i + 1}@servicehub.vn`,
+        phone: `090${String(1000000 + i).slice(1)}`,
+        passwordHash,
+        roleId: roleIds.CUSTOMER,
+        status: "ACTIVE" as const,
+        isEkycVerified: true,
+        createdAt: now,
+        updatedAt: now
+    }));
+
+    // Providers (201 -> 220) - 20 providers
+    const providerIdentities = Array.from({ length: 20 }, (_, i) => ({
+        id: userId(201 + i),
+        email: `nhacungcap${i + 1}@servicehub.vn`,
+        phone: `091${String(1000000 + i).slice(1)}`,
+        passwordHash,
+        roleId: roleIds.PROVIDER,
+        // Lifecycle PENDING/SUSPENDED belongs to Provider.status; Identity only
+        // supports ACTIVE/INACTIVE in the identity-service schema.
+        status: (i === 19 ? "INACTIVE" : "ACTIVE") as "ACTIVE" | "INACTIVE",
+        isEkycVerified: i !== 18,
+        createdAt: now,
+        updatedAt: now
+    }));
+
+    await prisma.identity.createMany({
+        data: [adminIdentity, ...customerIdentities, ...providerIdentities],
+        skipDuplicates: true,
+    });
+
+    // 4. PROVIDERS (Entities)
+    const providers = providerData.map((data, i) => {
+        const isCompany = data.company.includes("Công ty");
+        return {
+            id: providerId(i + 1),
+            identityId: userId(201 + i),
+            providerName: data.name,
+            companyName: data.company,
+            description: data.desc,
+            phone: `091${String(1000000 + i).slice(1)}`,
+            email: `contact@${data.name.toLowerCase().replace(/ /g, '')}.vn`,
+            address: data.address,
+            representativeName: randomName(true),
+            representativePosition: isCompany ? "Giám đốc" : "Chủ hộ kinh doanh",
+            businessType: isCompany ? "COMPANY" as const : "INDIVIDUAL" as const,
+            providerType: data.type as "PROPERTY_MANAGER" | "EXTERNAL_SERVICE",
+            status: (i === 18 ? "PENDING" : (i === 19 ? "SUSPENDED" : "ACTIVE")) as "ACTIVE" | "PENDING" | "SUSPENDED",
+            createdAt: now,
+            updatedAt: now
+        }
+    });
 
     await prisma.provider.createMany({
-        data: providers.map(
-            ([
-                key,
-                name,
-                companyName,
-                description,
-                phone,
-                email,
-                status,
-                type,
-            ]) => ({
-                id: IDS.providers[key as keyof typeof IDS.providers],
-                identityId: IDS.identities[key as keyof typeof IDS.identities],
-                providerName: name,
-                companyName,
-                description,
-                phone,
-                email,
-                address: "Thành phố Hồ Chí Minh, Việt Nam",
-                representativeName:
-                    key === "PROVIDER_TRI"
-                        ? "Nguyễn Văn Trí"
-                        : "Nguyễn Văn " + name.split(" ").at(-1),
-                representativePosition: "Chủ hộ kinh doanh",
-                businessType: "COMPANY" as const,
-                providerType: type as "PROPERTY_MANAGER" | "EXTERNAL_SERVICE",
-                status: status as "PENDING" | "ACTIVE" | "SUSPENDED",
-                createdAt: now,
-                updatedAt: now,
-            }),
-        ),
+        data: providers,
         skipDuplicates: true,
     });
 
-    const verifications = [
-        [
-            IDS.verifications.CUSTOMER_1,
-            IDS.identities.CUSTOMER_1,
-            "Căn cước công dân",
-            "Nguyễn Thị Mai",
-            "VERIFIED",
-        ],
-        [
-            IDS.verifications.PROVIDER_1,
-            IDS.identities.PROVIDER_1,
-            "Giấy phép kinh doanh",
-            "Nguyễn Văn An",
-            "VERIFIED",
-        ],
-        [
-            IDS.verifications.PROVIDER_2,
-            IDS.identities.PROVIDER_2,
-            "Giấy phép kinh doanh",
-            "Trần Thị Hân",
-            "VERIFIED",
-        ],
-        [
-            IDS.verifications.PROVIDER_TRI,
-            IDS.identities.PROVIDER_TRI,
-            "Giấy phép kinh doanh",
-            "Nguyễn Văn Trí",
-            "VERIFIED",
-        ],
-        [
-            IDS.verifications.PROVIDER_REJECTED,
-            IDS.identities.PROVIDER_REJECTED,
-            "Giấy phép kinh doanh",
-            "Hoàng Văn Long",
-            "REJECTED",
-        ],
-    ] as const;
-
-    await prisma.identityVerification.createMany({
-        data: verifications.map(
-            ([id, identityId, documentType, fullName, status]) => ({
-                id,
-                identityId,
-                provider: "Hệ thống xác minh danh tính",
-                referenceId: id,
-                verificationLevel: "CƠ BẢN",
-                faceSimilarity: status === "VERIFIED" ? "0.9800" : "0.4200",
-                livenessScore: status === "VERIFIED" ? "0.9700" : "0.3000",
-                failureReason:
-                    status === "REJECTED"
-                        ? "Thông tin hồ sơ không khớp."
-                        : null,
-                verifiedAt: status === "VERIFIED" ? now : null,
-                expiredAt:
-                    status === "VERIFIED" ? new Date("2027-12-31") : null,
-                createdAt: now,
-            }),
-        ),
-        skipDuplicates: true,
-    });
-
-    const documents = verifications.map(
-        ([id, identityId, documentType, fullName, status], i) => ({
-            id: randomUUID(),
-            verificationId: id,
-            documentType,
-            documentNumber: `0792${String(i + 1).padStart(8, "0")}`,
-            fullName,
-            dateOfBirth: new Date(`199${i}-0${i + 1}-0${i + 2}`),
-            gender: i % 2 ? "Nữ" : "Nam",
-            nationality: "Việt Nam",
-            issueDate: new Date("2022-01-01"),
-            expiryDate: new Date("2032-01-01"),
-            issuingAuthority:
-                "Cục Cảnh sát quản lý hành chính về trật tự xã hội",
-            frontImageUrl: `https://example.com/cccd/${id}-mat-truoc.jpg`,
-            backImageUrl: `https://example.com/cccd/${id}-mat-sau.jpg`,
-            selfieImageUrl: `https://example.com/cccd/${id}-chan-dung.jpg`,
+    // 5. IDENTITY VERIFICATIONS & DOCUMENTS (Customers 101-150 + Providers 201-220)
+    const verifications = [];
+    const idDocs = [];
+    
+    // For customers
+    for (let i = 0; i < 50; i++) {
+        const isMale = i % 2 === 0;
+        const name = randomName(isMale);
+        verifications.push({
+            id: verificationId(101 + i),
+            identityId: userId(101 + i),
+            provider: "Hệ thống xác minh danh tính quốc gia",
+            referenceId: `REF-CUST-${101 + i}`,
+            verificationLevel: "NÂNG CAO",
+            faceSimilarity: "0.9850",
+            livenessScore: "0.9900",
+            failureReason: null,
+            verifiedAt: now,
+            expiredAt: new Date("2032-12-31"),
             createdAt: now,
-        }),
-    );
-    await prisma.identityDocument.createMany({
-        data: documents,
-        skipDuplicates: true,
-    });
+        });
 
-    const legalTypes = [
-        "BUSINESS_LICENSE",
-        "TAX_CERTIFICATE",
-        "OTHER",
-    ] as const;
-    const providerRows = Object.entries(IDS.providers);
-    await prisma.providerLegalDocument.createMany({
-        data: providerRows.flatMap(([key, providerId], i) => [
-            {
-                id: randomUUID(),
-                providerId,
-                documentType: "BUSINESS_LICENSE",
-                documentName: "Giấy chứng nhận đăng ký kinh doanh",
-                documentNumber: `GPKD-${1000 + i}`,
-                fileUrl: `https://example.com/ho-so/${providerId}/giay-phep.pdf`,
-                issueDate: new Date("2024-01-01"),
-                expiryDate:
-                    i === 7 ? new Date("2025-12-31") : new Date("2030-12-31"),
-                verificationStatus:
-                    key === "PROVIDER_REJECTED"
-                        ? "REJECTED"
-                        : key === "PROVIDER_PENDING"
-                          ? "PENDING"
-                          : "VERIFIED",
-                verifiedAt: key === "PROVIDER_PENDING" ? null : now,
-                note:
-                    key === "PROVIDER_REJECTED"
-                        ? "Hồ sơ chưa đáp ứng yêu cầu."
-                        : null,
-                createdAt: now,
-            },
-            {
-                id: randomUUID(),
-                providerId,
-                documentType: legalTypes[1],
-                documentName: "Giấy chứng nhận đăng ký thuế",
-                documentNumber: `MST-${2000 + i}`,
-                fileUrl: `https://example.com/ho-so/${providerId}/thue.pdf`,
-                issueDate: new Date("2024-02-01"),
-                expiryDate: null,
-                verificationStatus:
-                    key === "PROVIDER_REJECTED" ? "REJECTED" : "VERIFIED",
-                verifiedAt: key === "PROVIDER_REJECTED" ? null : now,
-                note: null,
-                createdAt: now,
-            },
-        ]),
-        skipDuplicates: true,
-    });
+        idDocs.push({
+            id: identityDocumentId(101 + i),
+            verificationId: verificationId(101 + i),
+            documentType: "Căn cước công dân gắn chíp",
+            documentNumber: `079${isMale ? '0' : '1'}${String(90000000 + i)}`,
+            fullName: name,
+            dateOfBirth: new Date(`19${70 + (i % 30)}-0${(i % 9) + 1}-1${i % 8}`),
+            gender: isMale ? "Nam" : "Nữ",
+            nationality: "Việt Nam",
+            issueDate: new Date("2021-10-10"),
+            expiryDate: new Date("2035-10-10"),
+            issuingAuthority: "Cục Cảnh sát quản lý hành chính về trật tự xã hội",
+            frontImageUrl: `https://example.com/cccd/cust-${i}-front.jpg`,
+            backImageUrl: `https://example.com/cccd/cust-${i}-back.jpg`,
+            selfieImageUrl: `https://example.com/cccd/cust-${i}-selfie.jpg`,
+            createdAt: now,
+        });
+    }
+
+    // For providers (except pending)
+    for (let i = 0; i < 20; i++) {
+        if (i === 18) continue; // Skip pending provider
+        const name = providers[i].representativeName;
+        verifications.push({
+            id: verificationId(201 + i),
+            identityId: userId(201 + i),
+            provider: "Hệ thống xác minh danh tính doanh nghiệp",
+            referenceId: `REF-PROV-${201 + i}`,
+            verificationLevel: "NÂNG CAO",
+            faceSimilarity: "0.9920",
+            livenessScore: "0.9850",
+            failureReason: null,
+            verifiedAt: now,
+            expiredAt: new Date("2032-12-31"),
+            createdAt: now,
+        });
+
+        idDocs.push({
+            id: identityDocumentId(201 + i),
+            verificationId: verificationId(201 + i),
+            documentType: "Căn cước công dân gắn chíp",
+            documentNumber: `0010${String(90000000 + i)}`,
+            fullName: name,
+            dateOfBirth: new Date(`198${i % 10}-05-15`),
+            gender: "Nam",
+            nationality: "Việt Nam",
+            issueDate: new Date("2022-01-20"),
+            expiryDate: new Date("2037-01-20"),
+            issuingAuthority: "Cục Cảnh sát quản lý hành chính về trật tự xã hội",
+            frontImageUrl: `https://example.com/cccd/prov-${i}-front.jpg`,
+            backImageUrl: `https://example.com/cccd/prov-${i}-back.jpg`,
+            selfieImageUrl: `https://example.com/cccd/prov-${i}-selfie.jpg`,
+            createdAt: now,
+        });
+    }
+
+    await prisma.identityVerification.createMany({ data: verifications, skipDuplicates: true });
+    await prisma.identityDocument.createMany({ data: idDocs, skipDuplicates: true });
+
+    // 6. PROVIDER LEGAL DOCUMENTS
+    const legalDocs = [];
+    for (let i = 0; i < 20; i++) {
+        const provId = providerId(i + 1);
+        const status = i === 18 ? "PENDING" : "VERIFIED";
+        const verifiedAtDate = i === 18 ? null : now;
+
+        legalDocs.push({
+            id: providerLegalDocumentId(i * 2 + 1),
+            providerId: provId,
+            documentType: "BUSINESS_LICENSE",
+            documentName: "Giấy chứng nhận đăng ký doanh nghiệp",
+            documentNumber: `031${String(5000000 + i)}`,
+            fileUrl: `https://example.com/legal/${provId}-gpkd.pdf`,
+            issueDate: new Date("2020-01-01"),
+            expiryDate: null,
+            verificationStatus: status,
+            verifiedAt: verifiedAtDate,
+            note: null,
+            createdAt: now,
+        });
+
+        legalDocs.push({
+            id: providerLegalDocumentId(i * 2 + 2),
+            providerId: provId,
+            documentType: "TAX_CERTIFICATE",
+            documentName: "Giấy chứng nhận đăng ký thuế",
+            documentNumber: `031${String(5000000 + i)}`,
+            fileUrl: `https://example.com/legal/${provId}-thue.pdf`,
+            issueDate: new Date("2020-02-01"),
+            expiryDate: null,
+            verificationStatus: status,
+            verifiedAt: verifiedAtDate,
+            note: null,
+            createdAt: now,
+        });
+    }
+
+    await prisma.providerLegalDocument.createMany({ data: legalDocs, skipDuplicates: true });
+
+    console.log(`Đã seed identity-service: 1 admin, 50 customers, 20 providers, ${verifications.length} verifications.`);
 }
 
 main()

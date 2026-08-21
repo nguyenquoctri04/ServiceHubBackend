@@ -23,6 +23,11 @@ export class ProviderContractsController {
     return this.providerContractsService.sendContract(payload.providerId, payload.contractId);
   }
 
+  @MessagePattern({ cmd: ProviderContractPatterns.SIGNING_FILE_FIND })
+  async findSigningFile(@Payload() payload: { providerId: string; contractId: string }) {
+    return this.providerContractsService.findSigningFile(payload.providerId, payload.contractId);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.REVOKE })
   async revokeContract(@Payload() payload: { providerId: string; contractId: string; dto: { reason?: string } }) {
     return this.providerContractsService.revokeContract(payload.providerId, payload.contractId, payload.dto?.reason);

@@ -46,6 +46,7 @@ export class CreateContractDto {
 }
 
 export class UpdateContractDto {
+  @IsUUID() @IsOptional() templateId?: string;
   @IsUUID() @IsOptional() roomId?: string;
   @IsString() @IsOptional() startDate?: string;
   @IsString() @IsOptional() endDate?: string;

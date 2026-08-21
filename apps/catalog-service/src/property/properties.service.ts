@@ -479,7 +479,9 @@ export class PropertiesService {
         }
       },
       include: {
-        floor: true,
+        floor: {
+          include: { block: true },
+        },
         roomType: true
       }
     });

@@ -56,6 +56,7 @@ export class ProviderController {
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
+    @Inject('SIGNATURE_SERVICE') private readonly signatureClient: ClientProxy,
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
     @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
@@ -509,7 +510,9 @@ export class ProviderController {
         } : undefined,
         // Include floor info if present for dashboard compatibility
         floorId: room.floorId,
-        floorName: room.floor?.floorName
+        floorName: room.floor?.floorName,
+        blockId: room.floor?.blockId,
+        blockName: room.floor?.block?.blockName,
       };
     });
   }
@@ -568,6 +571,17 @@ export class ProviderController {
   async sendContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SEND }, { providerId, contractId });
+  }
+
+  @Get('contracts/:id/signing-file')
+  async getSigningFile(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SIGNING_FILE_FIND }, { providerId, contractId });
+  }
+
+  @Get('signature/status')
+  async getSignatureStatus(@CurrentUser() user: CurrentUserPayload) {
+    return this.proxy.send(this.signatureClient, { cmd: 'customer.keys.get-digital-signature-in-setting' }, { identityId: user.id });
   }
 
   @Post('contracts/:id/revoke')

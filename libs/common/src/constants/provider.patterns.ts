@@ -2,6 +2,7 @@ export class ProviderContractPatterns {
   public static readonly CREATE = 'contracts.create';
   public static readonly UPDATE = 'contracts.update';
   public static readonly SEND = 'contracts.send';
+  public static readonly SIGNING_FILE_FIND = 'contracts.signingFile.find';
   public static readonly REVOKE = 'contracts.revoke';
   public static readonly CANCEL = 'contracts.cancel';
   public static readonly FIND = 'contracts.find';

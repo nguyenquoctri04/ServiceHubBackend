@@ -1,6 +1,6 @@
-import { Controller } from "@nestjs/common";
+import { Controller, NotFoundException } from "@nestjs/common";
 import { CustomerContractsService } from "./customer.contracts.service";
-import { MessagePattern, Payload } from "@nestjs/microservices";
+import { MessagePattern, Payload, RpcException } from "@nestjs/microservices";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 
@@ -101,5 +101,57 @@ export class CustomerContractsController {
     })
     async getContractFileHashForVerify(input: { contractFileId: string }) {
         return this.service.getContractFileHashForVerify(input.contractFileId);
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_USED_SERVICES })
+    async getUsedServices(
+        @Payload()
+        payload: {
+            customerId: string;
+            status?: string;
+            page: number;
+            pageSize: number;
+        },
+    ) {
+        return this.service.getUsedServices(payload.customerId, {
+            status: payload.status,
+            page: payload.page,
+            pageSize: payload.pageSize,
+        });
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_USED_SERVICE_DETAIL })
+    async getUsedServiceDetail(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        const result = await this.service.getUsedServiceDetail(
+            payload.customerId,
+            payload.contractId,
+        );
+        if (!result) {
+            throw new RpcException(
+                new NotFoundException("Không tìm thấy dịch vụ."),
+            );
+        }
+        return result;
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_CONTRACT_FILE_FOR_VIEWING })
+    async getContractFileForViewing(
+        @Payload() payload: { contractId: string; identityId: string },
+    ) {
+        return this.service.getContractFileForViewing(
+            payload.contractId,
+            payload.identityId,
+        );
+    }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN,
+    })
+    async activateContractAfterCustomerSign(input: { contractFileId: string }) {
+        return this.service.activateContractAfterCustomerSign(
+            input.contractFileId,
+        );
     }
 }

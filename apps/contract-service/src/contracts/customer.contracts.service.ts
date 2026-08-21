@@ -1,5 +1,7 @@
+import { Prisma } from "@prisma/client-contract";
 import {
     BadRequestException,
+    ConflictException,
     ForbiddenException,
     Inject,
     Injectable,
@@ -11,11 +13,6 @@ import { createHash, randomUUID } from "crypto";
 import { ClientProxy, RpcException } from "@nestjs/microservices";
 import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
-
-interface PopularServiceInput {
-    serviceId: string;
-    providerId: string;
-}
 
 @Injectable()
 export class CustomerContractsService {
@@ -29,6 +26,9 @@ export class CustomerContractsService {
 
         @Inject("NOTIFICATION_SERVICE")
         private readonly notificationClient: ClientProxy,
+
+        @Inject("SIGNATURE_SERVICE")
+        private readonly signatureClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
     ) {}
@@ -420,6 +420,15 @@ export class CustomerContractsService {
             );
         }
 
+        const { isCustomer, isProvider, providerIdentityId } =
+            await this.resolveContractParties(file.contract, identityId);
+
+        if (!isCustomer && !isProvider) {
+            throw new RpcException(
+                new ForbiddenException("Bạn không có quyền ký hợp đồng này."),
+            );
+        }
+
         if (!file.hashContract) {
             throw new RpcException(
                 new BadRequestException(
@@ -428,27 +437,6 @@ export class CustomerContractsService {
             );
         }
 
-        const isCustomer = file.contract.customerId === identityId;
-
-        const providers = await this.secureRpc.send<
-            Array<{ id: string; identityId: string }>
-        >(
-            this.identityClient,
-            { cmd: CustomerPatterns.GET_PROVIDER_IN_POPULAR },
-            { providerIds: [file.contract.providerId] },
-        );
-
-        const providerIdentityId = providers[0]?.identityId ?? null;
-        const isProvider = providerIdentityId === identityId;
-
-        if (!isCustomer && !isProvider) {
-            throw new RpcException(
-                new ForbiddenException("Bạn không có quyền ký hợp đồng này."),
-            );
-        }
-
-        // Không tin field hashContract một cách mù quáng — tải lại PDF
-        // thật, tính lại hash, đối chiếu ngay tại đây trước khi cho ký.
         const actualHash = await this.computeFileHash(file.pdfUrl);
 
         if (actualHash !== file.hashContract) {
@@ -489,11 +477,8 @@ export class CustomerContractsService {
             where: {
                 id: contractFileId,
             },
-            select: {
-                id: true,
-                hashContract: true,
-                providerIdentityId: true,
-                customerId: true,
+            include: {
+                contract: true,
             },
         });
 
@@ -504,11 +489,451 @@ export class CustomerContractsService {
             });
         }
 
+        // Lấy PDF thật từ storage
+        const response = await fetch(contractFile.pdfUrl);
+
+        if (!response.ok) {
+            throw new RpcException({
+                statusCode: 500,
+                message: "Không thể lấy file hợp đồng.",
+            });
+        }
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+
+        // Hash lại file PDF hiện tại
+        const currentHash = createHash("sha256").update(buffer).digest("hex");
+
         return {
             contractFileId: contractFile.id,
-            hashContract: contractFile.hashContract,
-            providerIdentityId: contractFile.providerIdentityId,
-            customerId: contractFile.customerId,
+            hashContract: currentHash,
+            providerIdentityId: contractFile.contract.providerId,
+            customerId: contractFile.contract.customerId,
+        };
+    }
+
+    async getUsedServices(
+        customerId: string,
+        query: { status?: string; page: number; pageSize: number },
+    ) {
+        const where = this.buildUsedServicesWhere(customerId, query.status);
+        const skip = (query.page - 1) * query.pageSize;
+
+        const [total, contracts] = await this.prisma.$transaction([
+            this.prisma.contract.count({ where }),
+            this.prisma.contract.findMany({
+                where,
+                skip,
+                take: query.pageSize,
+                orderBy: { createdAt: "desc" },
+                include: this.usedServiceInclude(),
+            }),
+        ]);
+
+        return {
+            data: await this.enrichContracts(contracts),
+            pagination: {
+                page: query.page,
+                pageSize: query.pageSize,
+                total,
+                totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+            },
+        };
+    }
+
+    async getUsedServiceDetail(customerId: string, contractId: string) {
+        const contract = await this.prisma.contract.findFirst({
+            where: { id: contractId, customerId }, // bỏ status: { not: "CANCELLED" }
+            include: this.usedServiceInclude(),
+        });
+
+        if (!contract) return null;
+
+        const [item] = await this.enrichContracts([contract]);
+        return item;
+    }
+
+    private buildUsedServicesWhere(
+        customerId: string,
+        status?: string,
+    ): Prisma.ContractWhereInput {
+        const base: Prisma.ContractWhereInput = { customerId };
+
+        switch (status) {
+            case "PENDING_PROVIDER_APPROVAL":
+                return { ...base, status: "DRAFT" };
+            case "PENDING_SIGNATURE":
+                return { ...base, status: "PENDING_SIGNATURE" };
+            case "ACTIVE":
+                return { ...base, status: "ACTIVE" };
+            case "EXPIRED":
+                return {
+                    ...base,
+                    status: { in: ["EXPIRED", "TERMINATED", "CANCELLED"] },
+                };
+            default:
+                return base;
+        }
+    }
+
+    private usedServiceInclude() {
+        return {
+            services: { take: 1 },
+            files: true,
+            terms: { include: { term: true } },
+            violationCases: {
+                where: { status: "REPORTED" as const },
+                orderBy: { createdAt: "desc" as const },
+                take: 1,
+                include: { violationRule: true, evidence: true },
+            },
+        };
+    }
+
+    private deriveStatus(contractStatus: string): string {
+        switch (contractStatus) {
+            case "DRAFT":
+                return "PENDING_PROVIDER_APPROVAL";
+            case "PENDING_SIGNATURE":
+                return "PENDING_SIGNATURE";
+            case "ACTIVE":
+                return "ACTIVE";
+            case "EXPIRED":
+                return "EXPIRED";
+            case "TERMINATED":
+                return "EXPIRED";
+            case "CANCELLED":
+                return "EXPIRED";
+            default:
+                return "ACTIVE";
+        }
+    }
+
+    /**
+     * Gộp toàn bộ dữ liệu cross-service (catalog/identity/signature) cho
+     * ĐÚNG trang kết quả đã lọc+phân trang xong — không enrich cho cả
+     * tập chưa lọc.
+     */
+    private async enrichContracts(contracts: any[]) {
+        if (contracts.length === 0) return [];
+
+        const servicePriceIds = [
+            ...new Set(
+                contracts
+                    .map((c) => c.services[0]?.servicePriceId)
+                    .filter((x): x is string => !!x),
+            ),
+        ];
+        const providerIds = [...new Set(contracts.map((c) => c.providerId))];
+        const contractFileIds = contracts.flatMap((c) =>
+            c.files.map((f: any) => f.id),
+        );
+
+        const [priceDetails, providers, signatures] = await Promise.all([
+            servicePriceIds.length > 0
+                ? this.secureRpc.send<any[]>(
+                      this.catalogClient,
+                      { cmd: CustomerPatterns.GET_SERVICE_PRICE_DETAILS },
+                      { servicePriceIds },
+                  )
+                : Promise.resolve([]),
+            providerIds.length > 0
+                ? this.secureRpc.send<any[]>(
+                      this.identityClient,
+                      { cmd: CustomerPatterns.GET_PROVIDERS_FULL },
+                      { providerIds },
+                  )
+                : Promise.resolve([]),
+            contractFileIds.length > 0
+                ? this.secureRpc.send<any[]>(
+                      this.signatureClient,
+                      {
+                          cmd: CustomerPatterns.GET_SIGNATURES_BY_CONTRACT_FILE_IDS,
+                      },
+                      { contractFileIds },
+                  )
+                : Promise.resolve([]),
+        ]);
+
+        const priceMap = new Map(
+            priceDetails.map((p) => [p.servicePriceId, p]),
+        );
+        const providerMap = new Map(providers.map((p) => [p.id, p]));
+
+        const signaturesByFile = new Map<string, any[]>();
+        for (const sig of signatures) {
+            const list = signaturesByFile.get(sig.contractFileId) ?? [];
+            list.push(sig);
+            signaturesByFile.set(sig.contractFileId, list);
+        }
+
+        return contracts.map((contract) => {
+            const contractService = contract.services[0] ?? null;
+            const priceDetail = contractService
+                ? priceMap.get(contractService.servicePriceId)
+                : undefined;
+            const provider = providerMap.get(contract.providerId);
+            const file = contract.files[0] ?? null;
+            const violation = contract.violationCases[0] ?? null;
+
+            const status = this.deriveStatus(contract.status);
+
+            return {
+                id: contract.id,
+                service: priceDetail?.service ?? null,
+                provider: provider ?? null,
+                price: priceDetail
+                    ? {
+                          id: priceDetail.servicePriceId,
+                          price: priceDetail.price,
+                          unit: priceDetail.unit,
+                          effectiveFrom: priceDetail.effectiveFrom,
+                          effectiveTo: priceDetail.effectiveTo,
+                      }
+                    : null,
+                contract: {
+                    id: contract.id,
+                    contractNumber: contract.contractNumber,
+                    providerId: contract.providerId,
+                    roomId: contract.roomId,
+                    customerId: contract.customerId,
+                    startDate: contract.startDate.toISOString(),
+                    endDate: contract.endDate?.toISOString() ?? null,
+                    status: contract.status,
+                    requireSignature: contract.requireSignature,
+                    signedAt: contract.signedAt?.toISOString() ?? null,
+                    createdAt: contract.createdAt.toISOString(),
+                    updatedAt: contract.updatedAt.toISOString(),
+                },
+                contractService: contractService
+                    ? {
+                          id: contractService.id,
+                          contractId: contractService.contractId,
+                          servicePriceId: contractService.servicePriceId,
+                          quantity: contractService.quantity
+                              ? Number(contractService.quantity)
+                              : null,
+                          createdAt: contractService.createdAt.toISOString(),
+                      }
+                    : null,
+                contractFile: file
+                    ? {
+                          id: file.id,
+                          contractId: file.contractId,
+                          pdfUrl: file.pdfUrl,
+                          hashContract: file.hashContract,
+                      }
+                    : null,
+                signatures: file
+                    ? (signaturesByFile.get(file.id) ?? []).map((s) => ({
+                          id: s.id,
+                          contractFileId: s.contractFileId,
+                          gnupgKeyId: s.gnupgKeyId,
+                          signatureFile: s.signatureFile,
+                          signatureHash: s.signatureHash,
+                          signedAt: new Date(s.signedAt).toISOString(),
+                          createdAt: new Date(s.createdAt).toISOString(),
+                      }))
+                    : [],
+                terms: contract.terms.map((ct: any) => ({
+                    id: ct.id,
+                    contractId: ct.contractId,
+                    termId: ct.termId,
+                    createdAt: ct.createdAt.toISOString(),
+                    term: {
+                        id: ct.term.id,
+                        content: ct.term.content,
+                        status: ct.term.status,
+                        createdAt: ct.term.createdAt.toISOString(),
+                    },
+                })),
+                violation: violation
+                    ? {
+                          id: violation.id,
+                          violationRuleId: violation.violationRuleId,
+                          contractId: violation.contractId,
+                          providerId: violation.providerId,
+                          reportedBy: violation.reportedBy,
+                          serviceId: violation.serviceId,
+                          status: violation.status,
+                          description: violation.description,
+                          occurredAt: violation.occurredAt.toISOString(),
+                          createdAt: violation.createdAt.toISOString(),
+                          updatedAt: violation.updatedAt.toISOString(),
+                          violationRule: {
+                              id: violation.violationRule.id,
+                              name: violation.violationRule.name,
+                              description: violation.violationRule.description,
+                              targetType: violation.violationRule.targetType,
+                              isActive: violation.violationRule.isActive,
+                              createdAt:
+                                  violation.violationRule.createdAt.toISOString(),
+                              updatedAt:
+                                  violation.violationRule.updatedAt.toISOString(),
+                          },
+                          evidence: violation.evidence.map((e: any) => ({
+                              id: e.id,
+                              violationCaseId: e.violationCaseId,
+                              fileUrl: e.fileUrl,
+                          })),
+                      }
+                    : null,
+                status,
+            };
+        });
+    }
+
+    private async resolveContractParties(
+        contract: { customerId: string; providerId: string },
+        identityId: string,
+    ) {
+        const isCustomer = contract.customerId === identityId;
+
+        const providers = await this.secureRpc.send<
+            Array<{ id: string; identityId: string }>
+        >(
+            this.identityClient,
+            { cmd: CustomerPatterns.GET_PROVIDER_IN_POPULAR },
+            { providerIds: [contract.providerId] },
+        );
+
+        const providerIdentityId = providers[0]?.identityId ?? null;
+        const isProvider = providerIdentityId === identityId;
+
+        return { isCustomer, isProvider, providerIdentityId };
+    }
+
+    /**
+     * Xem hợp đồng — CHỈ customer hoặc provider của đúng hợp đồng đó, và
+     * BẮT BUỘC file thật khớp hash đã lưu (tự tải lại PDF, tính lại
+     * SHA-256, đối chiếu) — khác thì chặn hẳn, không trả pdfUrl.
+     *
+     * LƯU Ý: ContractFile hiện không có createdAt trong schema, nên nếu
+     * 1 Contract có nhiều file (tái phát hành), việc lấy "file mới nhất"
+     * qua take:1 không đảm bảo đúng thứ tự thời gian. Nếu thực tế 1
+     * contract chỉ có đúng 1 file (như luồng ký hiện tại) thì không ảnh
+     * hưởng; nếu có nhiều file, cần thêm createdAt vào ContractFile.
+     */
+    async getContractFileForViewing(contractId: string, identityId: string) {
+        const contract = await this.prisma.contract.findUnique({
+            where: { id: contractId },
+            include: { files: { take: 1 } },
+        });
+
+        if (!contract) {
+            throw new RpcException(
+                new NotFoundException("Không tìm thấy hợp đồng."),
+            );
+        }
+
+        const { isCustomer, isProvider } = await this.resolveContractParties(
+            contract,
+            identityId,
+        );
+
+        if (!isCustomer && !isProvider) {
+            throw new RpcException(
+                new ForbiddenException("Bạn không có quyền xem hợp đồng này."),
+            );
+        }
+
+        const file = contract.files[0];
+
+        if (!file) {
+            throw new RpcException(
+                new NotFoundException("Hợp đồng chưa có file."),
+            );
+        }
+
+        if (!file.hashContract) {
+            throw new RpcException(
+                new BadRequestException(
+                    "Hợp đồng chưa hoàn tất quy trình, chưa thể xác minh để xem.",
+                ),
+            );
+        }
+
+        const actualHash = await this.computeFileHash(file.pdfUrl);
+
+        if (actualHash !== file.hashContract) {
+            console.error("[SECURITY] Contract file integrity mismatch", {
+                contractId,
+                contractFileId: file.id,
+            });
+
+            throw new RpcException(
+                new ConflictException(
+                    "Hợp đồng đã bị thay đổi so với bản gốc, không thể hiển thị.",
+                ),
+            );
+        }
+
+        return {
+            contractId: contract.id,
+            contractFileId: file.id,
+            pdfUrl: file.pdfUrl,
+        };
+    }
+
+    async activateContractAfterCustomerSign(contractFileId: string) {
+        const contractFile = await this.prisma.contractFile.findUnique({
+            where: {
+                id: contractFileId,
+            },
+            select: {
+                id: true,
+                contractId: true,
+            },
+        });
+
+        if (!contractFile) {
+            throw new RpcException({
+                statusCode: 404,
+                message: "Không tìm thấy file hợp đồng.",
+            });
+        }
+
+        const contract = await this.prisma.contract.findUnique({
+            where: {
+                id: contractFile.contractId,
+            },
+            select: {
+                id: true,
+                status: true,
+            },
+        });
+
+        if (!contract) {
+            throw new RpcException({
+                statusCode: 404,
+                message: "Không tìm thấy hợp đồng.",
+            });
+        }
+
+        // Đã ACTIVE thì không cần cập nhật lại
+        if (contract.status === "ACTIVE") {
+            return {
+                contractId: contract.id,
+                status: contract.status,
+            };
+        }
+
+        const updatedContract = await this.prisma.contract.update({
+            where: {
+                id: contract.id,
+            },
+            data: {
+                status: "ACTIVE",
+            },
+            select: {
+                id: true,
+                status: true,
+            },
+        });
+
+        return {
+            contractId: updatedContract.id,
+            status: updatedContract.status,
         };
     }
 }

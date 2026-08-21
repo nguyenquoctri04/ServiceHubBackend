@@ -24,12 +24,4 @@ export class CustomerSignaturesService {
             },
         );
     }
-
-    async verifyContractSignatures(contractFileId: string) {
-        return this.secureRpc.send(
-            this.signatureClient,
-            { cmd: CustomerPatterns.VERIFY_CONTRACT },
-            { contractFileId },
-        );
-    }
 }

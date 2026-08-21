@@ -16,12 +16,4 @@ export class CustomerSignaturesController {
     ) {
         return this.service.signContract(identityId, dto);
     }
-
-    @UseGuards(JwtAuthGuard)
-    @Get(CUSTOMER_SIGNATURE_ENDPOINT.VERIFY_CONTRACT)
-    async verifyContractSignatures(
-        @Param("contractFileId") contractFileId: string,
-    ) {
-        return this.service.verifyContractSignatures(contractFileId);
-    }
 }

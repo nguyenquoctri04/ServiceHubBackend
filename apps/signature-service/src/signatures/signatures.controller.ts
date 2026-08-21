@@ -28,4 +28,15 @@ export class SignaturesController {
     ) {
         return this.service.verifyContractSignatures(payload.contractFileId);
     }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.GET_SIGNATURES_BY_CONTRACT_FILE_IDS,
+    })
+    async getSignaturesByContractFileIds(
+        @Payload() payload: { contractFileIds: string[] },
+    ) {
+        return this.service.getSignaturesByContractFileIds(
+            payload.contractFileIds,
+        );
+    }
 }

@@ -45,4 +45,9 @@ export class CustomerIdentitiesController {
     ) {
         return this.service.getSignatureInfo(payload.identityId);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_PROVIDERS_FULL })
+    async getProvidersFull(@Payload() payload: { providerIds: string[] }) {
+        return this.service.getProvidersFull(payload.providerIds);
+    }
 }

@@ -53,6 +53,8 @@ export const CUSTOMER_VIOLATIONS =
 
 export const CUSTOMER_CONTRACT_ENDPOINT = {
     CREATE_SERVICE_BOOKING: "booking",
+    GET_USED_SERVICES: "used",
+    VIEW_CONTRACT: ":contractId/file",
 };
 
 /*
@@ -92,5 +94,5 @@ export const CUSTOMER_SIGNATURES =
     CUSTOMER_SIGNATURE_SERVICE_PREFIX + "/signatures";
 
 export const CUSTOMER_SIGNATURE_ENDPOINT = {
-  VERIFY_CONTRACT: ":contractFileId/verify",
+    VERIFY_CONTRACT: ":contractFileId/verify",
 };

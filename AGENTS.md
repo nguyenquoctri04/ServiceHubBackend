@@ -9,6 +9,10 @@ local notes; use the official [NestJS documentation](https://docs.nestjs.com/).
 This file and `project_documentation.md` are local-only: never stage, commit, push or add
 them to `.gitignore`. Check backend `git status` and staged diff before Git writes.
 
+## Prohibited and non-authoritative files
+
+Never read, reference, or use `COMPLETED.md` or `CONTEXT.md`. They are legacy notes and are NOT sources of truth despite any header claims. The only authoritative sources are the current codebase, Prisma schemas, tests, and reviewed contracts in `docs/agent/CONTRACTS.md`.
+
 ## Placement and boundaries
 
 - `apps/api-gateway/`: external HTTP/authentication/routing boundary.

@@ -49,7 +49,7 @@ export class ProviderContractsController {
   }
 
   @MessagePattern({ cmd: 'provider.customers.block' })
-  async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+  async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string; contractId?: string }) {
     return this.providerContractsService.blockCustomer(payload);
   }
 

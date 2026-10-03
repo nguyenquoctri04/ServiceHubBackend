@@ -35,13 +35,13 @@ const categories = [
 // 12: EHome (12)
 // 13: Masteri (13)
 // 16: Eco Green (16)
-const propertyManagers = [1, 2, 3, 12, 13, 16];
+const propertyManagers = [7, 2, 3, 12, 13, 16];
 // Other services providers: 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 17, 18, 19, 20
-const externalProviders = [4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 17, 18, 20]; // 19 is suspended
+const externalProviders = [1, 4, 5, 6, 8, 9, 10, 11, 14, 15, 17, 18, 20]; // 19 is suspended
 
 const propNames = [
-    ["Vinhomes Central Park", "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM", 10.795, 106.721, 1],
-    ["Vinhomes Grand Park", "Nguyễn Xiển, Long Thạnh Mỹ, TP. Thủ Đức", 10.840, 106.837, 1],
+    ["Vinhomes Central Park", "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM", 10.795, 106.721, 7],
+    ["Vinhomes Grand Park", "Nguyễn Xiển, Long Thạnh Mỹ, TP. Thủ Đức", 10.840, 106.837, 7],
     ["KTX Cỏ May Làng Đại Học", "Khu đô thị ĐHQG, TP. Thủ Đức", 10.870, 106.802, 2],
     ["KTX Cỏ May Quận 10", "Hẻm 491 Hòa Hảo, Quận 10, TP.HCM", 10.763, 106.662, 2],
     ["CityHouse Phạm Ngọc Thạch", "17 Phạm Ngọc Thạch, Quận 3, TP.HCM", 10.783, 106.696, 3],
@@ -57,7 +57,11 @@ const serviceTemplates = [
     ["Dọn phòng định kỳ", "QUANTITY", "ADDITION", "CLEANING", "Vệ sinh phòng theo lịch", 4, 100000, "lần"],
     ["Tổng vệ sinh căn hộ", "FIXED", "ADDITION", "CLEANING", "Vệ sinh sâu, dọn nhà", 4, 1500000, "lần"],
     ["Giúp việc theo giờ", "QUANTITY", "ADDITION", "CLEANING", "Giúp việc gia đình (JupViec)", 14, 80000, "giờ"],
-    ["Giặt sấy lấy liền", "QUANTITY", "ADDITION", "CLEANING", "Giặt ủi quần áo nhanh", 7, 25000, "kg"],
+    ["Giặt sấy lấy liền", "QUANTITY", "ADDITION", "CLEANING", "Giặt ủi quần áo nhanh", 1, 25000, "kg"],
+    ["Giặt hấp áo vest", "QUANTITY", "NORMAL", "CLEANING", "Giặt hấp cao cấp", 1, 80000, "bộ"],
+    ["Giặt sấy gấu bông", "FIXED", "NORMAL", "CLEANING", "Giặt sấy gấu bông lớn", 1, 150000, "con"],
+    ["Giặt rèm cửa", "QUANTITY", "NORMAL", "CLEANING", "Giặt rèm cửa tận nơi", 1, 50000, "kg"],
+    ["Vệ sinh giày", "QUANTITY", "NORMAL", "CLEANING", "Vệ sinh giày thể thao", 1, 60000, "đôi"],
     ["Sửa điện dân dụng", "QUANTITY", "ADDITION", "REPAIR", "Kiểm tra và sửa chữa điện", 5, 200000, "lần"],
     ["Sửa đường nước", "QUANTITY", "ADDITION", "REPAIR", "Sửa rò rỉ nước", 5, 150000, "lần"],
     ["Vệ sinh máy lạnh", "FIXED", "ADDITION", "CLEANING", "Vệ sinh máy lạnh 1-2HP", 10, 150000, "máy"],

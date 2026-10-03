@@ -43,6 +43,8 @@ export class ViolationsService {
       id: c.id,
       contractId: c.contractId,
       contractNumber: c.contract?.contractNumber || '',
+      roomId: c.contract?.roomId,
+      customerId: c.contract?.customerId,
       roomName: '', 
       propertyName: '',
       customerName: '',

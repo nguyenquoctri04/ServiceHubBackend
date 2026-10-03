@@ -30,7 +30,7 @@ export class CustomerContractsController {
         @CurrentUser() user: CurrentUserPayload,
         @Body() dto: CreateServiceBookingDto,
     ) {
-        console.log(dto);
+
         return this.service.createServiceBooking(user.id, user.email, dto);
     }
 

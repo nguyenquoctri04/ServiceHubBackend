@@ -27,8 +27,8 @@ async function main() {
     await prisma.meterReading.deleteMany();
     await prisma.meter.deleteMany();
 
-    // Housing providers: 1, 2, 3, 12, 13, 16
-    const housingProviders = [1, 2, 3, 12, 13, 16];
+    // Housing providers: 7, 2, 3, 12, 13, 16
+    const housingProviders = [7, 2, 3, 12, 13, 16];
 
     // 2. METERS
     const meters = [];

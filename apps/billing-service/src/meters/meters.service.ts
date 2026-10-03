@@ -210,28 +210,28 @@ export class MetersService {
 
   async getMeterDashboardStats(providerId: string) {
     const totalMeters = await this.prisma.meter.count({
-      where: { providerId }
+      where: { providerId, status: 'ACTIVE' }
     });
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
 
-    const recordedMeters = await this.prisma.meter.count({
+    const readings = await this.prisma.meterReading.findMany({
       where: {
-        providerId,
-        readings: {
-          some: {
-            createdAt: {
-              gte: startOfMonth,
-              lte: endOfMonth
-            },
-            status: 'VALID'
-          }
-        }
-      }
+        meter: { providerId },
+        createdAt: { gte: startOfMonth, lte: endOfMonth },
+        status: 'VALID'
+      },
+      distinct: ['roomId', 'meterId'],
+      select: { id: true }
     });
 
-    return { totalMeters, recordedMeters };
+
+
+
+
+
+    return { totalMeters, recordedMeters: readings.length };
   }
 }

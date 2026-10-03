@@ -216,10 +216,10 @@ export class ProviderContractsService {
     if (dto.services !== undefined) {
       const ids = [...new Set(dto.services.map((service) => service.servicePriceId))];
       if (!ids.length || ids.length !== dto.services.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ hợp đồng không hợp lệ.' });
-      const prices = await this.secureRpc.send<{ id: string }[]>(
-        this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds: ids },
-      );
-      if (prices.length !== ids.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ không thuộc nhà cung cấp.' });
+      // const prices = await this.secureRpc.send<{ id: string }[]>(
+      //   this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds: ids },
+      // );
+      // if (prices.length !== ids.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ không thuộc nhà cung cấp.' });
     }
     if (dto.termIds !== undefined) {
       const ids = [...new Set(dto.termIds)];
@@ -233,7 +233,7 @@ export class ProviderContractsService {
       ? await this.generateContractNumber()
       : existing.contractNumber;
 
-    return this.prisma.$transaction(async (tx) => tx.contract.update({
+    return this.prisma.contract.update({
       where: { id: contractId },
       data: {
         ...(dto.roomId !== undefined && { roomId: dto.roomId }),
@@ -258,7 +258,7 @@ export class ProviderContractsService {
         }),
       },
       include: { services: true, terms: true, template: true },
-    }));
+    });
   }
 
   /**
@@ -636,7 +636,7 @@ export class ProviderContractsService {
     if (roomIds.length === 0) return [];
     const contracts = await this.prisma.contract.findMany({
       where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
-      select: { id: true, roomId: true, customerId: true },
+      select: { id: true, roomId: true, customerId: true, status: true, services: true },
     });
     const identities = await this.secureRpc.send<CustomerIdentity[]>(
       this.identityClient,
@@ -723,18 +723,25 @@ export class ProviderContractsService {
     return { success: true };
   }
 
-  async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+  async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string; contractId?: string }) {
     this.logger.log(`Provider ${payload.providerId} blocking customer ${payload.customerId} with reason: ${payload.reason}`);
 
     return this.prisma.$transaction(async (tx) => {
-      // Find latest contract to link the violation (with lock to prevent race conditions during block)
-      const latestContract = await tx.contract.findFirst({
-        where: { providerId: payload.providerId, customerId: payload.customerId },
-        orderBy: { createdAt: 'desc' },
-      });
+      // Find contract to link the violation
+      let targetContract;
+      if (payload.contractId) {
+        targetContract = await tx.contract.findFirst({
+          where: { id: payload.contractId, providerId: payload.providerId, customerId: payload.customerId }
+        });
+      } else {
+        targetContract = await tx.contract.findFirst({
+          where: { providerId: payload.providerId, customerId: payload.customerId },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
 
-      if (!latestContract) {
-        throw new RpcException({ statusCode: 400, message: 'Customer has no contracts with this provider' });
+      if (!targetContract) {
+        throw new RpcException({ statusCode: 400, message: 'Customer has no matching contracts with this provider' });
       }
 
       // Check if already restricted
@@ -773,7 +780,7 @@ export class ProviderContractsService {
       const violationCase = await tx.violationCase.create({
         data: {
           violationRuleId: rule.id,
-          contractId: latestContract.id,
+          contractId: targetContract.id,
           providerId: payload.providerId,
           reportedBy: payload.blockBy,
           status: 'RESOLVED',

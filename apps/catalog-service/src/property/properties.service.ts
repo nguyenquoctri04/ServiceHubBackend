@@ -430,9 +430,46 @@ export class PropertiesService {
 
   async findRoomsByIdsForProvider(providerId: string, roomIds: string[]) {
     return this.prisma.room.findMany({
-      where: { id: { in: roomIds }, floor: { block: { property: { providerId } } } },
-      select: { id: true, roomNumber: true },
-    });
+      where: { 
+        id: { in: roomIds },
+        OR: [
+          { floor: { block: { property: { providerId } } } },
+          { roomType: { property: { providerId } } }
+        ]
+      },
+      select: { 
+        id: true, 
+        roomNumber: true,
+        floor: {
+          select: {
+            block: {
+              select: {
+                property: {
+                  select: {
+                    propertyName: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        roomType: {
+          select: {
+            property: {
+              select: {
+                propertyName: true
+              }
+            }
+          }
+        }
+      },
+    }).then(rooms => rooms.map(room => ({
+      id: room.id,
+      roomNumber: room.roomNumber,
+      property: {
+        propertyName: room.floor?.block?.property?.propertyName || room.roomType?.property?.propertyName || ''
+      }
+    })));
   }
 
   async getFloors(providerId: string, blockId: string) {

@@ -32,13 +32,13 @@ function randomName(isMale: boolean) {
 }
 
 const providerData = [
-    { name: "Nhà trọ Vinhomes Central Park", company: "Công ty CP BĐS Vinhomes", desc: "Quản lý và cho thuê căn hộ Vinhomes Central Park", type: "PROPERTY_MANAGER", address: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM" },
+    { name: "Dịch vụ giặt ủi Sakura", company: "Công ty TNHH Giặt ủi Sakura", desc: "Giặt sấy lấy liền, giặt ủi công nghiệp", type: "EXTERNAL_SERVICE", address: "88 Nơ Trang Long, Phường 14, Bình Thạnh, TP.HCM" },
     { name: "Ký túc xá Cỏ May", company: "Công ty TNHH MTV Cỏ May", desc: "Ký túc xá cao cấp dành cho sinh viên", type: "PROPERTY_MANAGER", address: "Khu đô thị Đại học Quốc gia, TP. Thủ Đức, TP.HCM" },
     { name: "Căn hộ dịch vụ CityHouse", company: "Công ty CP Dịch vụ CityHouse", desc: "Chuỗi căn hộ dịch vụ cao cấp", type: "PROPERTY_MANAGER", address: "17 Phạm Ngọc Thạch, Phường Võ Thị Sáu, Quận 3, TP.HCM" },
     { name: "Vệ sinh Hoàn Mỹ", company: "Công ty TNHH Vệ Sinh Hoàn Mỹ", desc: "Dịch vụ vệ sinh công nghiệp và dân dụng", type: "EXTERNAL_SERVICE", address: "25 Lê Lợi, Phường Bến Nghé, Quận 1, TP.HCM" },
     { name: "Điện nước Minh Trí", company: "Hộ kinh doanh Minh Trí", desc: "Thi công và sửa chữa điện nước tại nhà", type: "EXTERNAL_SERVICE", address: "142 Âu Cơ, Phường 9, Tân Bình, TP.HCM" },
     { name: "Suất ăn công nghiệp Tâm Phát", company: "Công ty CP Suất ăn Tâm Phát", desc: "Cung cấp suất ăn văn phòng, công nghiệp", type: "EXTERNAL_SERVICE", address: "Lô B2, KCN Tân Bình, Tân Phú, TP.HCM" },
-    { name: "Dịch vụ giặt ủi Sakura", company: "Công ty TNHH Giặt ủi Sakura", desc: "Giặt sấy lấy liền, giặt ủi công nghiệp", type: "EXTERNAL_SERVICE", address: "88 Nơ Trang Long, Phường 14, Bình Thạnh, TP.HCM" },
+    { name: "Nhà trọ Vinhomes Central Park", company: "Công ty CP BĐS Vinhomes", desc: "Quản lý và cho thuê căn hộ Vinhomes Central Park", type: "PROPERTY_MANAGER", address: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM" },
     { name: "Bảo vệ Hoàng Long", company: "Công ty TNHH Dịch vụ Bảo vệ Hoàng Long", desc: "Dịch vụ bảo vệ chuyên nghiệp 24/7", type: "EXTERNAL_SERVICE", address: "155 Điện Biên Phủ, Phường 15, Bình Thạnh, TP.HCM" },
     { name: "Nội thất Xinh", company: "Công ty CP Kiến trúc và Nội thất Xinh", desc: "Thi công, lắp đặt và sửa chữa nội thất", type: "EXTERNAL_SERVICE", address: "200 Ba Tháng Hai, Phường 12, Quận 10, TP.HCM" },
     { name: "Điện lạnh Á Châu", company: "Công ty TNHH Dịch vụ Điện Lạnh Á Châu", desc: "Lắp đặt, vệ sinh, sửa chữa máy lạnh", type: "EXTERNAL_SERVICE", address: "450 Nguyễn Thị Minh Khai, Quận 3, TP.HCM" },

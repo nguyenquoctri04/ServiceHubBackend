@@ -31,7 +31,7 @@ export class CustomerIdentitiesService {
         providerId: string,
         customerId?: string,
     ): Promise<ProviderDetail> {
-        console.log(customerId);
+
         const { blocked } = await this.secureRpc.send<{ blocked: boolean }>(
             this.contractClient,
             { cmd: CustomerPatterns.CHECK_PROVIDER_ACCESS },

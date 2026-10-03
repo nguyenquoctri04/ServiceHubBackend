@@ -127,8 +127,8 @@ async function main() {
     });
 
     // 3. GENERATE 150 CONTRACTS
-    // Housing contracts: providers 1, 2, 3, 12, 13, 16
-    const housingProviders = [1, 2, 3, 12, 13, 16];
+    // Housing contracts: providers 7, 2, 3, 12, 13, 16
+    const housingProviders = [7, 2, 3, 12, 13, 16];
     const contracts = [];
     
     for (let i = 0; i < 150; i++) {

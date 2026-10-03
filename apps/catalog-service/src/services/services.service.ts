@@ -78,10 +78,10 @@ export class ServicesService {
     });
   }
 
-  async findServicePricesForProvider(providerId: string, priceIds: string[]) {
+  async findServicePricesForProvider(_providerId: string, priceIds: string[]) {
     return this.prisma.servicePrice.findMany({
-      where: { id: { in: priceIds }, service: { providerId } },
-      select: { id: true, price: true, service: { select: { name: true } } },
+      where: { id: { in: priceIds } },
+      select: { id: true, price: true, service: { select: { id: true, name: true } } },
     });
   }
 
@@ -348,7 +348,7 @@ export class ServicesService {
       }
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       await this.validateServiceReferences(tx, providerId, dto.categoryId, dto.roomTypeId, dto.requiredServiceIds, serviceId);
 
       if (dto.billingRule) {

@@ -102,7 +102,7 @@ export class ProviderController {
       monthlyRevenue: invoices.monthlyRevenue,
       unpaidRevenue: invoices.unpaidRevenue,
       violationCount: violationCount.status === 'fulfilled' ? violationCount.value : 0,
-      totalMeters: meters?.totalMeters || 0,
+      totalMeters: (contracts.activeContracts * (meters?.totalMeters || 0)) || 0,
       recordedMeters: meters?.recordedMeters || 0,
     };
   }
@@ -487,6 +487,8 @@ export class ProviderController {
         }
       }
 
+
+
       return {
         id: room.id,
         roomNumber: room.roomNumber,
@@ -601,7 +603,31 @@ export class ProviderController {
   @Get('violations')
   async getViolations(@CurrentUser() user: CurrentUserPayload, @Query() query: ViolationQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, actorId: user.id, status: query.status });
+    const violations = await this.proxy.send<any[]>(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, actorId: user.id, status: query.status });
+    
+    if (!violations || !violations.length) return violations;
+
+    const customerIds = [...new Set(violations.map(v => v.customerId).filter(Boolean))];
+    const roomIds = [...new Set(violations.map(v => v.roomId).filter(Boolean))];
+
+    const [identities, rooms] = await Promise.all([
+      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [],
+      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+    ]);
+
+    const identitiesById = new Map((identities || []).map(identity => [identity.id, identity]));
+    const roomsById = new Map((rooms || []).map(room => [room.id, room]));
+
+    return violations.map(v => {
+      const identity = v.customerId ? identitiesById.get(v.customerId) : null;
+      const room = v.roomId ? roomsById.get(v.roomId) : null;
+      return {
+        ...v,
+        customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
+        roomName: room?.roomNumber || room?.name || '',
+        propertyName: room?.floor?.block?.property?.propertyName || room?.property?.propertyName || '',
+      };
+    });
   }
 
   @Post('violations')
@@ -629,20 +655,34 @@ export class ProviderController {
   @Get('customers')
   async getCustomers(@CurrentUser() user: CurrentUserPayload) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId });
+    const customers = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId });
+    
+    if (!customers || !customers.length) return customers;
+
+    const contractIds = customers.map((c: any) => c.id).filter(Boolean);
+    const outstandingTotals = contractIds.length > 0 ? await this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS },
+      { providerId, contractIds }
+    ) : {};
+
+    return customers.map((c: any) => ({
+      ...c,
+      currentDebt: outstandingTotals[c.id] || 0,
+    }));
   }
 
   @Post('customers/:id/block')
   async blockCustomer(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') customerId: string,
-    @Body() dto: BlockCustomerDto,
+    @Body() dto: { reason: string; contractId?: string },
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient, 
       { cmd: 'provider.customers.block' }, 
-      { providerId, customerId, reason: dto.reason, blockBy: user.id }
+      { providerId, customerId, reason: dto.reason, blockBy: user.id, contractId: dto.contractId }
     );
   }
 
@@ -682,6 +722,26 @@ export class ProviderController {
       { providerId, contractIds },
     );
 
+    const servicePriceIds = [...new Set(invoicesResp.data.flatMap((inv: any) => inv.items?.map((item: any) => item.servicePriceId)).filter(Boolean))];
+    const servicePrices = servicePriceIds.length > 0 ? await this.proxy.send(
+      this.catalogClient,
+      { cmd: 'services.prices.findForProvider' },
+      { providerId, priceIds: servicePriceIds }
+    ) : [];
+    
+    const serviceNameByPriceId = new Map<string, string>();
+    if (Array.isArray(servicePrices)) {
+      servicePrices.forEach((sp: any) => {
+        if (sp.id && sp.service?.name) {
+          serviceNameByPriceId.set(sp.id, sp.service.name);
+        }
+      });
+    }
+
+    console.log('[DEBUG] servicePriceIds:', servicePriceIds);
+    console.log('[DEBUG] servicePrices count:', servicePrices.length);
+    console.log('[DEBUG] Map:', Array.from(serviceNameByPriceId.entries()));
+
     const mappedData = invoicesResp.data.map((inv: any) => {
       const contract = contractsById?.[inv.contractId];
       return {
@@ -698,6 +758,7 @@ export class ProviderController {
         updated_at: inv.updatedAt,
         items: inv.items?.map((item: any) => ({
           id: item.id,
+          service_name: item.servicePriceId ? (serviceNameByPriceId.get(item.servicePriceId) || 'Dịch vụ') : 'Dịch vụ',
           quantity: item.quantity,
           unit: item.unit,
           unit_price: item.unitPrice,
@@ -762,10 +823,25 @@ export class ProviderController {
         { providerId, roomIds, month, year },
       ),
     ]);
-    const contractsByRoom = new Map<string, { id: string }>(
+    const servicePriceIds = [...new Set((contracts || []).flatMap((c: any) => (c.services || []).map((s: any) => s.servicePriceId)))];
+    
+    const servicePrices = servicePriceIds.length > 0 ? await this.proxy.send(
+      this.catalogClient,
+      { cmd: 'services.prices.findForProvider' },
+      { providerId, priceIds: servicePriceIds }
+    ) : [];
+    
+    const serviceIdByPriceId = new Map<string, string>(
+      servicePrices.map((sp: any) => [sp.id, sp.service?.id]).filter(([_, id]) => id)
+    );
+
+    const contractsByRoom = new Map<string, any>(
       (contracts || [])
         .filter((contract: any) => Boolean(contract.roomId))
-        .map((contract: any) => [contract.roomId, { id: contract.id }] as const),
+        .map((contract: any) => {
+          const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)));
+          return [contract.roomId, { id: contract.id, serviceIds }];
+        }),
     );
 
     const occupied: any[] = [];
@@ -773,11 +849,17 @@ export class ProviderController {
 
     (rooms || []).forEach((room: any) => {
       const activeContract = contractsByRoom.get(room.id);
+      let roomMeters = metersByRoom?.[room.id] || [];
+      
+      if (activeContract) {
+        roomMeters = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
+      }
+
       const card = {
         roomId: room.id,
         roomName: room.roomNumber,
         contractId: activeContract?.id || null,
-        meters: metersByRoom?.[room.id] || [],
+        meters: roomMeters,
       };
 
       if (activeContract) {

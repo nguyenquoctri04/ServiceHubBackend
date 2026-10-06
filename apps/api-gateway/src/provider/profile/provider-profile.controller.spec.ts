@@ -1,9 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ProviderController } from './provider.controller';
-import { ProviderCacheService } from './provider-cache.service';
-import { GatewayProxyService } from '../proxy/gateway-proxy.service';
-import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
-import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
+import { ProviderProfileController } from './provider-profile.controller';
+import { ProviderCacheService } from '../provider-cache.service';
+import { ProviderBffService } from '../provider-bff.service';
+import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
+import { UpdateProviderProfileDto } from '../dto/update-provider-profile.dto';
+import { CreateLegalDocumentDto } from '../dto/create-legal-document.dto';
 
 const mockProviderCacheService = {
   resolveActiveProvider: jest.fn().mockResolvedValue('provider-1'),
@@ -13,15 +14,16 @@ const mockGatewayProxyService = {
   send: jest.fn(),
 };
 
-describe('ProviderController', () => {
-  let controller: ProviderController;
+describe('ProviderProfileController', () => {
+  let controller: ProviderProfileController;
   let proxy: typeof mockGatewayProxyService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [ProviderController],
+      controllers: [ProviderProfileController],
       providers: [
         { provide: ProviderCacheService, useValue: mockProviderCacheService },
+        { provide: ProviderBffService, useValue: {} },
         { provide: GatewayProxyService, useValue: mockGatewayProxyService },
         { provide: 'IDENTITY_SERVICE', useValue: {} },
         { provide: 'CATALOG_SERVICE', useValue: {} },
@@ -31,7 +33,7 @@ describe('ProviderController', () => {
       ],
     }).compile();
 
-    controller = module.get<ProviderController>(ProviderController);
+    controller = module.get<ProviderProfileController>(ProviderProfileController);
     proxy = module.get(GatewayProxyService);
   });
 

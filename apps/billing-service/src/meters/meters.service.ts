@@ -83,27 +83,25 @@ export class MetersService {
 
     if (data.roomId) {
       try {
-        const roomsMap = await this.secureRpc.send<any>(
-          this.catalogClient,
-          { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS },
-          [data.roomId]
-        );
-        room = roomsMap[data.roomId];
-        if (!room) throw new RpcException(new NotFoundException('Room not found'));
-        if (room.floor?.block?.property?.providerId !== providerId) throw new RpcException(new NotFoundException('Room not found'));
+        const rooms = await this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [data.roomId] });
+
+
+
+
+        if (!rooms || rooms.length === 0) throw new RpcException(new NotFoundException('Room not found or unauthorized'));
+        room = rooms[0];
       } catch (err) {
         throw new RpcException('Catalog Service failed');
       }
     } else if (data.contractId) {
       try {
-        const contractsMap = await this.secureRpc.send<any>(
-          this.contractClient,
-          { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS },
-          [data.contractId]
-        );
-        contract = contractsMap[data.contractId];
-        if (!contract) throw new RpcException(new NotFoundException('Contract not found'));
-        if (contract.providerId !== providerId) throw new RpcException(new NotFoundException('Contract not found'));
+        const contractsMap = await this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds: [data.contractId] });
+
+
+
+
+        contract = contractsMap?.[data.contractId];
+        if (!contract || contract.providerId !== providerId) throw new RpcException(new NotFoundException('Contract not found or unauthorized'));
       } catch (err) {
         throw new RpcException('Contract Service failed');
       }
@@ -146,10 +144,14 @@ export class MetersService {
     const roomIds = [...new Set(rows.map(r => r.roomId).filter(Boolean))];
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
-    const [roomsMap, contractsMap] = await Promise.all([
-      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
-      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
+    const [rooms, contractsMap] = await Promise.all([
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
+    const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
+
+
+
 
     const results = rows.map(row => {
       let isValid = true;
@@ -157,8 +159,11 @@ export class MetersService {
 
       if (!row.meterId) { isValid = false; errors.push('Missing meterId'); }
       if (!row.roomId && !row.contractId) { isValid = false; errors.push('Missing roomId or contractId'); }
-      if (row.roomId && (!roomsMap[row.roomId] || roomsMap[row.roomId].floor?.block?.property?.providerId !== providerId)) { isValid = false; errors.push('Invalid roomId'); }
-      if (row.contractId && (!contractsMap[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) { isValid = false; errors.push('Invalid contractId'); }
+      if (row.roomId && !roomsMap[row.roomId]) { isValid = false; errors.push('Invalid roomId or unauthorized'); }
+      if (row.contractId) {
+        const contract = contractsMap?.[row.contractId];
+        if (!contract || contract.providerId !== providerId) { isValid = false; errors.push('Invalid contractId or unauthorized'); }
+      }
       
       return { row, isValid, errors };
     });
@@ -171,10 +176,14 @@ export class MetersService {
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
     // 1. Batch fetch external data
-    const [roomsMap, contractsMap] = await Promise.all([
-      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
-      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
+    const [rooms, contractsMap] = await Promise.all([
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
+    const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
+
+
+
 
     // 2. Fetch all meters internally
     const meterIds = [...new Set(rows.map(r => r.meterId).filter(Boolean))];
@@ -186,8 +195,8 @@ export class MetersService {
     // 3. Process each row with pre-fetched context (Partial Success)
     const promises = rows.map(async row => {
       if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
-      if (row.roomId && (!roomsMap[row.roomId] || roomsMap[row.roomId].floor?.block?.property?.providerId !== providerId)) throw new Error(`Room ${row.roomId} not found`);
-      if (row.contractId && (!contractsMap[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found`);
+      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
+      if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found or unauthorized`);
 
       const context = {
         meter: metersMap[row.meterId],

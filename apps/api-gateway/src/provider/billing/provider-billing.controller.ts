@@ -111,11 +111,7 @@ export class ProviderBillingController {
     @Body() dto: ExcelImportPreviewDto
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW }, 
-      { providerId, rows: dto.rows }
-    );
+    return this.billingBffService.previewImport(providerId, dto.rows);
   }
 
   @Post('meters/import/confirm')
@@ -124,10 +120,6 @@ export class ProviderBillingController {
     @Body() dto: ExcelImportConfirmDto
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM }, 
-      { providerId, recordedBy: user.id, dto }
-    );
+    return this.billingBffService.confirmImport(providerId, user.id, dto);
   }
 }

@@ -57,14 +57,12 @@ export interface EnrichedContract extends Contract {
   services: any[];
   terms?: any[];
   files?: Array<{ id: string; pdfUrl: string; hashContract: string | null }>;
-  template?: ContractTemplate | null;
 }
 
 type ContractWithRelations = Contract & {
   services: Array<{ servicePriceId: string; [key: string]: unknown }>;
   terms?: Array<{ term: Term | null }>;
   files?: Array<{ id: string; pdfUrl: string; hashContract: string | null }>;
-  template?: ContractTemplate | null;
 };
 
 interface ServicePriceReference {
@@ -166,7 +164,6 @@ export class ProviderContractsService {
         data: {
           contractNumber,
           providerId,
-          templateId: dto.templateId,
           customerId: dto.customerId,
           roomId: dto.roomId,
           status: ContractStatus.DRAFT,
@@ -186,7 +183,7 @@ export class ProviderContractsService {
             create: dto.termIds.map(termId => ({ termId, createdAt: new Date() }))
           } : undefined
         },
-        include: { services: true, terms: true, template: true }
+        include: { services: true, terms: true }
       });
 
       return contract;
@@ -240,7 +237,7 @@ export class ProviderContractsService {
         ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
         ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
         ...(dto.requireSignature !== undefined && { requireSignature: dto.requireSignature }),
-        ...(dto.templateId !== undefined && { templateId: dto.templateId }),
+        // templateId removed
         ...(contractNumber !== existing.contractNumber && { contractNumber }),
         updatedAt: new Date(),
         ...(dto.services !== undefined && {
@@ -257,7 +254,7 @@ export class ProviderContractsService {
           terms: { deleteMany: {}, create: dto.termIds.map((termId) => ({ termId, createdAt: new Date() })) },
         }),
       },
-      include: { services: true, terms: true, template: true },
+      include: { services: true, terms: true },
     });
   }
 
@@ -310,7 +307,7 @@ export class ProviderContractsService {
   private async createSigningFile(providerId: string, contractId: string) {
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
-      include: { services: true, terms: { include: { term: true } }, template: true },
+      include: { services: true, terms: { include: { term: true } } },
     });
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
 
@@ -325,11 +322,7 @@ export class ProviderContractsService {
         startDate: contract.startDate.toISOString(),
         endDate: contract.endDate?.toISOString() ?? null,
         requireSignature: contract.requireSignature,
-        template: contract.template ? {
-          id: contract.template.id,
-          name: contract.template.name,
-          content: contract.template.content,
-        } : null,
+        // template was removed
         services: contract.services.map((service) => ({ servicePriceId: service.servicePriceId, quantity: service.quantity?.toString() ?? null })),
         terms: contract.terms.map((item) => ({ id: item.term.id, content: item.term.content })),
       },
@@ -450,27 +443,12 @@ export class ProviderContractsService {
     const customerIds = [...new Set(contracts.map((contract) => contract.customerId))];
     const roomIds = [...new Set(contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []))];
     const priceIds = [...new Set(contracts.flatMap((contract) => contract.services.map((service) => service.servicePriceId)))];
-    const [identities, rooms, prices] = await Promise.all([
-      this.secureRpc.send<CustomerIdentity[]>(
-        this.identityClient,
-        { cmd: 'provider.identities.batch' },
-        { identityIds: customerIds },
-      ).catch(() => []),
-      roomIds.length === 0
-        ? Promise.resolve<RoomReference[]>([])
-        : this.secureRpc.send<RoomReference[]>(
-          this.catalogClient,
-          { cmd: 'catalog.rooms.findByIdsForProvider' },
-          { providerId, roomIds },
-        ).catch(() => []),
-      priceIds.length === 0
-        ? Promise.resolve<ServicePriceReference[]>([])
-        : this.secureRpc.send<ServicePriceReference[]>(
-          this.catalogClient,
-          { cmd: 'services.prices.findForProvider' },
-          { providerId, priceIds },
-        ).catch(() => []),
-    ]);
+    const identities = [];
+    const rooms = [];
+    const prices = [];
+    // Promise.all removed
+    // removed identityClient call
+    // removed promise.all array closure
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
     const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
     const pricesById = new Map(prices.map((price) => [price.id, price] as const));
@@ -509,7 +487,7 @@ export class ProviderContractsService {
       },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
-      include: { services: true, terms: { include: { term: true } }, template: true, files: { orderBy: { id: 'desc' }, take: 1 } }
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
     });
 
     return this.enrichContractsData(contracts);
@@ -522,7 +500,7 @@ export class ProviderContractsService {
     this.logger.log(`Fetching contract details for ID: ${contractId}`);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
-      include: { services: true, terms: { include: { term: true } }, template: true, files: { orderBy: { id: 'desc' }, take: 1 } }
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
     });
     
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -533,7 +511,7 @@ export class ProviderContractsService {
   async findDraftByRequestNumber(providerId: string, contractNumber: string): Promise<EnrichedContract> {
     const contract = await this.prisma.contract.findFirst({
       where: { providerId, contractNumber, status: ContractStatus.DRAFT },
-      include: { services: true, terms: { include: { term: true } }, template: true, files: { orderBy: { id: 'desc' }, take: 1 } },
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } },
     });
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy yêu cầu dịch vụ.' });
     return (await this.enrichContractsData([contract]))[0];
@@ -600,22 +578,9 @@ export class ProviderContractsService {
     });
     const customerIds = contracts.map((contract) => contract.customerId);
     const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
-    const [identities, rooms] = await Promise.all([
-      customerIds.length === 0
-        ? Promise.resolve<CustomerIdentity[]>([])
-        : this.secureRpc.send<CustomerIdentity[]>(
-          this.identityClient,
-          { cmd: 'provider.identities.batch' },
-          { identityIds: customerIds },
-        ).catch(() => []),
-      roomIds.length === 0
-        ? Promise.resolve<any[]>([])
-        : this.secureRpc.send<any[]>(
-          this.catalogClient,
-          { cmd: 'catalog.rooms.findByIdsForProvider' },
-          { providerId, roomIds },
-        ).catch(() => []),
-    ]);
+    const identities = [];
+    const rooms = [];
+    // removed promise.all
     const identitiesById = new Map<string, CustomerIdentity>(
       identities.map((identity) => [identity.id, identity] as const),
     );
@@ -638,11 +603,7 @@ export class ProviderContractsService {
       where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
       select: { id: true, roomId: true, customerId: true, status: true, services: true },
     });
-    const identities = await this.secureRpc.send<CustomerIdentity[]>(
-      this.identityClient,
-      { cmd: 'provider.identities.batch' },
-      { identityIds: contracts.map((contract) => contract.customerId) },
-    ).catch(() => []);
+    const identities = [];
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
     return contracts.map((contract) => {
       const customer = identitiesById.get(contract.customerId);
@@ -685,13 +646,7 @@ export class ProviderContractsService {
     });
 
     const customerIds = restrictions.flatMap((restriction) => restriction.customerId ? [restriction.customerId] : []);
-    const identities = customerIds.length === 0
-      ? []
-      : await this.secureRpc.send<CustomerIdentity[]>(
-        this.identityClient,
-        { cmd: 'provider.identities.batch' },
-        { identityIds: customerIds },
-      ).catch(() => []);
+    const identities = [];
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity]));
 
     return restrictions.map((restriction) => {

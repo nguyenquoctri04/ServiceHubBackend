@@ -1,15 +1,15 @@
 import { IsNumber, IsOptional, IsString, IsUrl, IsUUID, ValidateIf } from 'class-validator';
 
 export class OcrConfirmDto {
-  @IsString()
+  @IsUUID()
   meterId: string;
 
   @ValidateIf((o) => !o.contractId)
-  @IsString()
+  @IsUUID()
   roomId?: string;
 
   @ValidateIf((o) => !o.roomId)
-  @IsString()
+  @IsUUID()
   contractId?: string;
 
   @IsNumber()

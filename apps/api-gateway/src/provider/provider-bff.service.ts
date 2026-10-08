@@ -10,6 +10,7 @@ export class ProviderBffService {
   constructor(
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
+    @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
   ) {}
 
@@ -22,14 +23,18 @@ export class ProviderBffService {
       { providerId, roomIds: rooms.map((room: any) => room.id) },
     );
     const contractIds = (contracts || []).map((contract: any) => contract.id);
-    const [outstandingTotals, violations] = await Promise.all([
+    const [outstandingTotals, violations, identities] = await Promise.all([
       contractIds.length === 0
         ? Promise.resolve({})
         : this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS }, { providerId, contractIds }),
       contractIds.length === 0
         ? Promise.resolve([])
         : this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, contractIds }),
+      contractIds.length === 0
+        ? Promise.resolve([])
+        : this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: contracts.map((c: any) => c.customerId) }).catch(() => [])
     ]);
+    const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
 
     return rooms.map((room: any) => {
       const activeContract = contracts?.find((c: any) => c.roomId === room.id && c.status === 'ACTIVE');
@@ -64,10 +69,11 @@ export class ProviderBffService {
         typeName: room.roomType.typeName
       } : undefined;
       dto.rentStatus = rentStatus;
+      const identity = activeContract ? identitiesById.get(activeContract.customerId) : null;
       dto.tenant = activeContract ? {
         id: activeContract.customerId,
-        name: activeContract.customerName,
-        phone: activeContract.customerPhone
+        name: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
+        phone: identity?.phone || ''
       } : undefined;
       dto.debtAmount = debtAmount;
       dto.contract = activeContract ? {

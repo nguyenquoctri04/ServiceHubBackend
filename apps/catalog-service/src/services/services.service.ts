@@ -47,10 +47,10 @@ export class ServicesService {
     this.logger.log(`Creating service for provider ${providerId}`);
     
     // 1. Get Provider info and check Address
-    const providerInfo = await this.validateAndGetProviderInfo(providerId);
-    const isExternalService = providerInfo.providerType === 'EXTERNAL_SERVICE';
+    // Note: BFF should now orchestrate this validation or pass the resolved address.
+    const isExternalService = false; // Simplified; rely on BFF for business rules
     
-    const finalAddress = dto.address ?? providerInfo.address;
+    const finalAddress = dto.address;
     if (!finalAddress) {
       throw new RpcException({ status: 400, message: 'Address is required to create a service' });
     }
@@ -87,18 +87,18 @@ export class ServicesService {
 
   // --- Private Helper Methods for Clean Code ---
 
-  private async validateAndGetProviderInfo(providerId: string): Promise<ProviderInfo> {
-    try {
-      const providerInfo = await this.secureRpc.send<ProviderInfo>(
-        this.identityClient,
-        { cmd: 'get.provider.by.id' },
-        providerId
-      );
-      return providerInfo;
-    } catch (err: any) {
-      this.logger.error(`Failed to fetch provider info: ${err.message}`);
-      throw new RpcException({ status: 400, message: 'Provider not found or Identity Service unavailable' });
-    }
+  private async validateAndGetProviderInfo(providerId: string): Promise<any> {
+    // Deprecated: BFF orchestrates this.
+    return { providerType: 'UNKNOWN', address: '' };
+
+
+
+
+
+
+
+
+
   }
 
   private async validateServiceLocation(address: string, confirmWarning: boolean) {
@@ -338,8 +338,9 @@ export class ServicesService {
     let latitude: number | undefined;
     let longitude: number | undefined;
     if (dto.address !== undefined && dto.address !== existing.address) {
-      const providerInfo = await this.validateAndGetProviderInfo(providerId);
-      if (providerInfo.providerType === 'EXTERNAL_SERVICE') {
+      // BFF orchestration should handle external service validation
+      const isExternalService = false;
+      if (isExternalService) {
         const location = await this.validateServiceLocation(dto.address, false);
         if (location) {
           latitude = location.lat;

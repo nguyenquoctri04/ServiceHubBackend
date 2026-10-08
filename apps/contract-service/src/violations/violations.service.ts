@@ -45,9 +45,7 @@ export class ViolationsService {
       contractNumber: c.contract?.contractNumber || '',
       roomId: c.contract?.roomId,
       customerId: c.contract?.customerId,
-      roomName: '', 
-      propertyName: '',
-      customerName: '',
+      // Removed UI-specific mapping fields
       violationType: c.violationRule?.name || ViolationType.OTHER,
       description: c.description,
       status: c.status,

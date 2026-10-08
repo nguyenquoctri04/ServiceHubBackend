@@ -134,4 +134,48 @@ export class ProviderProfileController {
     );
     return this.providerBffService.aggregateRoomData(providerId, rooms || []);
   }
+
+  @Get('dashboard/advanced-stats')
+  async getAdvancedStats(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+
+    const [
+      revenueGrowth,
+      contractDistribution,
+      invoiceAging,
+      recentPayments,
+      recentContracts,
+      expiringContracts,
+    ] = await Promise.allSettled([
+      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.revenueGrowth' }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: 'contract.statusDistribution' }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.aging' }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.recentPayments' }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: 'contract.recent' }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: 'contract.expiring' }, { providerId }),
+    ]);
+
+    const alerts = [];
+    if (expiringContracts.status === 'fulfilled' && expiringContracts.value?.length > 0) {
+      alerts.push({
+        id: 'expiring_contracts',
+        type: 'warning',
+        message: `Có ${expiringContracts.value.length} hợp đồng sắp hết hạn vào tháng tới.`,
+        actionText: 'Xem',
+      });
+    }
+    // Aggregate recent activities
+    const activities = [
+      ...(recentPayments.status === 'fulfilled' ? recentPayments.value : []),
+      ...(recentContracts.status === 'fulfilled' ? recentContracts.value : [])
+    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
+
+    return {
+      revenueGrowth: revenueGrowth.status === 'fulfilled' ? revenueGrowth.value : [],
+      contractDistribution: contractDistribution.status === 'fulfilled' ? contractDistribution.value : { active: 0, pending: 0, churn: 0 },
+      invoiceAging: invoiceAging.status === 'fulfilled' ? invoiceAging.value : { paid: 0, unpaid: 0, overdue: 0 },
+      alerts,
+      activities
+    };
+  }
 }

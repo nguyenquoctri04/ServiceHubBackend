@@ -1,7 +1,7 @@
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsUUID } from 'class-validator';
 
 export class RoomTypeDto {
-  @IsString()
+  @IsUUID()
   id: string;
 
   @IsString()
@@ -9,7 +9,7 @@ export class RoomTypeDto {
 }
 
 export class TenantDto {
-  @IsString()
+  @IsUUID()
   id: string;
 
   @IsString()
@@ -20,7 +20,7 @@ export class TenantDto {
 }
 
 export class ContractDto {
-  @IsString()
+  @IsUUID()
   id: string;
 
   @IsString()
@@ -31,13 +31,14 @@ export class ContractDto {
 }
 
 export class AggregatedRoomResponseDto {
-  @IsString()
+  @IsUUID()
   id: string;
 
   @IsString()
   roomNumber: string;
 
-  @IsString()
+  @IsUUID()
+  @IsOptional()
   roomTypeId?: string;
 
   @IsString()
@@ -58,7 +59,7 @@ export class AggregatedRoomResponseDto {
   @IsOptional()
   contract?: ContractDto;
 
-  @IsString()
+  @IsUUID()
   @IsOptional()
   floorId?: string;
 
@@ -66,7 +67,7 @@ export class AggregatedRoomResponseDto {
   @IsOptional()
   floorName?: string;
 
-  @IsString()
+  @IsUUID()
   @IsOptional()
   blockId?: string;
 

@@ -61,19 +61,19 @@ export class ProviderContractController {
   @Get('contracts')
   async getContracts(@CurrentUser() user: CurrentUserPayload, @Query() query: ContractQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, ...query });
+    return this.contractBffService.getContracts(providerId, query);
   }
 
   @Get('contracts/requests/:requestNumber')
   async getDraftByRequestNumber(@CurrentUser() user: CurrentUserPayload, @Param('requestNumber') contractNumber: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER }, { providerId, contractNumber });
+    return this.contractBffService.getDraftByRequestNumber(providerId, contractNumber);
   }
 
   @Get('contracts/:id')
   async getContractById(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId });
+    return this.contractBffService.getContractById(providerId, contractId);
   }
 
   @Post('contracts')

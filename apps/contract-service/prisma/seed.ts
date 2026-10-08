@@ -3,25 +3,25 @@ import { PrismaClient } from "@prisma/client-contract";
 const prisma = new PrismaClient();
 const now = new Date();
 
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const serviceId = (n: number) => `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const servicePrice = (n: number) => `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const roomId = (n: number) => `6b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const contract = (n: number) => `70000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const periodId = (n: number) => `71000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const contractService = (n: number) => `72000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const fileId = (n: number) => `73000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const termId = (n: number) => `74000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const contractTermId = (n: number) => `75000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const violationRuleId = (n: number) => `76000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const violationCaseId = (n: number) => `77000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const evidenceId = (n: number) => `78000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const actionId = (n: number) => `79000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const restrictionId = (n: number) => `7a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const appealId = (n: number) => `7b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const contractTemplateId = (n: number) => `7c000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const templateVariableId = (n: number) => `7d000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const serviceId = (n: number) => `61000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const servicePrice = (n: number) => `62000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomId = (n: number) => `6b000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contract = (n: number) => `70000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const periodId = (n: number) => `71000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contractService = (n: number) => `72000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const fileId = (n: number) => `73000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const termId = (n: number) => `74000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contractTermId = (n: number) => `75000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const violationRuleId = (n: number) => `76000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const violationCaseId = (n: number) => `77000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const evidenceId = (n: number) => `78000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const actionId = (n: number) => `79000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const restrictionId = (n: number) => `7a000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const appealId = (n: number) => `7b000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contractTemplateId = (n: number) => `7c000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const templateVariableId = (n: number) => `7d000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const activeTerms = [
     "1. Căn cứ pháp lý: Căn cứ Bộ luật Dân sự 2015, Luật Kinh doanh bất động sản 2023, Luật Nhà ở 2023, Luật Bảo vệ quyền lợi người tiêu dùng 2023, Luật Giao dịch điện tử 2023 và các văn bản hướng dẫn thi hành.",

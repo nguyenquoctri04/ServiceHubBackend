@@ -107,7 +107,9 @@ describe('ServicesService', () => {
     }));
   });
 
-  it('Nhánh 1: Loại PROPERTY_MANAGER -> Không chạy logic tính khoảng cách', async () => {
+  // Note: Tests for cross-service validation (external service, property distances) 
+  // were removed because validation was moved to the BFF layer in API Gateway.
+  it('không gọi cross-service validation do đã dời sang BFF', async () => {
     secureRpc.send.mockResolvedValue({ providerType: 'PROPERTY_MANAGER' });
     
     await service.createService('provider-1', {
@@ -127,7 +129,7 @@ describe('ServicesService', () => {
     expect(prismaService.service.create).toHaveBeenCalled();
   });
 
-  it('Nhánh 2: EXTERNAL_SERVICE xa Property > 5km chưa confirm -> throw HTTP 400', async () => {
+  it.skip('Nhánh 2: EXTERNAL_SERVICE xa Property > 5km chưa confirm -> throw HTTP 400', async () => {
     secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns a property
@@ -150,7 +152,7 @@ describe('ServicesService', () => {
     ).rejects.toThrow(RpcException);
   });
 
-  it('Nhánh 3: EXTERNAL_SERVICE xa Service khác > 5km (do không có Property) -> throw HTTP 400', async () => {
+  it.skip('Nhánh 3: EXTERNAL_SERVICE xa Service khác > 5km (do không có Property) -> throw HTTP 400', async () => {
     secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns empty
@@ -176,7 +178,7 @@ describe('ServicesService', () => {
     ).rejects.toThrow(RpcException);
   });
 
-  it('Nhánh 4: Không có Property, Không có Service -> Pass luôn', async () => {
+  it.skip('Nhánh 4: Không có Property, Không có Service -> Pass luôn', async () => {
     secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns empty
@@ -200,7 +202,7 @@ describe('ServicesService', () => {
     expect(prismaService.service.create).toHaveBeenCalled();
   });
 
-  it('Nhánh 5: External API bị timeout -> Ném lỗi 400 (Không còn Fail-open nữa)', async () => {
+  it.skip('Nhánh 5: External API bị timeout -> Ném lỗi 400 (Không còn Fail-open nữa)', async () => {
     // Giả lập Identity Service timeout
     secureRpc.send.mockRejectedValue(new Error('Timeout'));
     

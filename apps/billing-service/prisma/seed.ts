@@ -2,19 +2,19 @@ import { InvoiceStatus, PrismaClient } from "@prisma/client-billing";
 
 const prisma = new PrismaClient();
 
-const meterId = (n: number) => `80000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const readingId = (n: number) => `81000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const usageId = (n: number) => `82000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const invoiceId = (n: number) => `83000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const invoiceItemId = (n: number) => `84000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const paymentId = (n: number) => `85000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const contractId = (n: number) => `70000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const periodId = (n: number) => `71000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const roomId = (n: number) => `6b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const serviceId = (n: number) => `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const servicePriceId = (n: number) => `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const meterId = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const readingId = (n: number) => `81000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const usageId = (n: number) => `82000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const invoiceId = (n: number) => `83000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const invoiceItemId = (n: number) => `84000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const paymentId = (n: number) => `85000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contractId = (n: number) => `70000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const periodId = (n: number) => `71000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomId = (n: number) => `6b000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const serviceId = (n: number) => `61000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const servicePriceId = (n: number) => `62000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const now = new Date();
 

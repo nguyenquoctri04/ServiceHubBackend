@@ -2,7 +2,7 @@ import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsBool
 import { Type } from 'class-transformer';
 
 export class ContractServiceDto {
-  @IsString()
+  @IsUUID()
   servicePriceId: string;
 
   @IsNumber()
@@ -11,11 +11,11 @@ export class ContractServiceDto {
 }
 
 export class CreateContractDto {
-  @IsString()
+  @IsUUID()
   @IsOptional()
   templateId?: string;
 
-  @IsString()
+  @IsUUID()
   customerId: string;
 
   @IsArray()
@@ -24,12 +24,12 @@ export class CreateContractDto {
   services: ContractServiceDto[];
 
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   @IsOptional()
   termIds?: string[];
 
 
-  @IsString()
+  @IsUUID()
   @IsOptional()
   roomId?: string;
 
@@ -46,14 +46,14 @@ export class CreateContractDto {
 }
 
 export class UpdateContractDto {
-  @IsString() @IsOptional() templateId?: string;
-  @IsString() @IsOptional() roomId?: string;
+  @IsUUID() @IsOptional() templateId?: string;
+  @IsUUID() @IsOptional() roomId?: string;
   @IsString() @IsOptional() startDate?: string;
   @IsString() @IsOptional() endDate?: string;
   @IsBoolean() @IsOptional() requireSignature?: boolean;
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ContractServiceDto) @IsOptional()
   services?: ContractServiceDto[];
-  @IsArray() @IsString({ each: true }) @IsOptional() termIds?: string[];
+  @IsArray() @IsUUID('4', { each: true }) @IsOptional() termIds?: string[];
 }
 
 export class ContractActionDto {

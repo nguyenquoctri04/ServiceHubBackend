@@ -2,21 +2,21 @@ import { PrismaClient } from "@prisma/client-catalog";
 
 const prisma = new PrismaClient();
 
-const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const categoryId = (n: number) => `60000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const serviceId = (n: number) => `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const priceId = (n: number) => `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const imageId = (n: number) => `63000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const scheduleId = (n: number) => `64000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const ruleId = (n: number) => `65000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const tierId = (n: number) => `66000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const propertyId = (n: number) => `67000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const blockId = (n: number) => `68000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const floorId = (n: number) => `69000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const roomTypeId = (n: number) => `6a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const roomId = (n: number) => `6b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const requirementId = (n: number) => `6c000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const categoryId = (n: number) => `60000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const serviceId = (n: number) => `61000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const priceId = (n: number) => `62000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const imageId = (n: number) => `63000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const scheduleId = (n: number) => `64000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const ruleId = (n: number) => `65000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const tierId = (n: number) => `66000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const propertyId = (n: number) => `67000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const blockId = (n: number) => `68000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const floorId = (n: number) => `69000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomTypeId = (n: number) => `6a000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomId = (n: number) => `6b000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const requirementId = (n: number) => `6c000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const now = new Date();
 

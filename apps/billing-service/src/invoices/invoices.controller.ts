@@ -28,4 +28,19 @@ export class InvoicesController {
   async getDashboardStats(@Payload() payload: { providerId: string }) {
     return this.service.getDashboardStats(payload.providerId);
   }
+
+  @MessagePattern({ cmd: 'billing.invoices.revenueGrowth' })
+  async getRevenueGrowth(@Payload() payload: { providerId: string }) {
+    return this.service.getRevenueGrowth(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.aging' })
+  async getInvoiceAging(@Payload() payload: { providerId: string }) {
+    return this.service.getInvoiceAging(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.recentPayments' })
+  async getRecentPayments(@Payload() payload: { providerId: string }) {
+    return this.service.getRecentPayments(payload.providerId);
+  }
 }

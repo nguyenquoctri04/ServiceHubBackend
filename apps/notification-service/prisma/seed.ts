@@ -3,10 +3,10 @@ import { PrismaClient } from "@prisma/client-notification";
 const prisma = new PrismaClient();
 const now = new Date();
 
-const templateId = (n: number) => `90000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const notificationId = (n: number) => `91000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const templateId = (n: number) => `90000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const notificationId = (n: number) => `91000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const templateDefs = [
     ["Hợp đồng sắp hết hạn", "Hợp đồng thuê phòng của bạn sắp đến ngày hết hạn. Vui lòng liên hệ ban quản lý để gia hạn.", "IN_APP"],

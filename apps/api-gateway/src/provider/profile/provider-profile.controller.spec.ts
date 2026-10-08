@@ -88,4 +88,42 @@ describe('ProviderProfileController', () => {
       );
     });
   });
+
+  describe('getAdvancedStats', () => {
+    it('should aggregate advanced stats from multiple services', async () => {
+      // Mock Promise.allSettled resolutions by implementing a sequence or based on command
+      proxy.send.mockImplementation((client: any, pattern: any, payload: any) => {
+        if (pattern.cmd === 'billing.invoices.revenueGrowth') return Promise.resolve([{ month: '01/2026', total: 5000 }]);
+        if (pattern.cmd === 'contract.statusDistribution') return Promise.resolve({ active: 60, pending: 30, churn: 10 });
+        if (pattern.cmd === 'billing.invoices.aging') return Promise.resolve({ paid: 50, unpaid: 30, overdue: 20 });
+        if (pattern.cmd === 'billing.invoices.recentPayments') return Promise.resolve([{ id: 'p1', timestamp: new Date() }]);
+        if (pattern.cmd === 'contract.recent') return Promise.resolve([{ id: 'c1', timestamp: new Date(Date.now() - 1000) }]);
+        if (pattern.cmd === 'contract.expiring') return Promise.resolve([{ id: 'c2' }]);
+        return Promise.resolve([]);
+      });
+
+      const user = { id: 'user-1', email: 'test@test.com', role: 'PROVIDER' };
+      const result = await controller.getAdvancedStats(user);
+
+      expect(result.revenueGrowth).toEqual([{ month: '01/2026', total: 5000 }]);
+      expect(result.contractDistribution).toEqual({ active: 60, pending: 30, churn: 10 });
+      expect(result.invoiceAging).toEqual({ paid: 50, unpaid: 30, overdue: 20 });
+      expect(result.alerts).toHaveLength(1);
+      expect(result.activities).toHaveLength(2);
+      expect(proxy.send).toHaveBeenCalledTimes(6);
+    });
+
+    it('should handle partial service failures gracefully', async () => {
+      proxy.send.mockImplementation((client: any, pattern: any, payload: any) => {
+        if (pattern.cmd === 'billing.invoices.revenueGrowth') return Promise.reject(new Error('Billing down'));
+        return Promise.resolve([]);
+      });
+
+      const user = { id: 'user-1', email: 'test@test.com', role: 'PROVIDER' };
+      const result = await controller.getAdvancedStats(user);
+
+      expect(result.revenueGrowth).toEqual([]);
+      expect(result.contractDistribution).toBeDefined();
+    });
+  });
 });

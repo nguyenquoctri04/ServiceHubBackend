@@ -18,6 +18,6 @@ export class InvoiceQueryDto extends PaginationDto {
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @IsUUID('4', { each: true })
   contractIds?: string[];
 }

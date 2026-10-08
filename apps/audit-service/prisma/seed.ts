@@ -2,8 +2,8 @@ import { PrismaClient } from "@prisma/client-audit";
 
 const prisma = new PrismaClient();
 
-const auditLogId = (n: number) => `a0000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const auditLogId = (n: number) => `a0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const eventTypes = [
   ["LOGIN", "identity-service", "IDENTITY", "Đăng nhập thành công vào hệ thống."],
@@ -36,9 +36,9 @@ async function main() {
     const pastDate = new Date(Date.now() - Math.floor(Math.random() * 180) * 86400000);
 
     let entityIdStr = null;
-    if (entityType === "CONTRACT") entityIdStr = `70000000-0000-0000-0000-${String((i % 150) + 1).padStart(12, "0")}`;
-    if (entityType === "INVOICE") entityIdStr = `83000000-0000-0000-0000-${String((i % 450) + 1).padStart(12, "0")}`;
-    if (entityType === "PROVIDER") entityIdStr = `40000000-0000-0000-0000-${String((i % 20) + 1).padStart(12, "0")}`;
+    if (entityType === "CONTRACT") entityIdStr = `70000000-0000-4000-8000-${String((i % 150) + 1).padStart(12, "0")}`;
+    if (entityType === "INVOICE") entityIdStr = `83000000-0000-4000-8000-${String((i % 450) + 1).padStart(12, "0")}`;
+    if (entityType === "PROVIDER") entityIdStr = `40000000-0000-4000-8000-${String((i % 20) + 1).padStart(12, "0")}`;
 
     logs.push({
       id: auditLogId(i + 1),

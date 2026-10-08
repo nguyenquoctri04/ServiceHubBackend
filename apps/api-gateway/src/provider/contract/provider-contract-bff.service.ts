@@ -14,7 +14,64 @@ export class ProviderContractBffService {
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
   ) {}
+  async enrichContracts(providerId: string, contracts: any[]) {
+    if (!contracts || contracts.length === 0) return [];
+    
+    const customerIds = [...new Set(contracts.map((c) => c.customerId).filter(Boolean))];
+    const roomIds = [...new Set(contracts.flatMap((c) => c.roomId ? [c.roomId] : []).filter(Boolean))];
+    const priceIds = [...new Set(contracts.flatMap((c) => c.services?.map((s: any) => s.servicePriceId) || []).filter(Boolean))];
 
+    const [identities, rooms, prices] = await Promise.all([
+      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [],
+      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      priceIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds }).catch(() => []) : [],
+    ]);
+
+    const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
+    const roomsById = new Map((rooms || []).map((r: any) => [r.id, r]));
+    const pricesById = new Map((prices || []).map((p: any) => [p.id, p]));
+
+    return contracts.map((contract) => {
+      const customer = contract.customerId ? identitiesById.get(contract.customerId) : null;
+      const room = contract.roomId ? roomsById.get(contract.roomId) : null;
+      return {
+        ...contract,
+        customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
+        customerPhone: customer?.phone || '',
+        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        services: contract.services?.map((service: any) => {
+          const price = pricesById.get(service.servicePriceId);
+          return {
+            ...service,
+            serviceName: price?.service?.name || 'Chưa có tên dịch vụ',
+            price: Number(price?.price ?? 0),
+          };
+        }) || [],
+      };
+    });
+  }
+
+  async getContracts(providerId: string, query: any) {
+    const response = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND }, { providerId, ...query });
+    if (response?.data) {
+      response.data = await this.enrichContracts(providerId, response.data);
+    }
+    return response;
+  }
+
+  async getContractById(providerId: string, contractId: string) {
+    const contract = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_ONE }, { providerId, contractId });
+    if (!contract) return contract;
+    const enriched = await this.enrichContracts(providerId, [contract]);
+    return enriched[0];
+  }
+
+  async getDraftByRequestNumber(providerId: string, contractNumber: string) {
+    const contract = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER }, { providerId, contractNumber });
+    if (!contract) return contract;
+    const enriched = await this.enrichContracts(providerId, [contract]);
+    return enriched[0];
+  }
   async getViolations(providerId: string, actorId: string, query: ViolationQueryDto) {
     const violations = await this.proxy.send<any[]>(
       this.contractClient, 

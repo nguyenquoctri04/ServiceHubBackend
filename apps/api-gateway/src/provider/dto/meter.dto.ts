@@ -41,15 +41,15 @@ export class DashboardRoomsQueryDto {
 
 export class ExcelRowPreviewDto {
   @IsOptional()
-  @IsString()
+  @IsUUID()
   meterId?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   roomId?: string;
 
   @IsOptional()
-  @IsString()
+  @IsUUID()
   contractId?: string;
 
   @IsOptional()

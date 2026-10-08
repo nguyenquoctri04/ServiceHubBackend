@@ -73,4 +73,47 @@ describe('InvoicesService', () => {
       where: { providerId: 'provider-1', contractId: { in: ['contract-1'] }, status: { in: ['UNPAID', 'OVERDUE'] } },
     }));
   });
+
+  it('calculates invoice aging percentages correctly', async () => {
+    const prisma = {
+      invoice: {
+        groupBy: jest.fn().mockResolvedValue([
+          { status: 'PAID', _sum: { total: 500000 } },
+          { status: 'UNPAID', _sum: { total: 300000 } },
+          { status: 'OVERDUE', _sum: { total: 200000 } }
+        ])
+      }
+    };
+    const service = new InvoicesService(prisma as any);
+
+    const result = await service.getInvoiceAging('provider-1');
+    expect(result).toEqual({ paid: 50, unpaid: 30, overdue: 20 });
+    expect(prisma.invoice.groupBy).toHaveBeenCalledWith(expect.objectContaining({
+      where: { providerId: 'provider-1' }
+    }));
+  });
+
+  it('handles empty invoice aging correctly', async () => {
+    const prisma = {
+      invoice: { groupBy: jest.fn().mockResolvedValue([]) }
+    };
+    const service = new InvoicesService(prisma as any);
+
+    await expect(service.getInvoiceAging('provider-1')).resolves.toEqual({ paid: 0, unpaid: 0, overdue: 0 });
+  });
+
+  it('fetches recent payments correctly', async () => {
+    const prisma = {
+      payment: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: '1', invoice: { invoiceNumber: 'INV-1' }, createdAt: new Date('2026-10-01') }
+        ])
+      }
+    };
+    const service = new InvoicesService(prisma as any);
+
+    const result = await service.getRecentPayments('provider-1');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual(expect.objectContaining({ title: 'Thanh toán thành công', description: 'HĐ số INV-1' }));
+  });
 });

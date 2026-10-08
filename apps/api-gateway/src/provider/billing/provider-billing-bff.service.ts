@@ -13,6 +13,7 @@ export class ProviderBillingBffService {
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
+    @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
   ) {}
 
@@ -44,16 +45,28 @@ export class ProviderBillingBffService {
       });
     }
 
+    const customerIds = [...new Set(Object.values(contractsById || {}).map((c: any) => c.customerId).filter(Boolean))];
+    const roomIds = [...new Set(Object.values(contractsById || {}).map((c: any) => c.roomId).filter(Boolean))];
+    
+    const [identities, rooms] = await Promise.all([
+      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [],
+      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+    ]);
+    const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
+    const roomsById = new Map((rooms || []).map((r: any) => [r.id, r]));
+
     const mappedData = invoicesResp.data.map((inv: any) => {
       const contract = contractsById?.[inv.contractId];
+      const identity = contract?.customerId ? identitiesById.get(contract.customerId) : null;
+      const room = contract?.roomId ? roomsById.get(contract.roomId) : null;
       return {
         id: inv.id,
         invoice_number: inv.invoiceNumber,
         customer_id: contract?.customerId || '',
-        customer_name: contract?.customerName || 'Khách hàng',
+        customer_name: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
         contract_id: inv.contractId,
         contract_number: contract?.contractNumber || '',
-        room_name: contract?.roomName || 'Chưa xếp phòng',
+        room_name: room?.roomNumber || 'Chưa xếp phòng',
         total: inv.total,
         status: inv.status,
         created_at: inv.createdAt,
@@ -148,5 +161,21 @@ export class ProviderBillingBffService {
     });
 
     return { occupied, vacant };
+  }
+
+  async previewImport(providerId: string, rows: any[]) {
+    return this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW },
+      { providerId, rows }
+    );
+  }
+
+  async confirmImport(providerId: string, recordedBy: string, dto: any) {
+    return this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM },
+      { providerId, recordedBy, dto }
+    );
   }
 }

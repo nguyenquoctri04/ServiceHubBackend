@@ -1,7 +1,7 @@
 import { ProviderContractsService } from './provider.contracts.service';
 
 describe('ProviderContractsService.findContracts', () => {
-  it('enriches a page with batched identity, room and price lookups', async () => {
+  it('returns a page of contracts without cross-service enrichment (now handled by BFF)', async () => {
     const prisma = {
       contract: {
         findMany: jest.fn().mockResolvedValue([{
@@ -12,31 +12,17 @@ describe('ProviderContractsService.findContracts', () => {
       },
     };
     const secureRpc = {
-      send: jest.fn((_: unknown, pattern: { cmd: string }) => {
-        switch (pattern.cmd) {
-          case 'provider.identities.batch': return Promise.resolve([{ id: 'customer-1', fullName: 'Nguyễn Văn A', email: 'customer@example.com', phone: '0900000000' }]);
-          case 'catalog.rooms.findByIdsForProvider': return Promise.resolve([{ id: 'room-1', roomNumber: 'A-101' }]);
-          case 'services.prices.findForProvider': return Promise.resolve([{ id: 'price-1', price: 150000, service: { name: 'Internet' } }]);
-          default: return Promise.resolve(null);
-        }
-      }),
+      send: jest.fn().mockResolvedValue(null),
     };
     const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any);
 
     await expect(service.findContracts({ providerId: 'provider-1', page: 1, limit: 10 })).resolves.toEqual([
       expect.objectContaining({
-        customerName: 'Nguyễn Văn A',
-        customerPhone: '0900000000',
-        roomName: 'A-101',
-        services: [expect.objectContaining({ serviceName: 'Internet', price: 150000 })],
-        terms: [{ id: 'term-1', content: 'Điều khoản kiểm thử', status: 'ACTIVE' }],
+        id: 'contract-1',
+        providerId: 'provider-1',
       }),
     ]);
 
-    expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: 'provider.identities.batch' }, { identityIds: ['customer-1'] });
-    expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId: 'provider-1', roomIds: ['room-1'] });
-    expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: 'services.prices.findForProvider' }, { providerId: 'provider-1', priceIds: ['price-1'] });
-    expect(secureRpc.send).toHaveBeenCalledTimes(3);
     expect(prisma.contract.findMany).toHaveBeenCalledWith(expect.objectContaining({
       include: expect.objectContaining({ template: true }),
     }));

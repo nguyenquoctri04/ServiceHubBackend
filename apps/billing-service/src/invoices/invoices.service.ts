@@ -138,4 +138,82 @@ export class InvoicesService {
       throw error;
     }
   }
+
+  async getRevenueGrowth(providerId: string) {
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date();
+      d.setMonth(d.getMonth() - (5 - i));
+      return { monthIndex: d.getMonth(), year: d.getFullYear(), label: `T${d.getMonth() + 1}` };
+    });
+
+    const now = new Date();
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(now.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const paidInvoices = await this.prisma.invoice.findMany({
+      where: {
+        providerId,
+        status: 'PAID',
+        createdAt: { gte: sixMonthsAgo }
+      },
+      select: { total: true, createdAt: true }
+    });
+
+    const data = months.map(m => {
+      const total = paidInvoices
+        .filter(inv => inv.createdAt.getMonth() === m.monthIndex && inv.createdAt.getFullYear() === m.year)
+        .reduce((sum, inv) => sum + Number(inv.total), 0);
+      return { month: m.label, total };
+    });
+
+    return data;
+  }
+
+  async getInvoiceAging(providerId: string) {
+    const stats = await this.prisma.invoice.groupBy({
+      by: ['status'],
+      where: { providerId },
+      _count: { id: true }
+    });
+
+    let paid = 0, unpaid = 0, overdue = 0;
+    stats.forEach(s => {
+      if (s.status === 'PAID') paid = s._count.id;
+      if (s.status === 'UNPAID') unpaid = s._count.id;
+      if (s.status === 'OVERDUE') overdue = s._count.id;
+    });
+
+    const total = paid + unpaid + overdue;
+    if (total === 0) return { paid: 0, unpaid: 0, overdue: 0 };
+
+    return {
+      paid: Math.round((paid / total) * 100),
+      unpaid: Math.round((unpaid / total) * 100),
+      overdue: Math.round((overdue / total) * 100),
+    };
+  }
+
+  async getRecentPayments(providerId: string) {
+    const payments = await this.prisma.payment.findMany({
+      where: {
+        invoice: { providerId }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: {
+        invoice: { select: { invoiceNumber: true } }
+      }
+    });
+
+    return payments.map(p => ({
+      id: p.id,
+      type: 'PAYMENT',
+      title: 'Thanh toán thành công',
+      description: `HĐ số ${p.invoice?.invoiceNumber || ''}`,
+      timestamp: p.createdAt,
+      color: 'green'
+    }));
+  }
 }

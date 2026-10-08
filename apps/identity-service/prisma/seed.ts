@@ -4,17 +4,17 @@ import * as bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 const roleIds = {
-    ADMIN: "31000000-0000-0000-0000-000000000001",
-    CUSTOMER: "31000000-0000-0000-0000-000000000002",
-    PROVIDER: "31000000-0000-0000-0000-000000000003",
+    ADMIN: "31000000-0000-4000-8000-000000000001",
+    CUSTOMER: "31000000-0000-4000-8000-000000000002",
+    PROVIDER: "31000000-0000-4000-8000-000000000003",
 };
 
-const permissionId = (n: number) => `32000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const userId = (n: number) => `30000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const providerId = (n: number) => `40000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const verificationId = (n: number) => `50000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const identityDocumentId = (n: number) => `51000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-const providerLegalDocumentId = (n: number) => `52000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const permissionId = (n: number) => `32000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const verificationId = (n: number) => `50000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const identityDocumentId = (n: number) => `51000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const providerLegalDocumentId = (n: number) => `52000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const now = new Date();
 

@@ -39,32 +39,32 @@ export class ContractsService {
     const customerIds = contracts.map(c => c.customerId);
     const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
     
-    // Call Identity Service batch to get customer details
+    // Identity fetch removed
     let customersData = [];
-    try {
-      if (customerIds.length > 0) {
-        customersData = await this.secureRpc.send(
-          this.identityClient,
-          { cmd: 'provider.identities.batch' },
-          { identityIds: customerIds }
-        );
-      }
-    } catch (error) {
-      console.error('Failed to fetch identity batch', error);
-    }
+    // Removed Identity RPC
+
+
+
+
+
+
+
+
+
+
     
-    const rooms = roomIds.length === 0
-      ? []
-      : await this.secureRpc.send<any[]>(
-        this.catalogClient,
-        { cmd: 'catalog.rooms.findByIdsForProvider' },
-        { providerId, roomIds },
-      ).catch(() => []);
+    const rooms = [];
+
+
+
+
+
+
     const roomsById = new Map(rooms.map((room: any) => [room.id, room]));
 
-    // Map identity and room data in batches, then apply search/filter.
+    // Map identity and room data in batches
     let results = contracts.map(contract => {
-      const identity = customersData.find((i: any) => i.id === contract.customerId);
+      const identity = undefined;
       const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
       return {
         id: contract.customerId,
@@ -100,4 +100,62 @@ export class ContractsService {
       }
     };
   }
+
+  async getStatusDistribution(providerId: string) {
+    const stats = await this.prisma.contract.groupBy({
+      by: ['status'],
+      where: { providerId },
+      _count: { id: true }
+    });
+
+    let active = 0, pending = 0, churn = 0;
+    stats.forEach(s => {
+      if (s.status === 'ACTIVE') active += s._count.id;
+      if (s.status === 'PENDING_SIGNATURE' || s.status === 'DRAFT') pending += s._count.id;
+      if (s.status === 'EXPIRED' || s.status === 'TERMINATED' || s.status === 'CANCELLED') churn += s._count.id;
+    });
+
+    const total = active + pending + churn;
+    if (total === 0) return { active: 0, pending: 0, churn: 0 };
+
+    return {
+      active: Math.round((active / total) * 100),
+      pending: Math.round((pending / total) * 100),
+      churn: Math.round((churn / total) * 100),
+    };
+  }
+
+  async getExpiringContracts(providerId: string) {
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+    const expiring = await this.prisma.contract.findMany({
+      where: {
+        providerId,
+        status: 'ACTIVE',
+        endDate: { lte: nextMonth, not: null }
+      },
+      select: { contractNumber: true, endDate: true }
+    });
+    return expiring;
+  }
+
+  async getRecentContracts(providerId: string) {
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId },
+      orderBy: { createdAt: 'desc' },
+      take: 5
+    });
+
+    return contracts.map(c => ({
+      id: c.id,
+      type: 'CONTRACT',
+      title: c.status === 'DRAFT' ? 'Yêu cầu dịch vụ mới' : (c.status === 'PENDING_SIGNATURE' ? 'Gửi hợp đồng chờ ký' : 'Hợp đồng mới'),
+      description: `Hợp đồng ${c.contractNumber}`,
+      timestamp: c.createdAt,
+      color: c.status === 'DRAFT' ? 'blue' : (c.status === 'PENDING_SIGNATURE' ? 'orange' : 'green')
+    }));
+  }
 }
+
+

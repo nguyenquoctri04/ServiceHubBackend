@@ -27,6 +27,11 @@ export class MetersController {
     return this.service.createMeterReading(payload.providerId, payload.dto, payload.recordedBy, 'MANUAL');
   }
 
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_READING_CANCEL })
+  async cancelReading(@Payload() payload: { providerId: string; readingId: string }) {
+    return this.service.cancelReading(payload.providerId, payload.readingId);
+  }
+
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_OCR })
   async processOcr(@Payload() payload: { providerId: string; dto: OcrMeterDto }) {
     return this.service.processOcr(payload.dto.imgUrl);

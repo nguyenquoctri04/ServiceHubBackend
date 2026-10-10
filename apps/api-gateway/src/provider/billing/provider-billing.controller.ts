@@ -83,6 +83,19 @@ export class ProviderBillingController {
     );
   }
 
+  @Post('meters/readings/:id/cancel')
+  async cancelReading(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') readingId: string
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.billingClient, 
+      { cmd: ProviderBillingPatterns.METERS_READING_CANCEL }, 
+      { providerId, readingId }
+    );
+  }
+
   @Post('meters/ocr')
   async processOcr(
     @CurrentUser() user: CurrentUserPayload,

@@ -8,6 +8,7 @@ export class ProviderBillingPatterns {
   public static readonly METERS_FIND = 'billing.meters.find';
   public static readonly METERS_GROUPED = 'billing.meters.grouped';
   public static readonly METERS_READING_CREATE = 'billing.meters.reading.create';
+  public static readonly METERS_READING_CANCEL = 'billing.meters.reading.cancel';
   public static readonly METERS_OCR = 'billing.meters.ocr';
   public static readonly METERS_OCR_CONFIRM = 'billing.meters.ocr.confirm';
   public static readonly METERS_IMPORT_PREVIEW = 'billing.meters.import.preview';

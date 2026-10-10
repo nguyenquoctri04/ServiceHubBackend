@@ -601,7 +601,7 @@ export class ProviderContractsService {
     if (roomIds.length === 0) return [];
     const contracts = await this.prisma.contract.findMany({
       where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
-      select: { id: true, roomId: true, customerId: true, status: true, services: true },
+      select: { id: true, contractNumber: true, roomId: true, customerId: true, status: true, services: true },
     });
     const identities = [];
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));

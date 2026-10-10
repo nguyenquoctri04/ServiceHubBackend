@@ -131,9 +131,13 @@ export class ProviderBillingBffService {
         .filter((contract: any) => Boolean(contract.roomId))
         .map((contract: any) => {
           const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)));
-          return [contract.roomId, { id: contract.id, serviceIds }];
+          return [contract.roomId, { id: contract.id, contractNumber: contract.contractNumber, customerId: contract.customerId, serviceIds }];
         }),
     );
+
+    const customerIds = [...new Set((contracts || []).map((c: any) => c.customerId).filter(Boolean))];
+    const identities = customerIds.length > 0 ? await this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [];
+    const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
 
     const occupied: any[] = [];
     const vacant: any[] = [];
@@ -146,10 +150,13 @@ export class ProviderBillingBffService {
         roomMeters = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
       }
 
+      const identity = activeContract?.customerId ? identitiesById.get(activeContract.customerId) : null;
       const card = {
         roomId: room.id,
         roomName: room.roomNumber,
         contractId: activeContract?.id || null,
+        contractNumber: activeContract?.contractNumber || null,
+        tenantName: identity?.fullName || identity?.email || identity?.phone || null,
         meters: roomMeters,
       };
 

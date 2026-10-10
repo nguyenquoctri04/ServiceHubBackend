@@ -217,6 +217,46 @@ export class MetersService {
     return { success: successCount, failed };
   }
 
+  async cancelReading(providerId: string, readingId: string) {
+    const reading = await this.prisma.meterReading.findUnique({
+      where: { id: readingId },
+      include: { meter: true }
+    });
+
+    if (!reading) throw new NotFoundException('Không tìm thấy chỉ số');
+    if (reading.meter.providerId !== providerId) throw new BadRequestException('Không có quyền thao tác');
+    if (reading.status === 'VOID') throw new BadRequestException('Chỉ số đã được hủy từ trước');
+
+    const usages = await this.prisma.serviceUsage.findMany({
+      where: {
+        OR: [
+          { startReadingId: readingId },
+          { endReadingId: readingId }
+        ]
+      }
+    });
+
+    const billingPeriodIds = usages.map(u => u.billingPeriodId).filter(Boolean) as string[];
+
+    if (billingPeriodIds.length > 0) {
+      const paidInvoices = await this.prisma.invoice.findFirst({
+        where: {
+          billingPeriodId: { in: billingPeriodIds },
+          status: 'PAID'
+        }
+      });
+
+      if (paidInvoices) {
+        throw new BadRequestException('Chỉ số đã được lập hóa đơn và đã thanh toán, không thể hủy.');
+      }
+    }
+
+    return this.prisma.meterReading.update({
+      where: { id: readingId },
+      data: { status: 'VOID', updatedAt: new Date() }
+    });
+  }
+
   async getMeterDashboardStats(providerId: string) {
     const totalMeters = await this.prisma.meter.count({
       where: { providerId, status: 'ACTIVE' }

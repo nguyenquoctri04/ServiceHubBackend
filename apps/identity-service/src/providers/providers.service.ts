@@ -205,7 +205,7 @@ export class ProvidersService {
    */
   async getMyProviders(identityId: string) {
     this.logger.log(`Fetching all providers for identityId: ${identityId}`);
-    return this.prisma.provider.findMany({
+    const providers = await this.prisma.provider.findMany({
       where: { identityId },
       select: {
         id: true,
@@ -214,8 +214,34 @@ export class ProvidersService {
         providerType: true,
         status: true,
         address: true,
+        identity: {
+          select: {
+            verifications: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                documents: {
+                  select: { fullName: true }
+                }
+              }
+            }
+          }
+        }
       },
       orderBy: { createdAt: 'asc' },
+    });
+    return providers.map(p => {
+      const docs = (p as any).identity?.verifications?.[0]?.documents;
+      const ownerName = docs && docs.length > 0 ? docs[0].fullName : null;
+      return {
+        id: p.id,
+        providerName: p.providerName,
+        logoUrl: p.logoUrl,
+        providerType: p.providerType,
+        status: p.status,
+        address: p.address,
+        ownerName: ownerName,
+      };
     });
   }
 

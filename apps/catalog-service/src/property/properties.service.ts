@@ -25,10 +25,15 @@ export class PropertiesService {
       propertyName: string;
       address: string;
       description?: string;
+      latitude?: number;
+      longitude?: number;
       status?: 'ACTIVE' | 'INACTIVE';
     },
   ) {
-    const location = await this.resolveCoordinates(dto.address);
+    const location = (dto.latitude && dto.longitude) 
+      ? { address: dto.address.trim(), latitude: dto.latitude, longitude: dto.longitude }
+      : await this.resolveCoordinates(dto.address);
+
     const now = new Date();
     return this.prisma.property.create({
       data: {
@@ -49,9 +54,16 @@ export class PropertiesService {
     dto: {
       propertyName?: string; address?: string;
       description?: string; status?: 'ACTIVE' | 'INACTIVE';
+      latitude?: number; longitude?: number;
     },
   ) {
-    const location = dto.address === undefined ? undefined : await this.resolveCoordinates(dto.address);
+    let location;
+    if (dto.latitude && dto.longitude && dto.address) {
+        location = { address: dto.address.trim(), latitude: dto.latitude, longitude: dto.longitude };
+    } else if (dto.address !== undefined) {
+        location = await this.resolveCoordinates(dto.address);
+    }
+
     const data = {
       ...(dto.propertyName !== undefined && { propertyName: dto.propertyName.trim() }),
       ...(location !== undefined && location),

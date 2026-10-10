@@ -12,6 +12,7 @@ import { AuthModule } from "./auth/auth.module";
 import { ProxyModule } from "./proxy/proxy.module";
 import { ProviderModule } from "./provider/provider.module";
 import { CustomerModule } from "./customer/customer.module";
+import { MediaModule } from "./media/media.module";
 
 const microservices = [
   "IDENTITY_SERVICE",
@@ -52,6 +53,7 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
     AuthModule,
     ProviderModule,
     CustomerModule,
+    MediaModule,
   ],
   controllers: [],
   providers: [

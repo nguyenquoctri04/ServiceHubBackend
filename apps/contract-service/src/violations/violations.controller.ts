@@ -8,12 +8,42 @@ export class ViolationsController {
   constructor(private readonly service: ViolationsService) {}
 
   @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_FIND })
-  async findViolations(@Payload() data: { providerId: string, status?: string }) {
-    return this.service.findByProvider(data.providerId, data.status);
+  async findViolations(@Payload() data: { providerId: string, actorId?: string, status?: string, contractIds?: string[] }) {
+    return this.service.findByProvider(data.providerId, data.actorId, data.status, data.contractIds);
+  }
+
+  @MessagePattern({ cmd: 'provider.violations.count' })
+  async countViolations(@Payload() data: { providerId: string, status?: string }) {
+    return this.service.countByProvider(data.providerId, data.status);
+  }
+
+  @MessagePattern({ cmd: 'provider.violations.create' })
+  async createReport(@Payload() data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
+    return this.service.createReport(data);
   }
 
   @MessagePattern({ cmd: 'provider.violations.appeals.create' })
   async createAppeal(@Payload() data: { providerId: string, violationCaseId: string, reason: string, appellantId: string }) {
     return this.service.createAppeal(data);
   }
+
+  /**
+   * Xử lý hành động đối với vi phạm (tạo ViolationAction, tuỳ chọn đóng case).
+   * Caller: API Gateway → POST /api/provider/violations/:id/actions
+   */
+  @MessagePattern({ cmd: 'provider.violations.handleAction' })
+  async handleAction(
+    @Payload() data: {
+      providerId: string;
+      violationCaseId: string;
+      actionType: string;
+      description: string;
+      performedBy: string;
+      resolveViolation: boolean;
+      createRestriction?: boolean;
+    },
+  ) {
+    return this.service.handleAction(data);
+  }
 }
+

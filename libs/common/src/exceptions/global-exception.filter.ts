@@ -58,28 +58,22 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     if (ctxType === 'rpc') {
-      // Re-throw RpcException đúng cách để NestJS microservice
-      // serialize lỗi và gửi response về Gateway, tránh silent timeout.
       let rpcError: any;
 
       if (exception instanceof RpcException) {
-        // Đã là RpcException, lấy error payload gốc
         rpcError = exception.getError();
       } else if (exception instanceof HttpException) {
         const resp = exception.getResponse();
-        rpcError = {
-          message: typeof resp === 'string'
-            ? resp
-            : (resp as any)?.message || exception.message,
-          statusCode: exception.getStatus(),
-        };
+        rpcError = typeof resp === 'object' && resp !== null
+          ? { statusCode: exception.getStatus(), ...(resp as object) }
+          : { statusCode: exception.getStatus(), message: resp };
       } else if (exception instanceof Error) {
-        rpcError = { message: exception.message, statusCode: 500 };
+        rpcError = { statusCode: 500, message: exception.message };
       } else {
         rpcError = exception;
       }
 
-      return throwError(() => new RpcException(rpcError));
+      return throwError(() => rpcError);
     }
   }
 }

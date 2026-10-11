@@ -71,8 +71,8 @@ export class IdentitiesService {
             dateOfBirth: doc.dateOfBirth,
             gender: doc.gender,
             nationality: doc.nationality,
-            placeOfOrigin: doc.placeOfOrigin,
-            placeOfResidence: doc.placeOfResidence,
+            placeOfOrigin: (doc as any).placeOfOrigin ?? (doc as any).place_of_origin ?? null,
+            placeOfResidence: (doc as any).placeOfResidence ?? (doc as any).place_of_residence ?? null,
             issueDate: doc.issueDate,
             expiryDate: doc.expiryDate,
             issuingAuthority: doc.issuingAuthority,
@@ -110,18 +110,33 @@ export class IdentitiesService {
       select: {
         id: true,
         email: true,
+        phone: true,
+        status: true,
+        isEkycVerified: true,
         role: {
           select: {
             name: true,
           },
         },
+        verifications: {
+          where: { verifiedAt: { not: null } },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            documents: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: { fullName: true },
+            },
+          },
+        },
       },
     });
 
-    return identities.map((identity) => ({
-      id: identity.id,
-      email: identity.email,
-      role: identity.role.name,
+    return identities.map(({ verifications, role, ...identity }) => ({
+      ...identity,
+      fullName: verifications[0]?.documents[0]?.fullName ?? null,
+      role: role?.name ?? null,
     }));
   }
 

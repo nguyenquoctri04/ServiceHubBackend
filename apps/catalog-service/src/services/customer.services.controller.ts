@@ -82,4 +82,11 @@ export class CustomerServicesController {
     async validateServicePrice(@Payload() payload: { servicePriceId: string }) {
         return this.service.validateServicePrice(payload.servicePriceId);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.GET_SERVICE_PRICE_DETAILS })
+    async getServicePriceDetails(
+        @Payload() payload: { servicePriceIds: string[] },
+    ) {
+        return this.service.getServicePriceDetails(payload.servicePriceIds);
+    }
 }

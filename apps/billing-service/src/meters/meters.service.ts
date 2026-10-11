@@ -5,7 +5,7 @@ import { OcrService } from '../ocr/ocr.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { Prisma, Meter } from '@prisma/client-billing';
 import { SecureRpcService } from '@app/common';
-import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
+import { ExcelRowDto } from './dto/meter.dto';
 
 export interface MeterContext {
   meter: Meter;
@@ -36,43 +36,78 @@ export class MetersService {
     return { data, total, page, limit };
   }
 
+  async findGroupedMeters(providerId: string, roomIds: string[], month: number, year: number) {
+    if (roomIds.length === 0) return {};
+    const startOfMonth = new Date(year, month - 1, 1);
+    const startOfNextMonth = new Date(year, month, 1);
+    const readingScope = { roomId: { in: roomIds }, status: 'VALID' as const, meter: { providerId } };
+    const [meters, currentReadings, previousReadings] = await Promise.all([
+      this.prisma.meter.findMany({ where: { providerId, status: 'ACTIVE' }, select: { id: true, serviceId: true, name: true, unit: true } }),
+      this.prisma.meterReading.findMany({
+        where: { ...readingScope, createdAt: { gte: startOfMonth, lt: startOfNextMonth } },
+        distinct: ['roomId', 'meterId'],
+        orderBy: [{ roomId: 'asc' }, { meterId: 'asc' }, { createdAt: 'desc' }],
+      }),
+      this.prisma.meterReading.findMany({
+        where: { ...readingScope, createdAt: { lt: startOfMonth } },
+        distinct: ['roomId', 'meterId'],
+        orderBy: [{ roomId: 'asc' }, { meterId: 'asc' }, { createdAt: 'desc' }],
+      }),
+    ]);
+    const currentByKey = new Map<string, typeof currentReadings[number]>(
+      currentReadings.map((reading) => [`${reading.roomId}:${reading.meterId}`, reading] as const),
+    );
+    const previousByKey = new Map<string, typeof previousReadings[number]>(
+      previousReadings.map((reading) => [`${reading.roomId}:${reading.meterId}`, reading] as const),
+    );
+
+    return Object.fromEntries(roomIds.map((roomId) => [roomId, meters.map((meter) => {
+      const key = `${roomId}:${meter.id}`;
+      return {
+        meter: { id: meter.id, serviceId: meter.serviceId, serviceName: meter.name, unit: meter.unit },
+        currentReading: currentByKey.get(key) ?? null,
+        previousReading: previousByKey.get(key) ?? null,
+      };
+    })]));
+  }
+
   async processOcr(imgUrl: string) {
     const value = await this.ocrService.processImage(imgUrl);
     return { value };
   }
 
-  private async fetchValidationContext(data: { roomId?: string; contractId?: string; meterId: string }) {
+  private async fetchValidationContext(providerId: string, data: { roomId?: string; contractId?: string; meterId: string }) {
     // 1 RPC call to either Catalog or Contract based on which ID is provided
     let room = null;
     let contract = null;
 
     if (data.roomId) {
       try {
-        const roomsMap = await this.secureRpc.send<any>(
-          this.catalogClient,
-          { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS },
-          [data.roomId]
-        );
-        room = roomsMap[data.roomId];
-        if (!room) throw new RpcException(new NotFoundException('Room not found'));
+        const rooms = await this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [data.roomId] });
+
+
+
+
+        if (!rooms || rooms.length === 0) throw new RpcException(new NotFoundException('Room not found or unauthorized'));
+        room = rooms[0];
       } catch (err) {
         throw new RpcException('Catalog Service failed');
       }
     } else if (data.contractId) {
       try {
-        const contractsMap = await this.secureRpc.send<any>(
-          this.contractClient,
-          { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS },
-          [data.contractId]
-        );
-        contract = contractsMap[data.contractId];
-        if (!contract) throw new RpcException(new NotFoundException('Contract not found'));
+        const contractsMap = await this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds: [data.contractId] });
+
+
+
+
+        contract = contractsMap?.[data.contractId];
+        if (!contract || contract.providerId !== providerId) throw new RpcException(new NotFoundException('Contract not found or unauthorized'));
       } catch (err) {
         throw new RpcException('Contract Service failed');
       }
     }
 
-    const meter = await this.prisma.meter.findUnique({ where: { id: data.meterId } });
+    const meter = await this.prisma.meter.findFirst({ where: { id: data.meterId, providerId, status: 'ACTIVE' } });
     if (!meter) throw new RpcException(new NotFoundException('Meter not found'));
 
     return { room, contract, meter };
@@ -85,6 +120,8 @@ export class MetersService {
     const reading = await this.prisma.meterReading.create({
       data: {
         meterId: meter.id,
+        roomId: data.roomId ?? null,
+        contractId: data.contractId ?? null,
         value: data.value,
         source,
         imgUrl: data.imgUrl,
@@ -95,25 +132,26 @@ export class MetersService {
       }
     });
 
-    // TODO: Emit Event MeterReadingConfirmed here if needed.
-    // this.eventEmitter.emit(ProviderBillingPatterns.EVENT_METER_READING_CONFIRMED, reading);
-
     return reading;
   }
 
   async createMeterReading(providerId: string, data: ExcelRowDto | any, recordedBy: string, source: 'MANUAL' | 'IMAGE' | 'EXCEL_IMPORT') {
-    const context = await this.fetchValidationContext(data);
+    const context = await this.fetchValidationContext(providerId, data);
     return this.createMeterReadingCore(providerId, data, recordedBy, source, context);
   }
 
-  async previewImport(rows: ExcelRowDto[]) {
+  async previewImport(providerId: string, rows: ExcelRowDto[]) {
     const roomIds = [...new Set(rows.map(r => r.roomId).filter(Boolean))];
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
-    const [roomsMap, contractsMap] = await Promise.all([
-      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
-      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
+    const [rooms, contractsMap] = await Promise.all([
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
+    const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
+
+
+
 
     const results = rows.map(row => {
       let isValid = true;
@@ -121,8 +159,11 @@ export class MetersService {
 
       if (!row.meterId) { isValid = false; errors.push('Missing meterId'); }
       if (!row.roomId && !row.contractId) { isValid = false; errors.push('Missing roomId or contractId'); }
-      if (row.roomId && !roomsMap[row.roomId]) { isValid = false; errors.push('Invalid roomId'); }
-      if (row.contractId && !contractsMap[row.contractId]) { isValid = false; errors.push('Invalid contractId'); }
+      if (row.roomId && !roomsMap[row.roomId]) { isValid = false; errors.push('Invalid roomId or unauthorized'); }
+      if (row.contractId) {
+        const contract = contractsMap?.[row.contractId];
+        if (!contract || contract.providerId !== providerId) { isValid = false; errors.push('Invalid contractId or unauthorized'); }
+      }
       
       return { row, isValid, errors };
     });
@@ -135,21 +176,27 @@ export class MetersService {
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
     // 1. Batch fetch external data
-    const [roomsMap, contractsMap] = await Promise.all([
-      this.secureRpc.send<any>(this.catalogClient, { cmd: ProviderBillingPatterns.CATALOG_ROOMS_BY_IDS }, roomIds),
-      this.secureRpc.send<any>(this.contractClient, { cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS }, contractIds)
+    const [rooms, contractsMap] = await Promise.all([
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
+    const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
+
+
+
 
     // 2. Fetch all meters internally
     const meterIds = [...new Set(rows.map(r => r.meterId).filter(Boolean))];
-    const meters = await this.prisma.meter.findMany({ where: { id: { in: meterIds } } });
+    const meters = await this.prisma.meter.findMany({
+      where: { id: { in: meterIds }, providerId, status: 'ACTIVE' },
+    });
     const metersMap = Object.fromEntries(meters.map(m => [m.id, m]));
 
     // 3. Process each row with pre-fetched context (Partial Success)
     const promises = rows.map(async row => {
       if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
-      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found`);
-      if (row.contractId && !contractsMap[row.contractId]) throw new Error(`Contract ${row.contractId} not found`);
+      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
+      if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found or unauthorized`);
 
       const context = {
         meter: metersMap[row.meterId],
@@ -170,20 +217,70 @@ export class MetersService {
     return { success: successCount, failed };
   }
 
-  async handleServiceCreated(payload: ServiceCreatedPayload) {
-    // If service calculation_method is METERED, create a Meter for it
-    if (payload.calculation_method === 'METERED') {
-      await this.prisma.meter.create({
-        data: {
-          providerId: payload.providerId || '00000000-0000-0000-0000-000000000000', // Provide fallback or make sure payload has providerId
-          name: `${payload.name} Meter`,
-          serviceId: payload.id, // we might need serviceId in Meter if it's there. 
-          unit: 'N/A', // Default unit, as the payload might not have it
-          status: 'ACTIVE',
-          createdAt: new Date(),
-          updatedAt: new Date(),
+  async cancelReading(providerId: string, readingId: string) {
+    const reading = await this.prisma.meterReading.findUnique({
+      where: { id: readingId },
+      include: { meter: true }
+    });
+
+    if (!reading) throw new NotFoundException('Không tìm thấy chỉ số');
+    if (reading.meter.providerId !== providerId) throw new BadRequestException('Không có quyền thao tác');
+    if (reading.status === 'VOID') throw new BadRequestException('Chỉ số đã được hủy từ trước');
+
+    const usages = await this.prisma.serviceUsage.findMany({
+      where: {
+        OR: [
+          { startReadingId: readingId },
+          { endReadingId: readingId }
+        ]
+      }
+    });
+
+    const billingPeriodIds = usages.map(u => u.billingPeriodId).filter(Boolean) as string[];
+
+    if (billingPeriodIds.length > 0) {
+      const paidInvoices = await this.prisma.invoice.findFirst({
+        where: {
+          billingPeriodId: { in: billingPeriodIds },
+          status: 'PAID'
         }
       });
+
+      if (paidInvoices) {
+        throw new BadRequestException('Chỉ số đã được lập hóa đơn và đã thanh toán, không thể hủy.');
+      }
     }
+
+    return this.prisma.meterReading.update({
+      where: { id: readingId },
+      data: { status: 'VOID', updatedAt: new Date() }
+    });
+  }
+
+  async getMeterDashboardStats(providerId: string) {
+    const totalMeters = await this.prisma.meter.count({
+      where: { providerId, status: 'ACTIVE' }
+    });
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+    const readings = await this.prisma.meterReading.findMany({
+      where: {
+        meter: { providerId },
+        createdAt: { gte: startOfMonth, lte: endOfMonth },
+        status: 'VALID'
+      },
+      distinct: ['roomId', 'meterId'],
+      select: { id: true }
+    });
+
+
+
+
+
+
+    return { totalMeters, recordedMeters: readings.length };
   }
 }

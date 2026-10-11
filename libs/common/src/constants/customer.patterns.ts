@@ -51,6 +51,8 @@ export class CustomerPatterns {
     public static readonly VALIDATE_SERVICE_PRICE =
         this.SERVICES + "validate-service-price";
 
+    public static readonly GET_SERVICE_PRICE_DETAILS =
+        this.SERVICES + "get-service-price-details";
     /*
         ===============================
             Contract Service
@@ -63,6 +65,8 @@ export class CustomerPatterns {
 
     public static readonly GET_POPULAR_SERVICES =
         this.CONTRACTS + "get-popular-services";
+    public static readonly CREATE_SERVICE_REQUEST =
+        this.CONTRACTS + "create-service-request";
 
     public static readonly GET_MARKETPLACE_RESTRICTIONS =
         this.CONTRACTS + "get-marketplace-restrictions";
@@ -84,6 +88,21 @@ export class CustomerPatterns {
 
     public static readonly GET_CONTRACT_FILE_HASH_FOR_VERIFY =
         this.CONTRACTS + "get_contract_file_hash_for_verify";
+
+    public static readonly GET_USED_SERVICES =
+        this.CONTRACTS + "get-used-services";
+
+    public static readonly GET_USED_SERVICE_DETAIL =
+        this.CONTRACTS + "get-used-service-detail";
+
+    public static readonly GET_VIOLATION_RULES =
+        this.VIOLATIONS + "get-violation-rules";
+
+    public static readonly GET_CONTRACT_FILE_FOR_VIEWING =
+        this.CONTRACTS + "get-contract-file-for-viewing";
+
+    public static readonly ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN =
+        this.CONTRACTS + "activate-contract-after-customer-sign";
 
     /*
         ===============================
@@ -113,6 +132,9 @@ export class CustomerPatterns {
     public static readonly GET_SIGNATURE_INFOR =
         this.IDENTITIES + "get-signature-infor";
 
+    public static readonly GET_PROVIDERS_FULL =
+        this.IDENTITIES + "get-providers-full";
+
     /*
         ===============================
             Notification Service
@@ -141,4 +163,7 @@ export class CustomerPatterns {
 
     public static readonly VERIFY_CONTRACT =
         this.SIGNATURES + "verify-contract";
+
+    public static readonly GET_SIGNATURES_BY_CONTRACT_FILE_IDS =
+        this.SIGNATURES + "get-signatures-by-contract-file-ids";
 }

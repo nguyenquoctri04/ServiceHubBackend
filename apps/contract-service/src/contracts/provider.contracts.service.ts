@@ -1,10 +1,11 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ContractStatus, Contract } from '@prisma/client-contract';
-import { lastValueFrom } from 'rxjs';
 import { ProviderBillingPatterns, SecureRpcService } from '@app/common';
 import { ContractTemplate, Term } from '@prisma/client-contract';
+import { createHash } from 'node:crypto';
 /**
  * Payload interface for creating a contract.
  */
@@ -22,7 +23,15 @@ export interface CreateContractPayload {
 /**
  * Payload interface for updating a contract.
  */
-export interface UpdateContractPayload extends CreateContractPayload {}
+export interface UpdateContractPayload {
+  templateId?: string;
+  roomId?: string;
+  startDate?: string;
+  endDate?: string;
+  requireSignature?: boolean;
+  services?: { servicePriceId: string; quantity?: number }[];
+  termIds?: string[];
+}
 
 /**
  * Payload interface for querying contracts.
@@ -36,6 +45,7 @@ export interface ContractQueryPayload {
 
 export interface CustomerIdentity {
   id: string;
+  fullName?: string | null;
   email?: string;
   phone?: string;
 }
@@ -46,6 +56,24 @@ export interface EnrichedContract extends Contract {
   roomName: string;
   services: any[];
   terms?: any[];
+  files?: Array<{ id: string; pdfUrl: string; hashContract: string | null }>;
+}
+
+type ContractWithRelations = Contract & {
+  services: Array<{ servicePriceId: string; [key: string]: unknown }>;
+  terms?: Array<{ term: Term | null }>;
+  files?: Array<{ id: string; pdfUrl: string; hashContract: string | null }>;
+};
+
+interface ServicePriceReference {
+  id: string;
+  price: unknown;
+  service?: { name?: string | null } | null;
+}
+
+interface RoomReference {
+  id: string;
+  roomNumber?: string | null;
 }
 
 @Injectable()
@@ -56,7 +84,9 @@ export class ProviderContractsService {
     private readonly prisma: PrismaService,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -127,6 +157,7 @@ export class ProviderContractsService {
 
     const contractNumber = await this.generateContractNumber();
     const startDate = dto.startDate ? new Date(dto.startDate) : new Date();
+    if (dto.templateId) await this.ensureTemplateAvailable(providerId, dto.templateId);
 
     return this.prisma.$transaction(async (tx) => {
       const contract = await tx.contract.create({
@@ -164,7 +195,7 @@ export class ProviderContractsService {
    */
   async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<Contract> {
     this.logger.log(`Updating contract: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) {
       throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -173,16 +204,57 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Only draft contracts can be updated' });
     }
 
+    if (dto.roomId) {
+      const rooms = await this.secureRpc.send<{ id: string }[]>(
+        this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [dto.roomId] },
+      );
+      if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
+    }
+    if (dto.services !== undefined) {
+      const ids = [...new Set(dto.services.map((service) => service.servicePriceId))];
+      if (!ids.length || ids.length !== dto.services.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ hợp đồng không hợp lệ.' });
+      // const prices = await this.secureRpc.send<{ id: string }[]>(
+      //   this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds: ids },
+      // );
+      // if (prices.length !== ids.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ không thuộc nhà cung cấp.' });
+    }
+    if (dto.termIds !== undefined) {
+      const ids = [...new Set(dto.termIds)];
+      if (ids.length !== dto.termIds.length) throw new RpcException({ statusCode: 400, message: 'Điều khoản hợp đồng không hợp lệ.' });
+      const count = await this.prisma.term.count({ where: { id: { in: ids }, status: 'ACTIVE' } });
+      if (count !== ids.length) throw new RpcException({ statusCode: 400, message: 'Có điều khoản không còn hiệu lực.' });
+    }
+    if (dto.templateId !== undefined) await this.ensureTemplateAvailable(providerId, dto.templateId);
+
+    const contractNumber = existing.contractNumber.startsWith('YCDV-')
+      ? await this.generateContractNumber()
+      : existing.contractNumber;
+
     return this.prisma.contract.update({
       where: { id: contractId },
       data: {
-        customerId: dto.customerId,
-        roomId: dto.roomId,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        requireSignature: dto.requireSignature,
+        ...(dto.roomId !== undefined && { roomId: dto.roomId }),
+        ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
+        ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
+        ...(dto.requireSignature !== undefined && { requireSignature: dto.requireSignature }),
+        // templateId removed
+        ...(contractNumber !== existing.contractNumber && { contractNumber }),
         updatedAt: new Date(),
-      }
+        ...(dto.services !== undefined && {
+          services: {
+            deleteMany: {},
+            create: dto.services.map((service) => ({
+              servicePriceId: service.servicePriceId,
+              quantity: service.quantity ?? 1,
+              createdAt: new Date(),
+            })),
+          },
+        }),
+        ...(dto.termIds !== undefined && {
+          terms: { deleteMany: {}, create: dto.termIds.map((termId) => ({ termId, createdAt: new Date() })) },
+        }),
+      },
+      include: { services: true, terms: true },
     });
   }
 
@@ -191,17 +263,123 @@ export class ProviderContractsService {
    */
   async sendContract(providerId: string, contractId: string): Promise<Contract> {
     this.logger.log(`Sending contract for signature: ${contractId}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.DRAFT) {
       throw new RpcException({ statusCode: 400, message: 'Invalid status for send' });
     }
+    if (existing.contractNumber.startsWith('YCDV-')) {
+      throw new RpcException({ statusCode: 400, message: 'Cần hoàn thiện bản nháp trước khi gửi hợp đồng.' });
+    }
 
-    return this.prisma.contract.update({
+    if (existing.requireSignature) {
+      await this.createSigningFile(providerId, contractId);
+    }
+
+    const contract = await this.prisma.contract.update({
       where: { id: contractId },
       data: { status: ContractStatus.PENDING_SIGNATURE, updatedAt: new Date() }
     });
+    await this.secureRpc.send(
+      this.notificationClient,
+      { cmd: 'notifications.createInApp' },
+      {
+        userId: contract.customerId,
+        providerId,
+        title: 'Nhà cung cấp đã gửi hợp đồng',
+        content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}.`,
+      },
+    );
+    return contract;
+  }
+
+  async findSigningFile(providerId: string, contractId: string) {
+    const file = await this.prisma.contractFile.findFirst({
+      where: { contractId, contract: { providerId } },
+      orderBy: { id: 'desc' },
+      select: { id: true, pdfUrl: true, hashContract: true },
+    });
+    if (!file) throw new RpcException({ statusCode: 404, message: 'Hợp đồng chưa có file để ký.' });
+    return file;
+  }
+
+  private async createSigningFile(providerId: string, contractId: string) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: contractId, providerId },
+      include: { services: true, terms: { include: { term: true } } },
+    });
+    if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
+
+    const document = Buffer.from(JSON.stringify({
+      version: 1,
+      contract: {
+        id: contract.id,
+        contractNumber: contract.contractNumber,
+        providerId: contract.providerId,
+        customerId: contract.customerId,
+        roomId: contract.roomId,
+        startDate: contract.startDate.toISOString(),
+        endDate: contract.endDate?.toISOString() ?? null,
+        requireSignature: contract.requireSignature,
+        // template was removed
+        services: contract.services.map((service) => ({ servicePriceId: service.servicePriceId, quantity: service.quantity?.toString() ?? null })),
+        terms: contract.terms.map((item) => ({ id: item.term.id, content: item.term.content })),
+      },
+    }));
+    const hashContract = createHash('sha256').update(document).digest('hex');
+    const pdfUrl = await this.uploadContractSnapshot(contract.contractNumber, document);
+
+    return this.prisma.contractFile.create({ data: { contractId, pdfUrl, hashContract } });
+  }
+
+  private async uploadContractSnapshot(contractNumber: string, content: Buffer): Promise<string> {
+    const { cloudName, apiKey, apiSecret } = this.getCloudinaryCredentials();
+
+    const timestamp = Math.floor(Date.now() / 1000);
+    const publicId = `servicehub/contracts/${contractNumber}-${timestamp}`;
+    const signature = createHash('sha1').update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`).digest('hex');
+    const form = new FormData();
+    form.set('file', new Blob([Uint8Array.from(content)], { type: 'application/json' }), `${contractNumber}.json`);
+    form.set('public_id', publicId);
+    form.set('timestamp', String(timestamp));
+    form.set('api_key', apiKey);
+    form.set('signature', signature);
+    form.set('resource_type', 'raw');
+
+    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, { method: 'POST', body: form });
+    if (!response.ok) {
+      this.logger.error(`Cloudinary upload failed: ${response.status}`);
+      throw new RpcException({ statusCode: 502, message: 'Không thể lưu file hợp đồng.' });
+    }
+    const payload = await response.json() as { secure_url?: string };
+    if (!payload.secure_url) throw new RpcException({ statusCode: 502, message: 'Cloudinary không trả về URL file hợp đồng.' });
+    return payload.secure_url;
+  }
+
+  private getCloudinaryCredentials(): { cloudName: string; apiKey: string; apiSecret: string } {
+    const cloudinaryUrl = this.configService.get<string>('CLOUDINARY_URL');
+    if (!cloudinaryUrl) {
+      throw new RpcException({ statusCode: 503, message: 'Chưa cấu hình CLOUDINARY_URL để lưu hợp đồng.' });
+    }
+
+    try {
+      const parsed = new URL(cloudinaryUrl);
+      if (parsed.protocol !== 'cloudinary:' || !parsed.hostname || !parsed.username || !parsed.password) {
+        throw new Error('Invalid Cloudinary URL');
+      }
+
+      return {
+        cloudName: parsed.hostname,
+        apiKey: decodeURIComponent(parsed.username),
+        apiSecret: decodeURIComponent(parsed.password),
+      };
+    } catch {
+      throw new RpcException({
+        statusCode: 503,
+        message: 'CLOUDINARY_URL không hợp lệ. Cần định dạng cloudinary://API_KEY:API_SECRET@CLOUD_NAME.',
+      });
+    }
   }
 
   /**
@@ -209,7 +387,7 @@ export class ProviderContractsService {
    */
   async revokeContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Revoking contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     if (existing.status !== ContractStatus.PENDING_SIGNATURE) {
@@ -227,78 +405,73 @@ export class ProviderContractsService {
    */
   async cancelContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
     this.logger.log(`Cancelling contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
+    const normalizedReason = reason?.trim();
+    if (!normalizedReason) {
+      throw new RpcException({ statusCode: 400, message: 'Vui lòng nhập lý do từ chối cung cấp dịch vụ.' });
+    }
+    if (normalizedReason.length > 2000) {
+      throw new RpcException({ statusCode: 400, message: 'Lý do từ chối không được vượt quá 2000 ký tự.' });
+    }
+    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
+    if (existing.status !== ContractStatus.DRAFT) {
+      throw new RpcException({ statusCode: 400, message: 'Chỉ có thể từ chối yêu cầu dịch vụ đang ở trạng thái nháp.' });
+    }
 
-    return this.prisma.contract.update({
+    const contract = await this.prisma.contract.update({
       where: { id: contractId },
       data: { status: ContractStatus.CANCELLED, updatedAt: new Date() }
     });
+    await this.secureRpc.send(
+      this.notificationClient,
+      { cmd: 'notifications.createInApp' },
+      {
+        userId: contract.customerId,
+        providerId,
+        title: 'Nhà cung cấp từ chối cung cấp dịch vụ',
+        content: `Yêu cầu dịch vụ ${contract.contractNumber} đã bị từ chối. Lý do: ${normalizedReason}`,
+      },
+    );
+    return contract;
   }
 
-  /**
-   * Terminates an active contract.
-   */
-  async terminateContract(providerId: string, contractId: string, reason?: string): Promise<Contract> {
-    this.logger.log(`Terminating contract: ${contractId}. Reason: ${reason}`);
-    const existing = await this.prisma.contract.findUnique({ where: { id: contractId, providerId } });
-    
-    if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
-    if (existing.status !== ContractStatus.ACTIVE) {
-      throw new RpcException({ statusCode: 400, message: 'Only active contracts can be terminated' });
-    }
+  /** Enriches an entire page with bounded, provider-scoped RPC calls. */
+  private async enrichContractsData(contracts: ContractWithRelations[]): Promise<EnrichedContract[]> {
+    if (contracts.length === 0) return [];
 
-    return this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: ContractStatus.TERMINATED, updatedAt: new Date() }
+    const providerId = contracts[0].providerId;
+    const customerIds = [...new Set(contracts.map((contract) => contract.customerId))];
+    const roomIds = [...new Set(contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []))];
+    const priceIds = [...new Set(contracts.flatMap((contract) => contract.services.map((service) => service.servicePriceId)))];
+    const identities = [];
+    const rooms = [];
+    const prices = [];
+    // Promise.all removed
+    // removed identityClient call
+    // removed promise.all array closure
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
+    const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
+    const pricesById = new Map(prices.map((price) => [price.id, price] as const));
+
+    return contracts.map((contract) => {
+      const customer = identitiesById.get(contract.customerId);
+      const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
+      return {
+        ...contract,
+        customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
+        customerPhone: customer?.phone || '',
+        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        services: contract.services.map((service) => {
+          const price = pricesById.get(service.servicePriceId);
+          return {
+            ...service,
+            serviceName: price?.service?.name || 'Chưa có tên dịch vụ',
+            price: Number(price?.price ?? 0),
+          };
+        }),
+        terms: contract.terms?.map((item) => item.term).filter((term): term is Term => term !== null),
+      } as EnrichedContract;
     });
-  }
-
-  /**
-   * Enriches contract data by fetching external references (Customer, Services).
-   */
-  private async enrichContractData(contract: Contract & { services?: any[], terms?: any[] }): Promise<EnrichedContract> {
-    try {
-      const customer = await this.secureRpc.send<CustomerIdentity>(
-        this.identityClient,
-        { cmd: 'get.customer.by.id' },
-        { customerId: contract.customerId }
-      ).catch(() => null);
-
-      const customerName = customer?.email || customer?.phone || contract.customerId;
-      const customerPhone = customer?.phone || '';
-
-      const enrichedServices = await Promise.all((contract.services || []).map(async (s: any) => {
-        const priceDetail = await this.secureRpc.send<any>(
-          this.catalogClient,
-          { cmd: 'get.service.price.by.id' },
-          { servicePriceId: s.servicePriceId }
-        ).catch(() => null);
-
-        return {
-          ...s,
-          serviceName: priceDetail?.service?.name || 'Unknown Service',
-          price: Number(priceDetail?.price || 0)
-        };
-      }));
-
-      return {
-        ...contract,
-        customerName,
-        customerPhone,
-        roomName: 'Phòng ' + (contract.roomId ? contract.roomId.slice(-4) : 'Mới'),
-        services: enrichedServices
-      };
-    } catch (error) {
-      this.logger.warn(`Failed to enrich contract data for ID: ${contract.id}`, error.stack);
-      return {
-        ...contract,
-        customerName: 'Unknown',
-        customerPhone: 'Unknown',
-        roomName: 'Unknown',
-        services: contract.services || []
-      };
-    }
   }
 
   /**
@@ -314,10 +487,10 @@ export class ProviderContractsService {
       },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
-      include: { services: true, terms: true }
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
     });
 
-    return Promise.all(contracts.map(c => this.enrichContractData(c)));
+    return this.enrichContractsData(contracts);
   }
   
   /**
@@ -325,14 +498,23 @@ export class ProviderContractsService {
    */
   async findOneContract(providerId: string, contractId: string): Promise<EnrichedContract> {
     this.logger.log(`Fetching contract details for ID: ${contractId}`);
-    const contract = await this.prisma.contract.findUnique({
+    const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
-      include: { services: true, terms: true }
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
     });
     
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     
-    return this.enrichContractData(contract);
+    return (await this.enrichContractsData([contract]))[0];
+  }
+
+  async findDraftByRequestNumber(providerId: string, contractNumber: string): Promise<EnrichedContract> {
+    const contract = await this.prisma.contract.findFirst({
+      where: { providerId, contractNumber, status: ContractStatus.DRAFT },
+      include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } },
+    });
+    if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy yêu cầu dịch vụ.' });
+    return (await this.enrichContractsData([contract]))[0];
   }
 
   /**
@@ -340,7 +522,10 @@ export class ProviderContractsService {
    */
   async findTemplates(providerId: string): Promise<ContractTemplate[]> {
     return this.prisma.contractTemplate.findMany({
-      where: { providerId }
+      where: {
+        OR: [{ providerId }, { providerId: null }],
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -349,10 +534,21 @@ export class ProviderContractsService {
    */
   async findTemplate(providerId: string, templateId: string): Promise<ContractTemplate> {
     const template = await this.prisma.contractTemplate.findFirst({
-      where: { id: templateId, providerId }
+      where: {
+        id: templateId,
+        OR: [{ providerId }, { providerId: null }],
+      }
     });
     if (!template) throw new RpcException({ statusCode: 404, message: 'Template not found' });
     return template;
+  }
+
+  private async ensureTemplateAvailable(providerId: string, templateId: string): Promise<void> {
+    const template = await this.prisma.contractTemplate.findFirst({
+      where: { id: templateId, OR: [{ providerId }, { providerId: null }] },
+      select: { id: true },
+    });
+    if (!template) throw new RpcException({ statusCode: 400, message: 'Mẫu hợp đồng không thuộc nhà cung cấp.' });
   }
 
   /**
@@ -373,18 +569,134 @@ export class ProviderContractsService {
     return map;
   }
 
-  async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+  async getContractsByIdsForProvider(providerId: string, contractIds: string[]) {
+    if (contractIds.length === 0) return {};
+
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId, id: { in: contractIds } },
+      select: { id: true, customerId: true, roomId: true, contractNumber: true },
+    });
+    const customerIds = contracts.map((contract) => contract.customerId);
+    const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
+    const identities = [];
+    const rooms = [];
+    // removed promise.all
+    const identitiesById = new Map<string, CustomerIdentity>(
+      identities.map((identity) => [identity.id, identity] as const),
+    );
+    const roomsById = new Map<string, any>(rooms.map((room: any) => [room.id, room] as const));
+
+    return Object.fromEntries(contracts.map((contract) => {
+      const identity = identitiesById.get(contract.customerId);
+      const room = contract.roomId ? roomsById.get(contract.roomId) : undefined;
+      return [contract.id, {
+        ...contract,
+        customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
+        roomName: room?.roomNumber || 'Chưa xếp phòng',
+      }];
+    }));
+  }
+
+  async findActiveContractsByRoomIds(providerId: string, roomIds: string[]) {
+    if (roomIds.length === 0) return [];
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
+      select: { id: true, contractNumber: true, roomId: true, customerId: true, status: true, services: true },
+    });
+    const identities = [];
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
+    return contracts.map((contract) => {
+      const customer = identitiesById.get(contract.customerId);
+      return {
+        ...contract,
+        customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
+        customerPhone: customer?.phone || '',
+      };
+    });
+  }
+
+  async hasRoomReferences(providerId: string, roomId: string) {
+    const count = await this.prisma.contract.count({
+      where: {
+        providerId,
+        roomId,
+        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.ACTIVE] },
+      },
+    });
+    return { hasReferences: count > 0 };
+  }
+
+  async findRestrictions(providerId: string, status?: 'ACTIVE' | 'LIFTED') {
+    const restrictions = await this.prisma.restriction.findMany({
+      where: {
+        providerId,
+        scopeType: 'PROVIDER',
+        isDeleted: false,
+        ...(status === 'ACTIVE' ? { endAt: null } : status === 'LIFTED' ? { endAt: { not: null } } : {}),
+      },
+      select: {
+        id: true,
+        customerId: true,
+        reason: true,
+        startAt: true,
+        endAt: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const customerIds = restrictions.flatMap((restriction) => restriction.customerId ? [restriction.customerId] : []);
+    const identities = [];
+    const identitiesById = new Map(identities.map((identity) => [identity.id, identity]));
+
+    return restrictions.map((restriction) => {
+      const identity = restriction.customerId ? identitiesById.get(restriction.customerId) : undefined;
+      return {
+        ...restriction,
+        status: restriction.endAt ? 'LIFTED' : 'ACTIVE',
+        customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
+        customerPhone: identity?.phone || '',
+      };
+    });
+  }
+
+  async liftRestriction(providerId: string, restrictionId: string) {
+    const now = new Date();
+    const result = await this.prisma.restriction.updateMany({
+      where: {
+        id: restrictionId,
+        providerId,
+        scopeType: 'PROVIDER',
+        isDeleted: false,
+        endAt: null,
+      },
+      data: { endAt: now, updatedAt: now },
+    });
+    if (result.count !== 1) {
+      throw new RpcException({ statusCode: 404, message: 'Không tìm thấy lệnh chặn đang hiệu lực' });
+    }
+    return { success: true };
+  }
+
+  async blockCustomer(payload: { providerId: string; customerId: string; reason: string; blockBy: string; contractId?: string }) {
     this.logger.log(`Provider ${payload.providerId} blocking customer ${payload.customerId} with reason: ${payload.reason}`);
 
     return this.prisma.$transaction(async (tx) => {
-      // Find latest contract to link the violation (with lock to prevent race conditions during block)
-      const latestContract = await tx.contract.findFirst({
-        where: { providerId: payload.providerId, customerId: payload.customerId },
-        orderBy: { createdAt: 'desc' },
-      });
+      // Find contract to link the violation
+      let targetContract;
+      if (payload.contractId) {
+        targetContract = await tx.contract.findFirst({
+          where: { id: payload.contractId, providerId: payload.providerId, customerId: payload.customerId }
+        });
+      } else {
+        targetContract = await tx.contract.findFirst({
+          where: { providerId: payload.providerId, customerId: payload.customerId },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
 
-      if (!latestContract) {
-        throw new RpcException({ statusCode: 400, message: 'Customer has no contracts with this provider' });
+      if (!targetContract) {
+        throw new RpcException({ statusCode: 400, message: 'Customer has no matching contracts with this provider' });
       }
 
       // Check if already restricted
@@ -423,7 +735,7 @@ export class ProviderContractsService {
       const violationCase = await tx.violationCase.create({
         data: {
           violationRuleId: rule.id,
-          contractId: latestContract.id,
+          contractId: targetContract.id,
           providerId: payload.providerId,
           reportedBy: payload.blockBy,
           status: 'RESOLVED',
@@ -455,5 +767,18 @@ export class ProviderContractsService {
       });
       return { success: true, violationCase };
     }, { isolationLevel: 'Serializable' });
+  }
+
+  async getDashboardStats(providerId: string) {
+    const [activeContracts, pendingRequests] = await Promise.all([
+      this.prisma.contract.count({
+        where: { providerId, status: 'ACTIVE' }
+      }),
+      this.prisma.contract.count({
+        where: { providerId, status: 'PENDING_SIGNATURE' }
+      })
+    ]);
+
+    return { activeContracts, pendingRequests };
   }
 }

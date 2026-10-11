@@ -7,7 +7,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
-import path from "node:path";
+import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { KeysService } from "../keys/keys.service";
 
@@ -139,6 +139,19 @@ export class SignaturesService {
                     signedAt: new Date(),
                 },
             });
+
+            // Customer ký thành công -> activate contract
+            if (!isProviderSigning) {
+                await this.secureRpc.send(
+                    this.contractClient,
+                    {
+                        cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN,
+                    },
+                    {
+                        contractFileId,
+                    },
+                );
+            }
 
             return {
                 id: signature.id,
@@ -338,7 +351,7 @@ export class SignaturesService {
             signatures.map(async (signature) => {
                 const verification = await this.verifySignatureRecord(
                     signature.id,
-                    fileInfo.hashContract
+                    fileInfo.hashContract,
                 );
 
                 return {
@@ -360,22 +373,31 @@ export class SignaturesService {
             (signature) => signature.identityId !== fileInfo.providerIdentityId,
         );
 
-        const providerValid =
-            !!providerSignature &&
-            providerSignature.valid &&
-            providerSignature.hashValid;
+        // Chỉ đánh giá "hợp lệ về mặt mật mã" cho những chữ ký ĐANG TỒN
+        // TẠI — không coi "chưa ký" là "sai". Đây là 2 khái niệm khác nhau.
+        const providerSignatureIntegrityOk =
+            !providerSignature ||
+            (providerSignature.valid && providerSignature.hashValid);
 
-        const customerValid =
-            customerSignatures.length > 0 &&
-            customerSignatures.every(
-                (signature) => signature.valid && signature.hashValid,
-            );
+        const customerSignaturesIntegrityOk = customerSignatures.every(
+            (signature) => signature.valid && signature.hashValid,
+        );
 
-        const valid = providerValid && customerValid;
+        const providerSigned = !!providerSignature;
+        const customerSigned = customerSignatures.length > 0;
 
         return {
             contractFileId,
-            valid,
+            // Toàn vẹn mật mã: chữ ký nào có thì phải đúng, không quan
+            // tâm đã đủ các bên ký hay chưa. False = có chữ ký bị hỏng/
+            // giả mạo thật sự -> cảnh báo nghiêm trọng.
+            integrityValid:
+                providerSignatureIntegrityOk && customerSignaturesIntegrityOk,
+            // Đã ký đủ cả 2 bên chưa — bình thường sẽ false cho tới khi
+            // customer ký xong, không phải lỗi.
+            fullySigned: providerSigned && customerSigned,
+            providerSigned,
+            customerSigned,
             provider: providerSignature
                 ? {
                       signatureId: providerSignature.signatureId,
@@ -384,9 +406,7 @@ export class SignaturesService {
                       valid: providerSignature.valid,
                       hashValid: providerSignature.hashValid,
                   }
-                : {
-                      valid: false,
-                  },
+                : null,
             customer: customerSignatures.map((signature) => ({
                 signatureId: signature.signatureId,
                 fingerprint: signature.fingerprint,
@@ -395,5 +415,14 @@ export class SignaturesService {
                 hashValid: signature.hashValid,
             })),
         };
+    }
+
+    async getSignaturesByContractFileIds(contractFileIds: string[]) {
+        if (contractFileIds.length === 0) return [];
+
+        return this.prisma.contractSignature.findMany({
+            where: { contractFileId: { in: contractFileIds } },
+            orderBy: { signedAt: "asc" },
+        });
     }
 }

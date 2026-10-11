@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsObject } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber, IsBoolean, ArrayMinSize, IsIn, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ContractServiceDto {
@@ -24,7 +24,7 @@ export class CreateContractDto {
   services: ContractServiceDto[];
 
   @IsArray()
-  @IsUUID("4", { each: true })
+  @IsUUID('4', { each: true })
   @IsOptional()
   termIds?: string[];
 
@@ -45,12 +45,53 @@ export class CreateContractDto {
   requireSignature?: boolean;
 }
 
-export class UpdateContractDto extends CreateContractDto {}
+export class UpdateContractDto {
+  @IsUUID() @IsOptional() templateId?: string;
+  @IsUUID() @IsOptional() roomId?: string;
+  @IsString() @IsOptional() startDate?: string;
+  @IsString() @IsOptional() endDate?: string;
+  @IsBoolean() @IsOptional() requireSignature?: boolean;
+  @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => ContractServiceDto) @IsOptional()
+  services?: ContractServiceDto[];
+  @IsArray() @IsUUID('4', { each: true }) @IsOptional() termIds?: string[];
+}
 
 export class ContractActionDto {
   @IsString()
   @IsOptional()
   reason?: string;
+}
+
+export class CreateViolationDto {
+  @IsUUID() contractId: string;
+  @IsString() @MaxLength(1000) description: string;
+  @IsString() @IsOptional() @MaxLength(100) violationType?: string;
+}
+
+export class BlockCustomerDto {
+  @IsString() @MaxLength(2000) reason: string;
+}
+
+export class RestrictionQueryDto {
+  @IsIn(['ACTIVE', 'LIFTED']) @IsOptional() status?: 'ACTIVE' | 'LIFTED';
+}
+
+export class ViolationQueryDto {
+  @IsIn(['REPORTED', 'REJECTED', 'RESOLVED', 'CANCELLED']) @IsOptional()
+  status?: 'REPORTED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED';
+}
+
+export class CreateViolationAppealDto {
+  @IsString() @MaxLength(2000) reason: string;
+}
+
+export class ViolationActionDto {
+  @IsIn(['WARNING', 'REQUEST_CORRECTION', 'FINE', 'RESTRICT', 'TERMINATE_CONTRACT', 'NO_ACTION'])
+  actionType: 'WARNING' | 'REQUEST_CORRECTION' | 'FINE' | 'RESTRICT' | 'TERMINATE_CONTRACT' | 'NO_ACTION';
+
+  @IsString() @MaxLength(2000) description: string;
+  @IsBoolean() resolveViolation: boolean;
+  @IsBoolean() @IsOptional() createRestriction?: boolean;
 }
 
 export class ContractQueryDto {

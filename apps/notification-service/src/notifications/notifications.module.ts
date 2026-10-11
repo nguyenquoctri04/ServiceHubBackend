@@ -8,6 +8,8 @@ import { ClientsModule, ClientsModuleAsyncOptions, Transport } from '@nestjs/mic
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 
+import { NotificationsGateway } from './notifications.gateway';
+
 const clientProviders: ClientsModuleAsyncOptions = [
   {
     name: "IDENTITY_SERVICE",
@@ -32,6 +34,7 @@ const clientProviders: ClientsModuleAsyncOptions = [
     }),
   ],
   controllers: [NotificationsController, CustomerNotificationsController],
-  providers: [NotificationsService, CustomerNotificationsService],
+  providers: [NotificationsService, CustomerNotificationsService, NotificationsGateway],
+  exports: [NotificationsGateway],
 })
 export class NotificationsModule {}

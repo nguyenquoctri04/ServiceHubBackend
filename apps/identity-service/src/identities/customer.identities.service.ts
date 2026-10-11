@@ -360,4 +360,26 @@ export class CustomerIdentitiesService {
             name: document.fullName,
         };
     }
+
+    async getProvidersFull(providerIds: string[]) {
+        if (providerIds.length === 0) return [];
+
+        return this.prisma.provider.findMany({
+            where: { id: { in: providerIds } },
+            select: {
+                id: true,
+                providerName: true,
+                logoUrl: true,
+                companyName: true,
+                description: true,
+                phone: true,
+                email: true,
+                website: true,
+                address: true,
+                businessType: true,
+                providerType: true,
+                status: true,
+            },
+        });
+    }
 }

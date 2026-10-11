@@ -19,6 +19,11 @@ export class InvoicesController {
     return this.service.findInvoices(payload.providerId, payload.query);
   }
 
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS })
+  async findOutstandingTotals(@Payload() payload: { providerId: string; contractIds: string[] }) {
+    return this.service.findOutstandingTotals(payload.providerId, payload.contractIds);
+  }
+
   @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_PAY })
   payInvoice(
     @Payload()
@@ -71,5 +76,25 @@ export class InvoicesController {
       payload.dto,
       payload.ipAddr,
     );
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.dashboardStats' })
+  async getDashboardStats(@Payload() payload: { providerId: string }) {
+    return this.service.getDashboardStats(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.revenueGrowth' })
+  async getRevenueGrowth(@Payload() payload: { providerId: string }) {
+    return this.service.getRevenueGrowth(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.aging' })
+  async getInvoiceAging(@Payload() payload: { providerId: string }) {
+    return this.service.getInvoiceAging(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: 'billing.invoices.recentPayments' })
+  async getRecentPayments(@Payload() payload: { providerId: string }) {
+    return this.service.getRecentPayments(payload.providerId);
   }
 }

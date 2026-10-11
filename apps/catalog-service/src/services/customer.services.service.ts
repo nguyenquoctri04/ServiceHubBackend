@@ -1238,4 +1238,71 @@ export class CustomerServicesService {
             unit: servicePrice.unit,
         };
     }
+
+    /**
+     * Trả đúng snapshot ServicePrice tại thời điểm đặt — KHÔNG lọc theo
+     * effectiveFrom/effectiveTo hiện tại, vì đây là dữ liệu lịch sử (giá
+     * lúc khách đặt có thể đã hết hiệu lực ở hiện tại).
+     */
+    async getServicePriceDetails(servicePriceIds: string[]) {
+        if (servicePriceIds.length === 0) return [];
+
+        const prices = await this.prisma.servicePrice.findMany({
+            where: { id: { in: servicePriceIds } },
+            include: {
+                service: {
+                    include: {
+                        category: true,
+                        billingRule: true,
+                        images: { orderBy: { displayOrder: "asc" } },
+                    },
+                },
+            },
+        });
+
+        return prices.map((p) => ({
+            servicePriceId: p.id,
+            price: Number(p.price),
+            unit: p.unit,
+            effectiveFrom: p.effectiveFrom.toISOString(),
+            effectiveTo: p.effectiveTo?.toISOString() ?? null,
+            service: {
+                id: p.service.id,
+                name: p.service.name,
+                description: p.service.description,
+                status: p.service.status,
+                address: p.service.address,
+                latitude: Number(p.service.latitude),
+                longitude: Number(p.service.longitude),
+                requiresPrepayment: p.service.requiresPrepayment,
+                requiresContract: p.service.requiresContract,
+                providerId: p.service.providerId,
+                categoryId: p.service.categoryId,
+                billingRuleId: p.service.billingRuleId,
+                serviceType: p.service.serviceType,
+                roomTypeId: p.service.roomTypeId,
+                category: {
+                    id: p.service.category.id,
+                    name: p.service.category.name,
+                    description: p.service.category.description,
+                },
+                billingRule: {
+                    id: p.service.billingRule.id,
+                    calculationMethod: p.service.billingRule.calculationMethod,
+                    billingFrequency: p.service.billingRule.billingFrequency,
+                    billingIntervalValue:
+                        p.service.billingRule.billingIntervalValue,
+                    billingIntervalUnit:
+                        p.service.billingRule.billingIntervalUnit,
+                    prorationMethod: p.service.billingRule.prorationMethod,
+                    usageSource: p.service.billingRule.usageSource,
+                },
+                images: p.service.images.map((img) => ({
+                    id: img.id,
+                    imageUrl: img.imageUrl,
+                    displayOrder: img.displayOrder,
+                })),
+            },
+        }));
+    }
 }

@@ -1,3 +1,5 @@
+import { Inject, Injectable, HttpException, NotFoundException } from "@nestjs/common";
+import { ClientProxy } from "@nestjs/microservices";
 import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import {
@@ -6,8 +8,6 @@ import {
     ProviderDetail,
     ProviderIdentityDetailRpcResult,
 } from "@app/common/dto/customer/identity";
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
 
 @Injectable()
 export class CustomerIdentitiesService {
@@ -27,6 +27,25 @@ export class CustomerIdentitiesService {
         private readonly secureRpc: SecureRpcService,
     ) {}
 
+    /** GET /api/customer/identity/identities/me — profile + IdentityDocument */
+    async getMyProfile(identityId: string) {
+        try {
+            return await this.secureRpc.send(
+                this.identityClient,
+                { cmd: "identities.getMyProfile" },
+                { id: identityId },
+            );
+        } catch (err: any) {
+            const msg = err?.message || err?.response?.message || "Lỗi lấy thông tin cá nhân";
+            const status =
+                typeof err?.statusCode === "number" ? err.statusCode
+                : typeof err?.status === "number" ? err.status
+                : 400;
+            throw new HttpException(msg, status);
+        }
+    }
+
+    /** GET provider detail for public service-detail page */
     async getProviderDetail(
         providerId: string,
         customerId?: string,

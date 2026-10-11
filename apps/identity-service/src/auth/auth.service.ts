@@ -15,11 +15,17 @@ export class AuthService {
   ) { }
 
   async register(dto: RegisterDto & { ipAddress?: string }) {
-    this.logger.log(`Registering new identity for email: ${dto.email}, role: ${dto.role}`);
+    const email = dto.email ? dto.email.trim().toLowerCase() : '';
+    this.logger.log(`Registering new identity for email: ${email}, role: ${dto.role}`);
 
     // 1. Check if email exists
-    const existingUser = await this.prisma.identity.findUnique({
-      where: { email: dto.email },
+    const existingUser = await this.prisma.identity.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
     });
     if (existingUser) {
       throw new RpcException({ message: 'Email is already registered', statusCode: 400 });
@@ -70,11 +76,17 @@ export class AuthService {
   }
 
   async login(dto: LoginDto & { ipAddress?: string }) {
-    this.logger.log(`Attempting login for email: ${dto.email}`);
+    const email = dto.email ? dto.email.trim().toLowerCase() : '';
+    this.logger.log(`Attempting login for email: ${email}`);
 
-    // 1. Find User
-    const identity = await this.prisma.identity.findUnique({
-      where: { email: dto.email },
+    // 1. Find User (case insensitive)
+    const identity = await this.prisma.identity.findFirst({
+      where: {
+        email: {
+          equals: email,
+          mode: 'insensitive',
+        },
+      },
       include: { role: true },
     });
 

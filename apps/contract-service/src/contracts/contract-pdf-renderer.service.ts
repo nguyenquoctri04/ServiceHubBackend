@@ -214,7 +214,27 @@ export class ContractPdfRendererService {
       }
       doc.moveDown(0.8);
 
-      // --- 6. CÁC ĐIỀU KHOẢN MẪU (TEMPLATE SECTIONS) ---
+      // --- 6. CÁC DỊCH VỤ ĐĂNG KÝ ---
+      useFont('bold').fontSize(10.5).fillColor('#111827').text(txt('CÁC DỊCH VỤ ĐĂNG KÝ:'));
+      doc.moveDown(0.2);
+      if (input.services && input.services.length > 0) {
+        input.services.forEach((s) => {
+          const priceStr = typeof s.unitPrice === 'number' || s.unitPrice ? `: ${this.formatMoney(s.unitPrice)} đ` : '';
+          const qtyStr = s.quantity ? ` (SL: ${s.quantity})` : '';
+          const mandStr = s.isMandatory ? ' (Bắt buộc)' : '';
+          const line = `- ${s.name}${priceStr}${qtyStr}${mandStr}`;
+          useFont('regular').fontSize(9.5).fillColor('#374151').text(txt(line), { indent: 12 });
+          doc.moveDown(0.15);
+        });
+      } else {
+        useFont('regular').fontSize(9.5).fillColor('#6b7280').text(txt('(Chưa chọn dịch vụ)'), { indent: 12 });
+      }
+      doc.moveDown(0.8);
+
+      // --- 7. CÁC ĐIỀU KHOẢN HỢP ĐỒNG ---
+      useFont('bold').fontSize(10.5).fillColor('#111827').text(txt('CÁC ĐIỀU KHOẢN HỢP ĐỒNG:'));
+      doc.moveDown(0.4);
+
       const rawSections = input.template?.content?.sections || this.getDefaultSections(input);
       const sections = (Array.isArray(rawSections) ? rawSections : []).map((s: any) => {
         const heading = typeof s.heading === 'string' ? s.heading : (typeof s.title === 'string' ? s.title : '');
@@ -243,30 +263,10 @@ export class ContractPdfRendererService {
           useFont('bold').fontSize(10).fillColor('#111827').text(txt(`Điều ${i + 1}: ${headingText}`));
           doc.moveDown(0.2);
           useFont('regular').fontSize(9.5).fillColor('#374151').text(txt(bodyText), { align: 'justify', lineGap: 2 });
-          doc.moveDown(0.6);
+          doc.moveDown(0.5);
         }
       }
 
-      // --- 7. CÁC DỊCH VỤ ĐĂNG KÝ ---
-      useFont('bold').fontSize(10).fillColor('#111827').text(txt('Các dịch vụ đăng ký:'));
-      doc.moveDown(0.2);
-      if (input.services && input.services.length > 0) {
-        input.services.forEach((s) => {
-          const priceStr = typeof s.unitPrice === 'number' || s.unitPrice ? `: ${this.formatMoney(s.unitPrice)} đ` : '';
-          const qtyStr = s.quantity ? ` (SL: ${s.quantity})` : '';
-          const mandStr = s.isMandatory ? ' (Bắt buộc)' : '';
-          const line = `- ${s.name}${priceStr}${qtyStr}${mandStr}`;
-          useFont('regular').fontSize(9.5).fillColor('#374151').text(txt(line), { indent: 12 });
-          doc.moveDown(0.15);
-        });
-      } else {
-        useFont('regular').fontSize(9.5).fillColor('#6b7280').text(txt('(Chưa chọn dịch vụ)'), { indent: 12 });
-      }
-      doc.moveDown(0.6);
-
-      // --- 8. ĐIỀU KHOẢN ÁP DỤNG (TERMS) ---
-      useFont('bold').fontSize(10).fillColor('#111827').text(txt('Điều khoản áp dụng:'));
-      doc.moveDown(0.2);
       if (input.terms && input.terms.length > 0) {
         input.terms.forEach((t, idx) => {
           const contentText = t.content.replace(/^Điều \d+[:\.]?\s*/i, '').replace(/^\d+\.\s*/, '');
@@ -277,9 +277,9 @@ export class ContractPdfRendererService {
 
           useFont('bold').fontSize(9.5).fillColor('#111827').text(txt(`Điều ${termNumber}${termTitle ? `: ${termTitle}` : '.'} `), { continued: true });
           useFont('regular').fontSize(9.5).fillColor('#374151').text(txt(termBody), { align: 'justify', lineGap: 2 });
-          doc.moveDown(0.3);
+          doc.moveDown(0.4);
         });
-      } else {
+      } else if (sections.length === 0) {
         useFont('regular').fontSize(9.5).fillColor('#6b7280').text(txt('(Chưa chọn điều khoản)'), { indent: 12 });
       }
       doc.moveDown(1.2);

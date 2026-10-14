@@ -116,6 +116,10 @@ export class CreateServiceDto {
   @IsOptional()
   requiresContract?: boolean;
 
+  @IsUUID()
+  @IsNotEmpty({ message: 'Vui lòng chọn mẫu hợp đồng cho dịch vụ' })
+  contractTemplateId: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ServicePriceDto)

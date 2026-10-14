@@ -131,6 +131,7 @@ export class AuthService {
     if (userId) {
       await this.redisService.del(`access_token:${userId}`);
       await this.redisService.del(`refresh_token:${userId}`);
+      await this.redisService.del(`user_active:${userId}`);
       this.auditEmitter.emit({
         userId,
         serviceName: 'identity-service',
@@ -160,6 +161,13 @@ export class AuthService {
       `refresh_token:${user.id}`,
       refreshToken,
       7 * 24 * 60 * 60,
+    );
+
+    // Prime user_active cache (60s TTL)
+    await this.redisService.set(
+      `user_active:${user.id}`,
+      '1',
+      60,
     );
 
     return {

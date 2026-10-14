@@ -24,6 +24,7 @@ export class UpdateServiceDto {
   @IsOptional() @IsUUID() roomTypeId?: string;
   @IsOptional() @IsBoolean() requiresPrepayment?: boolean;
   @IsOptional() @IsBoolean() requiresContract?: boolean;
+  @IsOptional() @IsUUID() contractTemplateId?: string;
   @IsOptional() @IsEnum(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ServicePriceDto) prices?: ServicePriceDto[];
   @IsOptional() @IsArray() @IsUUID('4', { each: true }) requiredServiceIds?: string[];

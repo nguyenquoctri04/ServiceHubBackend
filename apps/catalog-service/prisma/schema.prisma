@@ -77,7 +77,8 @@ model Service {
   longitude          Decimal     @map("longitude") @db.Decimal(10, 6)
 
   requiresPrepayment Boolean     @default(false) @map("requires_prepayment")
-  requiresContract   Boolean     @default(false) @map("requires_contract")
+  requiresContract   Boolean     @default(true) @map("requires_contract")
+  contractTemplateId String?     @map("contract_template_id") @db.Uuid
 
   // Cross-service reference -> identity-service
   providerId         String      @map("provider_id") @db.Uuid

@@ -4,8 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ContractStatus, Contract } from '@prisma/client-contract';
 import { ProviderBillingPatterns, SecureRpcService } from '@app/common';
+import { CustomerPatterns } from '@app/common/constants/customer.patterns';
 import { ContractTemplate, Term } from '@prisma/client-contract';
 import { createHash } from 'node:crypto';
+import { ContractPdfRendererService } from './contract-pdf-renderer.service';
 /**
  * Payload interface for creating a contract.
  */
@@ -87,6 +89,7 @@ export class ProviderContractsService {
     @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
     private readonly configService: ConfigService,
+    private readonly pdfRenderer: ContractPdfRendererService,
   ) {}
 
   /**
@@ -140,18 +143,42 @@ export class ProviderContractsService {
       }
     }
 
+    let finalServices = dto.services || [];
     if (dto.services && dto.services.length > 0) {
-      for (const s of dto.services) {
-        try {
-          const servicePrice = await this.secureRpc.send<any>(
-            this.catalogClient,
-            { cmd: 'get.service.price.by.id' },
-            { servicePriceId: s.servicePriceId }
-          );
-          if (!servicePrice) throw new Error();
-        } catch (error) {
-          throw new RpcException({ statusCode: 400, message: `Invalid servicePriceId: ${s.servicePriceId}` });
+      const ids = [...new Set(dto.services.map((s) => s.servicePriceId))];
+      try {
+        const prices = await this.secureRpc.send<any[]>(
+          this.catalogClient,
+          { cmd: 'services.prices.findForProvider' },
+          { providerId, priceIds: ids },
+          10000,
+        );
+        if (!prices || prices.length !== ids.length) {
+          throw new RpcException({ statusCode: 400, message: 'Có dịch vụ không hợp lệ hoặc không thuộc nhà cung cấp.' });
         }
+
+        const currentPriceIds = new Set(ids);
+        const resolvedServices = [...dto.services];
+
+        for (const priceItem of prices) {
+          for (const req of priceItem.service?.requirements || []) {
+            const additionalPrice = req.additionalService?.prices?.[0];
+            if (additionalPrice && !currentPriceIds.has(additionalPrice.id)) {
+              currentPriceIds.add(additionalPrice.id);
+              resolvedServices.push({
+                servicePriceId: additionalPrice.id,
+                quantity: 1,
+              });
+              this.logger.log(
+                `[createContract] Tự động bổ sung dịch vụ đi kèm bắt buộc: "${req.additionalService.name}" (${additionalPrice.id}) cho dịch vụ "${priceItem.service.name}"`,
+              );
+            }
+          }
+        }
+        finalServices = resolvedServices;
+      } catch (error: any) {
+        if (error instanceof RpcException) throw error;
+        this.logger.warn(`Could not validate/resolve accompanying services: ${error?.message || error}`);
       }
     }
 
@@ -172,8 +199,8 @@ export class ProviderContractsService {
           requireSignature: dto.requireSignature ?? false,
           createdAt: new Date(),
           updatedAt: new Date(),
-          services: dto.services?.length ? {
-            create: dto.services.map(s => ({
+          services: finalServices.length ? {
+            create: finalServices.map(s => ({
               servicePriceId: s.servicePriceId,
               quantity: s.quantity || 1,
               createdAt: new Date()
@@ -193,15 +220,15 @@ export class ProviderContractsService {
   /**
    * Updates an existing draft contract.
    */
-  async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<Contract> {
+  async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<ContractWithRelations> {
     this.logger.log(`Updating contract: ${contractId}`);
     const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) {
       throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     }
-    if (existing.status !== ContractStatus.DRAFT) {
-      throw new RpcException({ statusCode: 400, message: 'Only draft contracts can be updated' });
+    if (existing.status !== ContractStatus.DRAFT && existing.status !== ContractStatus.PENDING_SIGNATURE) {
+      throw new RpcException({ statusCode: 400, message: 'Chỉ có thể chỉnh sửa hợp đồng ở trạng thái bản nháp hoặc chờ ký.' });
     }
 
     if (dto.roomId) {
@@ -210,13 +237,42 @@ export class ProviderContractsService {
       );
       if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
     }
+    let finalServices = dto.services;
     if (dto.services !== undefined) {
       const ids = [...new Set(dto.services.map((service) => service.servicePriceId))];
       if (!ids.length || ids.length !== dto.services.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ hợp đồng không hợp lệ.' });
-      // const prices = await this.secureRpc.send<{ id: string }[]>(
-      //   this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds: ids },
-      // );
-      // if (prices.length !== ids.length) throw new RpcException({ statusCode: 400, message: 'Dịch vụ không thuộc nhà cung cấp.' });
+
+      // Tự động kiểm tra và thêm các dịch vụ đi kèm bắt buộc từ catalog-service
+      try {
+        const prices = await this.secureRpc.send<any[]>(
+          this.catalogClient,
+          { cmd: 'services.prices.findForProvider' },
+          { providerId, priceIds: ids },
+          10000,
+        );
+
+        const currentPriceIds = new Set(ids);
+        const resolvedServices = [...dto.services];
+
+        for (const priceItem of prices || []) {
+          for (const req of priceItem.service?.requirements || []) {
+            const additionalPrice = req.additionalService?.prices?.[0];
+            if (additionalPrice && !currentPriceIds.has(additionalPrice.id)) {
+              currentPriceIds.add(additionalPrice.id);
+              resolvedServices.push({
+                servicePriceId: additionalPrice.id,
+                quantity: 1,
+              });
+              this.logger.log(
+                `[updateContract] Tự động bổ sung dịch vụ đi kèm bắt buộc: "${req.additionalService.name}" (${additionalPrice.id}) cho dịch vụ "${priceItem.service.name}"`,
+              );
+            }
+          }
+        }
+        finalServices = resolvedServices;
+      } catch (err: any) {
+        this.logger.warn(`Could not resolve required accompanying services: ${err?.message || err}`);
+      }
     }
     if (dto.termIds !== undefined) {
       const ids = [...new Set(dto.termIds)];
@@ -230,20 +286,26 @@ export class ProviderContractsService {
       ? await this.generateContractNumber()
       : existing.contractNumber;
 
-    return this.prisma.contract.update({
+    const nextStatus = (finalServices !== undefined && finalServices.length > 0)
+      ? ((dto.requireSignature ?? (dto.requireSignature !== undefined ? dto.requireSignature : existing.requireSignature))
+          ? ContractStatus.PENDING_SIGNATURE
+          : ContractStatus.ACTIVE)
+      : undefined;
+
+    const updated = await this.prisma.contract.update({
       where: { id: contractId },
       data: {
+        ...(nextStatus && { status: nextStatus }),
         ...(dto.roomId !== undefined && { roomId: dto.roomId }),
         ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
         ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
         ...(dto.requireSignature !== undefined && { requireSignature: dto.requireSignature }),
-        // templateId removed
         ...(contractNumber !== existing.contractNumber && { contractNumber }),
         updatedAt: new Date(),
-        ...(dto.services !== undefined && {
+        ...(finalServices !== undefined && {
           services: {
             deleteMany: {},
-            create: dto.services.map((service) => ({
+            create: finalServices.map((service) => ({
               servicePriceId: service.servicePriceId,
               quantity: service.quantity ?? 1,
               createdAt: new Date(),
@@ -254,15 +316,44 @@ export class ProviderContractsService {
           terms: { deleteMany: {}, create: dto.termIds.map((termId) => ({ termId, createdAt: new Date() })) },
         }),
       },
-      include: { services: true, terms: true },
+      include: { services: true, terms: { include: { term: true } }, files: true },
     });
+
+    // Khi Provider hoàn thiện bản nháp (truyền services/startDate):
+    // Tự động tạo file PDF, băm SHA-256
+    if (finalServices !== undefined && finalServices.length > 0) {
+      try {
+        const file = await this.createSigningFile(providerId, contractId, updated);
+
+        void this.secureRpc.send(
+          this.notificationClient,
+          { cmd: 'notifications.createInApp' },
+          {
+            userId: existing.customerId,
+            providerId,
+            title: updated.requireSignature ? 'Nhà cung cấp đã gửi hợp đồng để ký' : 'Hợp đồng dịch vụ đã kích hoạt',
+            content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contractNumber}.${updated.requireSignature ? ' Vui lòng kiểm tra và ký hợp đồng.' : ''}`,
+          },
+        ).catch(() => {});
+
+        return {
+          ...updated,
+          files: file ? [file] : updated.files,
+        };
+      } catch (err: any) {
+        this.logger.error(`Error finalizing contract PDF: ${err?.message || err}`);
+      }
+    }
+
+    return updated;
   }
 
   /**
-   * Transitions a contract to PENDING_SIGNATURE.
+   * Transitions a contract to PENDING_SIGNATURE or ACTIVE depending on requireSignature.
+   * Generates real PDF snapshot and computes cryptographic SHA-256 hash.
    */
   async sendContract(providerId: string, contractId: string): Promise<Contract> {
-    this.logger.log(`Sending contract for signature: ${contractId}`);
+    this.logger.log(`Sending contract: ${contractId}`);
     const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
     
     if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -273,22 +364,27 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Cần hoàn thiện bản nháp trước khi gửi hợp đồng.' });
     }
 
-    if (existing.requireSignature) {
-      await this.createSigningFile(providerId, contractId);
-    }
+    // Luôn sinh snapshot PDF chính thức của hợp đồng và tính mã hash SHA-256
+    await this.createSigningFile(providerId, contractId);
+
+    const nextStatus = existing.requireSignature
+      ? ContractStatus.PENDING_SIGNATURE
+      : ContractStatus.ACTIVE;
 
     const contract = await this.prisma.contract.update({
       where: { id: contractId },
-      data: { status: ContractStatus.PENDING_SIGNATURE, updatedAt: new Date() }
+      data: { status: nextStatus, updatedAt: new Date() },
+      include: { services: true, terms: true, files: true }
     });
+
     await this.secureRpc.send(
       this.notificationClient,
       { cmd: 'notifications.createInApp' },
       {
         userId: contract.customerId,
         providerId,
-        title: 'Nhà cung cấp đã gửi hợp đồng',
-        content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}.`,
+        title: existing.requireSignature ? 'Nhà cung cấp đã gửi hợp đồng để ký' : 'Hợp đồng dịch vụ đã kích hoạt',
+        content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}.${existing.requireSignature ? ' Vui lòng kiểm tra và ký hợp đồng.' : ''}`,
       },
     );
     return contract;
@@ -304,69 +400,237 @@ export class ProviderContractsService {
     return file;
   }
 
-  private async createSigningFile(providerId: string, contractId: string) {
-    const contract = await this.prisma.contract.findFirst({
+  private async createSigningFile(providerId: string, contractId: string, existingContract?: any) {
+    const contract = existingContract || await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
-      include: { services: true, terms: { include: { term: true } } },
+      include: { services: true, terms: { include: { term: true } }, files: true },
     });
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
 
-    const document = Buffer.from(JSON.stringify({
-      version: 1,
+    // 1. Chạy song song các RPC calls để tải đầy đủ thông tin bên A, bên B, phòng và giá dịch vụ
+    const priceIds = contract.services.map((s) => s.servicePriceId);
+    const [priceList, providerInfo, customerInfo, rooms] = await Promise.all([
+      priceIds.length > 0
+        ? this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: 'services.prices.findForProvider' },
+            { providerId, priceIds },
+            20000,
+          ).catch((err) => {
+            this.logger.warn(`Could not load price info via findForProvider: ${err?.message || err}`);
+            return [];
+          })
+        : Promise.resolve([]),
+      this.secureRpc.send<any>(
+        this.identityClient,
+        { cmd: 'get.provider.by.id' },
+        providerId,
+        20000,
+      ).catch((err) => {
+        this.logger.warn(`Could not fetch provider profile: ${err?.message || err}`);
+        return {};
+      }),
+      this.secureRpc.send<any>(
+        this.identityClient,
+        { cmd: CustomerPatterns.GET_CUSTOMER_INFORMATION },
+        { customerId: contract.customerId },
+        20000,
+      ).catch((err) => {
+        this.logger.warn(`Could not fetch customer info: ${err?.message || err}`);
+        return {};
+      }),
+      contract.roomId
+        ? this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { providerId, roomIds: [contract.roomId] },
+            20000,
+          ).catch((err) => {
+            this.logger.warn(`Could not fetch room info: ${err?.message || err}`);
+            return [];
+          })
+        : Promise.resolve([]),
+    ]);
+
+    const priceMap = new Map((priceList || []).map((p: any) => [p.id, p]));
+
+    const serviceItems: Array<{
+      name: string;
+      quantity: number | string;
+      unitPrice: number | string;
+      totalPrice: number | string;
+      contractTemplateId?: string | null;
+    }> = [];
+    let totalMonthlyPrice = 0;
+
+    contract.services.forEach((s) => {
+      const priceInfo = priceMap.get(s.servicePriceId);
+      const qty = s.quantity ? Number(s.quantity) : 1;
+      const unitPrice = Number(priceInfo?.price || 0);
+      const lineTotal = unitPrice * qty;
+      totalMonthlyPrice += lineTotal;
+      serviceItems.push({
+        name: priceInfo?.service?.name || 'Dịch vụ',
+        quantity: qty,
+        unitPrice,
+        totalPrice: lineTotal,
+        contractTemplateId: priceInfo?.service?.contractTemplateId,
+      });
+    });
+
+    const roomInfo = rooms && rooms.length > 0 ? {
+      roomNumber: rooms[0].roomNumber || rooms[0].name,
+      propertyName: rooms[0].property?.propertyName || rooms[0].propertyName,
+      address: rooms[0].property?.address || rooms[0].address,
+    } : null;
+
+    // 2. Xác định ContractTemplate được gán cho dịch vụ hoặc mặc định theo loại
+    const templateId = serviceItems.find((s) => s.contractTemplateId)?.contractTemplateId;
+    let template: any = null;
+    if (templateId) {
+      template = await this.prisma.contractTemplate.findUnique({ where: { id: templateId } });
+    }
+    if (!template) {
+      if (contract.roomId) {
+        template = await this.prisma.contractTemplate.findFirst({
+          where: {
+            OR: [
+              { name: { contains: 'nhà ở', mode: 'insensitive' } },
+              { name: { contains: 'thuê', mode: 'insensitive' } },
+            ],
+            status: 'ACTIVE',
+          },
+        });
+      } else {
+        template = await this.prisma.contractTemplate.findFirst({
+          where: {
+            OR: [
+              { name: { contains: 'dịch vụ', mode: 'insensitive' } },
+            ],
+            status: 'ACTIVE',
+          },
+        });
+      }
+      if (!template) {
+        template = await this.prisma.contractTemplate.findFirst({ where: { status: 'ACTIVE' } });
+      }
+    }
+
+    // 6. Render file PDF thực sự theo template JSON và dữ liệu động
+    const pdfBuffer = await this.pdfRenderer.renderContractPdf({
       contract: {
         id: contract.id,
         contractNumber: contract.contractNumber,
-        providerId: contract.providerId,
-        customerId: contract.customerId,
-        roomId: contract.roomId,
-        startDate: contract.startDate.toISOString(),
-        endDate: contract.endDate?.toISOString() ?? null,
+        startDate: contract.startDate,
+        endDate: contract.endDate,
         requireSignature: contract.requireSignature,
-        // template was removed
-        services: contract.services.map((service) => ({ servicePriceId: service.servicePriceId, quantity: service.quantity?.toString() ?? null })),
-        terms: contract.terms.map((item) => ({ id: item.term.id, content: item.term.content })),
+        roomId: contract.roomId,
+        status: contract.status,
+        createdAt: contract.createdAt,
+        updatedAt: contract.updatedAt,
+        signedAt: contract.signedAt,
       },
-    }));
-    const hashContract = createHash('sha256').update(document).digest('hex');
-    const pdfUrl = await this.uploadContractSnapshot(contract.contractNumber, document);
+      template: template ? {
+        id: template.id,
+        name: template.name,
+        content: template.content,
+      } : null,
+      provider: {
+        id: providerId,
+        name: providerInfo?.companyName || providerInfo?.providerName || 'Nhà cung cấp',
+        businessType: providerInfo?.businessType,
+        companyName: providerInfo?.companyName,
+        taxCode: providerInfo?.taxCode || providerInfo?.businessLicenseNumber,
+        businessLicenseNumber: providerInfo?.businessLicenseNumber,
+        representativeName: providerInfo?.representativeName,
+        representativePosition: providerInfo?.representativePosition,
+        address: providerInfo?.address,
+        phone: providerInfo?.phone,
+        email: providerInfo?.email,
+        accountNumber: providerInfo?.accountNumber,
+        bankName: providerInfo?.bankName,
+      },
+      customer: {
+        id: contract.customerId,
+        name: customerInfo?.fullName || customerInfo?.name || 'Khách hàng',
+        cccd: customerInfo?.identityCardNumber || customerInfo?.cccd,
+        address: customerInfo?.address,
+        phone: customerInfo?.phone,
+        email: customerInfo?.email,
+      },
+      services: serviceItems,
+      terms: contract.terms.map((item) => ({ id: item.term.id, content: item.term.content })),
+      room: roomInfo,
+      totalMonthlyPrice,
+      depositAmount: 0,
+    });
+
+    // 7. Tính mã băm cryptographic SHA-256 trên buffer file PDF thật sự
+    const hashContract = createHash('sha256').update(pdfBuffer).digest('hex');
+
+    // 8. Upload file .pdf thật lên Cloudinary
+    const pdfUrl = await this.uploadContractSnapshot(contract.contractNumber, pdfBuffer);
+
+    // 9. Lưu bản ghi ContractFile
+    const existingFile = (contract as any)?.files?.[0] || await this.prisma.contractFile.findFirst({
+      where: { contractId },
+      orderBy: { id: 'desc' },
+    });
+
+    if (existingFile) {
+      return this.prisma.contractFile.update({
+        where: { id: existingFile.id },
+        data: { pdfUrl, hashContract },
+      });
+    }
 
     return this.prisma.contractFile.create({ data: { contractId, pdfUrl, hashContract } });
   }
 
   private async uploadContractSnapshot(contractNumber: string, content: Buffer): Promise<string> {
-    const { cloudName, apiKey, apiSecret } = this.getCloudinaryCredentials();
+    const creds = this.getCloudinaryCredentials();
+    if (creds) {
+      try {
+        const { cloudName, apiKey, apiSecret } = creds;
+        const timestamp = Math.floor(Date.now() / 1000);
+        const publicId = `servicehub/contracts/${contractNumber}-${timestamp}.pdf`;
+        const signature = createHash('sha1').update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`).digest('hex');
+        const form = new FormData();
+        form.set('file', new Blob([Uint8Array.from(content)], { type: 'application/pdf' }), `${contractNumber}.pdf`);
+        form.set('public_id', publicId);
+        form.set('timestamp', String(timestamp));
+        form.set('api_key', apiKey);
+        form.set('signature', signature);
+        form.set('resource_type', 'raw');
 
-    const timestamp = Math.floor(Date.now() / 1000);
-    const publicId = `servicehub/contracts/${contractNumber}-${timestamp}`;
-    const signature = createHash('sha1').update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`).digest('hex');
-    const form = new FormData();
-    form.set('file', new Blob([Uint8Array.from(content)], { type: 'application/json' }), `${contractNumber}.json`);
-    form.set('public_id', publicId);
-    form.set('timestamp', String(timestamp));
-    form.set('api_key', apiKey);
-    form.set('signature', signature);
-    form.set('resource_type', 'raw');
-
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, { method: 'POST', body: form });
-    if (!response.ok) {
-      this.logger.error(`Cloudinary upload failed: ${response.status}`);
-      throw new RpcException({ statusCode: 502, message: 'Không thể lưu file hợp đồng.' });
+        const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
+          method: 'POST',
+          body: form,
+          signal: AbortSignal.timeout(1500),
+        });
+        if (response.ok) {
+          const payload = await response.json() as { secure_url?: string };
+          if (payload.secure_url) return payload.secure_url;
+        }
+        this.logger.warn(`Cloudinary upload returned status ${response.status}, falling back to Data URI`);
+      } catch (err: any) {
+        this.logger.warn(`Cloudinary upload failed: ${err?.message || err}, falling back to Data URI`);
+      }
     }
-    const payload = await response.json() as { secure_url?: string };
-    if (!payload.secure_url) throw new RpcException({ statusCode: 502, message: 'Cloudinary không trả về URL file hợp đồng.' });
-    return payload.secure_url;
+    // Fallback: return base64 Data URI for the generated PDF document
+    return `data:application/pdf;base64,${content.toString('base64')}`;
   }
 
-  private getCloudinaryCredentials(): { cloudName: string; apiKey: string; apiSecret: string } {
+  private getCloudinaryCredentials(): { cloudName: string; apiKey: string; apiSecret: string } | null {
     const cloudinaryUrl = this.configService.get<string>('CLOUDINARY_URL');
     if (!cloudinaryUrl) {
-      throw new RpcException({ statusCode: 503, message: 'Chưa cấu hình CLOUDINARY_URL để lưu hợp đồng.' });
+      return null;
     }
 
     try {
       const parsed = new URL(cloudinaryUrl);
       if (parsed.protocol !== 'cloudinary:' || !parsed.hostname || !parsed.username || !parsed.password) {
-        throw new Error('Invalid Cloudinary URL');
+        return null;
       }
 
       return {
@@ -375,10 +639,7 @@ export class ProviderContractsService {
         apiSecret: decodeURIComponent(parsed.password),
       };
     } catch {
-      throw new RpcException({
-        statusCode: 503,
-        message: 'CLOUDINARY_URL không hợp lệ. Cần định dạng cloudinary://API_KEY:API_SECRET@CLOUD_NAME.',
-      });
+      return null;
     }
   }
 
@@ -443,12 +704,29 @@ export class ProviderContractsService {
     const customerIds = [...new Set(contracts.map((contract) => contract.customerId))];
     const roomIds = [...new Set(contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []))];
     const priceIds = [...new Set(contracts.flatMap((contract) => contract.services.map((service) => service.servicePriceId)))];
-    const identities = [];
-    const rooms = [];
-    const prices = [];
-    // Promise.all removed
-    // removed identityClient call
-    // removed promise.all array closure
+    const [identities, rooms, prices] = await Promise.all([
+      customerIds.length > 0
+        ? this.secureRpc.send<any[]>(
+            this.identityClient,
+            { cmd: 'provider.identities.batch' },
+            { identityIds: customerIds },
+          ).catch(() => [])
+        : [],
+      roomIds.length > 0
+        ? this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { providerId, roomIds },
+          ).catch(() => [])
+        : [],
+      priceIds.length > 0
+        ? this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: 'services.prices.findForProvider' },
+            { providerId, priceIds },
+          ).catch(() => [])
+        : [],
+    ]);
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
     const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
     const pricesById = new Map(prices.map((price) => [price.id, price] as const));
@@ -460,7 +738,7 @@ export class ProviderContractsService {
         ...contract,
         customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
         customerPhone: customer?.phone || '',
-        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        roomName: room?.roomNumber || (contract.roomId ? 'Chưa xếp phòng' : null),
         services: contract.services.map((service) => {
           const price = pricesById.get(service.servicePriceId);
           return {
@@ -578,9 +856,22 @@ export class ProviderContractsService {
     });
     const customerIds = contracts.map((contract) => contract.customerId);
     const roomIds = contracts.flatMap((contract) => contract.roomId ? [contract.roomId] : []);
-    const identities = [];
-    const rooms = [];
-    // removed promise.all
+    const [identities, rooms] = await Promise.all([
+      customerIds.length > 0
+        ? this.secureRpc.send<CustomerIdentity[]>(
+            this.identityClient,
+            { cmd: 'provider.identities.batch' },
+            { identityIds: customerIds },
+          ).catch(() => [])
+        : [],
+      roomIds.length > 0
+        ? this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { providerId, roomIds },
+          ).catch(() => [])
+        : [],
+    ]);
     const identitiesById = new Map<string, CustomerIdentity>(
       identities.map((identity) => [identity.id, identity] as const),
     );
@@ -592,7 +883,7 @@ export class ProviderContractsService {
       return [contract.id, {
         ...contract,
         customerName: identity?.fullName || identity?.email || identity?.phone || 'Khách hàng',
-        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        roomName: room?.roomNumber || (contract.roomId ? 'Chưa xếp phòng' : null),
       }];
     }));
   }
@@ -603,7 +894,14 @@ export class ProviderContractsService {
       where: { providerId, status: ContractStatus.ACTIVE, roomId: { in: roomIds } },
       select: { id: true, contractNumber: true, roomId: true, customerId: true, status: true, services: true },
     });
-    const identities = [];
+    const customerIds = [...new Set(contracts.map((c) => c.customerId))];
+    const identities = customerIds.length > 0
+      ? await this.secureRpc.send<CustomerIdentity[]>(
+          this.identityClient,
+          { cmd: 'provider.identities.batch' },
+          { identityIds: customerIds },
+        ).catch(() => [])
+      : [];
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
     return contracts.map((contract) => {
       const customer = identitiesById.get(contract.customerId);
@@ -645,8 +943,14 @@ export class ProviderContractsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    const customerIds = restrictions.flatMap((restriction) => restriction.customerId ? [restriction.customerId] : []);
-    const identities = [];
+    const customerIds = [...new Set(restrictions.flatMap((restriction) => restriction.customerId ? [restriction.customerId] : []))];
+    const identities = customerIds.length > 0
+      ? await this.secureRpc.send<CustomerIdentity[]>(
+          this.identityClient,
+          { cmd: 'provider.identities.batch' },
+          { identityIds: customerIds },
+        ).catch(() => [])
+      : [];
     const identitiesById = new Map(identities.map((identity) => [identity.id, identity]));
 
     return restrictions.map((restriction) => {

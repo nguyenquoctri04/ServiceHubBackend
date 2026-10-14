@@ -126,6 +126,16 @@ export class ProvidersService {
         providerType: true,
         status: true,
         address: true,
+        phone: true,
+        email: true,
+        companyName: true,
+        taxCode: true,
+        businessLicenseNumber: true,
+        representativeName: true,
+        representativePosition: true,
+        businessType: true,
+        numberCard: true,
+        nameBank: true,
       },
     });
 
@@ -142,7 +152,17 @@ export class ProvidersService {
       providerName: provider.providerName,
       providerType: provider.providerType as ProviderRpcSummary['providerType'],
       status: provider.status as ProviderRpcSummary['status'],
-      address: provider.address,
+      address: provider.address || undefined,
+      phone: provider.phone || undefined,
+      email: provider.email || undefined,
+      companyName: provider.companyName || undefined,
+      taxCode: provider.taxCode || undefined,
+      businessLicenseNumber: provider.businessLicenseNumber || undefined,
+      representativeName: provider.representativeName || undefined,
+      representativePosition: provider.representativePosition || undefined,
+      businessType: provider.businessType || undefined,
+      accountNumber: provider.numberCard || undefined,
+      bankName: provider.nameBank || undefined,
     };
   }
 

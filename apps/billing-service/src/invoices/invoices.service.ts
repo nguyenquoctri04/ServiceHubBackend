@@ -86,8 +86,29 @@ export class InvoicesService {
       }),
     ]);
 
+    let monthlyRevenue = Number(monthlyInvoices._sum.total ?? 0);
+    if (monthlyRevenue === 0) {
+      const latestInvoice = await this.prisma.invoice.findFirst({
+        where: { providerId },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      });
+      if (latestInvoice) {
+        const latestMonthStart = new Date(latestInvoice.createdAt.getFullYear(), latestInvoice.createdAt.getMonth(), 1);
+        const latestMonthEnd = new Date(latestInvoice.createdAt.getFullYear(), latestInvoice.createdAt.getMonth() + 1, 0, 23, 59, 59);
+        const latestAggregate = await this.prisma.invoice.aggregate({
+          where: {
+            providerId,
+            createdAt: { gte: latestMonthStart, lte: latestMonthEnd },
+          },
+          _sum: { total: true },
+        });
+        monthlyRevenue = Number(latestAggregate._sum.total ?? 0);
+      }
+    }
+
     return {
-      monthlyRevenue: Number(monthlyInvoices._sum.total ?? 0),
+      monthlyRevenue,
       unpaidRevenue: Number(unpaidInvoices._sum.total ?? 0),
     };
   }

@@ -14,10 +14,10 @@ export function parseRedisUrl(urlStr?: string): RedisOptions {
       password: redisUrl.password ? decodeURIComponent(redisUrl.password) : undefined,
       tls: isTlsRedis ? { rejectUnauthorized: false } : undefined,
       keepAlive: 10000,
-      connectTimeout: 5000,
-      commandTimeout: 3000,
+      connectTimeout: 10000,
+      commandTimeout: 10000,
       retryStrategy: (times) => Math.min(times * 200, 5000),
-      maxRetriesPerRequest: 1,
+      maxRetriesPerRequest: 3,
     };
   } catch (e) {
     return { host: 'localhost', port: 6379, keepAlive: 10000 };

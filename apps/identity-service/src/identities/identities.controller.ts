@@ -37,4 +37,16 @@ export class IdentitiesController {
   ) {
     return this.identitiesService.resolveNotificationRecipients(payload);
   }
+
+  @MessagePattern({ cmd: 'provider.identities.batch' })
+  async getIdentitiesBatch(@Payload() payload: { identityIds: string[] }) {
+    return this.identitiesService.getIdentitiesBatch(payload?.identityIds || []);
+  }
+
+  @MessagePattern({ cmd: 'get.customer.by.id' })
+  async getCustomerById(@Payload() payload: { customerId: string }) {
+    const list = await this.identitiesService.getIdentitiesBatch([payload?.customerId]);
+    return list[0] || null;
+  }
 }
+

@@ -14,7 +14,7 @@ describe('ProviderContractsService.findContracts', () => {
     const secureRpc = {
       send: jest.fn().mockResolvedValue(null),
     };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any);
+    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any, { renderContractPdf: jest.fn() } as any);
 
     await expect(service.findContracts({ providerId: 'provider-1', page: 1, limit: 10 })).resolves.toEqual([
       expect.objectContaining({
@@ -24,13 +24,13 @@ describe('ProviderContractsService.findContracts', () => {
     ]);
 
     expect(prisma.contract.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      include: expect.objectContaining({ template: true }),
+      include: expect.objectContaining({ services: true }),
     }));
   });
 
   it('reports room references only inside the active provider workspace', async () => {
     const prisma = { contract: { count: jest.fn().mockResolvedValue(1) } };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { renderContractPdf: jest.fn() } as any);
 
     await expect(service.hasRoomReferences('provider-1', 'room-1')).resolves.toEqual({ hasReferences: true });
     expect(prisma.contract.count).toHaveBeenCalledWith({
@@ -46,7 +46,7 @@ describe('ProviderContractsService.findContracts', () => {
       },
     };
     const secureRpc = { send: jest.fn().mockResolvedValue(undefined) };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any);
+    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any, { renderContractPdf: jest.fn() } as any);
 
     await expect(service.cancelContract('provider-1', 'contract-1', '')).rejects.toMatchObject({ message: expect.stringContaining('lý do') });
 

@@ -61,7 +61,18 @@ export class MetersService {
       previousReadings.map((reading) => [`${reading.roomId}:${reading.meterId}`, reading] as const),
     );
 
-    return Object.fromEntries(roomIds.map((roomId) => [roomId, meters.map((meter) => {
+    // Rooms typically have 2 meters: electricity and water.
+    // Deduplicate active meters by serviceId and unit to prevent repeating meters per room.
+    const distinctMetersMap = new Map<string, typeof meters[number]>();
+    for (const meter of meters) {
+      const key = meter.serviceId || meter.unit;
+      if (!distinctMetersMap.has(key)) {
+        distinctMetersMap.set(key, meter);
+      }
+    }
+    const distinctMeters = Array.from(distinctMetersMap.values());
+
+    return Object.fromEntries(roomIds.map((roomId) => [roomId, distinctMeters.map((meter) => {
       const key = `${roomId}:${meter.id}`;
       return {
         meter: { id: meter.id, serviceId: meter.serviceId, serviceName: meter.name, unit: meter.unit },

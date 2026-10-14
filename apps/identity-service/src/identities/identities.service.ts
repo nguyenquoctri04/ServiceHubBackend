@@ -166,4 +166,62 @@ export class IdentitiesService {
       },
     };
   }
+
+  async getIdentitiesBatch(identityIds: string[]) {
+    if (!identityIds || identityIds.length === 0) return [];
+    const uniqueIds = [...new Set(identityIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const identities = await this.prisma.identity.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        status: true,
+        isEkycVerified: true,
+        verifications: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            status: true,
+            documents: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                fullName: true,
+                documentNumber: true,
+                dateOfBirth: true,
+                gender: true,
+                nationality: true,
+                placeOfOrigin: true,
+                placeOfResidence: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return identities.map((id) => {
+      const doc = id.verifications[0]?.documents[0];
+      return {
+        id: id.id,
+        email: id.email,
+        phone: id.phone,
+        status: id.status,
+        isEkycVerified: id.isEkycVerified,
+        fullName: doc?.fullName || '',
+        cccd: doc?.documentNumber || '',
+        documentNumber: doc?.documentNumber || '',
+        dateOfBirth: doc?.dateOfBirth ? doc.dateOfBirth.toISOString() : null,
+        gender: doc?.gender || '',
+        address: doc?.placeOfResidence || '',
+        placeOfResidence: doc?.placeOfResidence || '',
+        placeOfOrigin: doc?.placeOfOrigin || '',
+        nationality: doc?.nationality || 'Việt Nam',
+      };
+    });
+  }
 }
+

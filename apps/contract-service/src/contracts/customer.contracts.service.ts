@@ -507,6 +507,12 @@ export class CustomerContractsService {
     }
 
     private async computeFileHash(pdfUrl: string): Promise<string> {
+        if (pdfUrl.startsWith("data:application/pdf")) {
+            const base64Data = pdfUrl.includes(",") ? pdfUrl.split(",")[1] : pdfUrl;
+            const buffer = Buffer.from(base64Data, "base64");
+            return createHash("sha256").update(buffer).digest("hex");
+        }
+
         const response = await fetch(pdfUrl);
 
         if (!response.ok) {

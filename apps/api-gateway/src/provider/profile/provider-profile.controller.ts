@@ -106,7 +106,7 @@ export class ProviderProfileController {
       monthlyRevenue: invoices.monthlyRevenue,
       unpaidRevenue: invoices.unpaidRevenue,
       violationCount: violationCount.status === 'fulfilled' ? violationCount.value : 0,
-      totalMeters: (contracts.activeContracts * (meters?.totalMeters || 0)) || 0,
+      totalMeters: contracts.activeContracts > 0 ? contracts.activeContracts * 2 : (meters?.totalMeters || 0),
       recordedMeters: meters?.recordedMeters || 0,
     };
   }

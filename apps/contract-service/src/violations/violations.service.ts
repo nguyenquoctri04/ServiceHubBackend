@@ -39,34 +39,54 @@ export class ViolationsService {
 
     // Never expose reportedBy. The UI receives only permissions derived from
     // the authenticated actor, so the reporter's identity remains private.
-    return cases.map(c => ({
-      id: c.id,
-      contractId: c.contractId,
-      contractNumber: c.contract?.contractNumber || '',
-      roomId: c.contract?.roomId,
-      customerId: c.contract?.customerId,
-      // Removed UI-specific mapping fields
-      violationType: c.violationRule?.name || ViolationType.OTHER,
-      description: c.description,
-      status: c.status,
-      violationDate: c.occurredAt,
-      reportView: c.reportedBy === actorId ? 'REPORTED_BY_ME' : 'REPORTED_AGAINST_ME',
-      canProviderProcess: c.reportedBy === actorId && c.status === 'REPORTED',
-      canProviderAppeal: c.reportedBy !== actorId && c.status === 'REPORTED',
-      actions: c.actions.map(a => ({
-        id: a.id,
-        actionType: a.actionType,
-        description: a.reason || '',
-        createdAt: a.createdAt
-      })),
-      appeals: c.appeals.map(ap => ({
-        id: ap.id,
-        reason: ap.reason,
-        status: ap.status,
-        resolutionNote: ap.resolutionNote,
-        createdAt: ap.createdAt
-      }))
-    }));
+    // Categorize correctly:
+    // If rule targets CUSTOMER -> Customer is violator ("Khách hàng vi phạm"), provider manages/takes action.
+    // If rule targets PROVIDER -> Provider is accused ("Bị báo cáo"), provider can appeal.
+    // If targetType is BOTH or undefined -> fallback to reportedBy === actorId.
+    return cases.map(c => {
+      const targetType = c.violationRule?.targetType;
+      let isCustomerViolation: boolean;
+
+      if (targetType === 'CUSTOMER') {
+        isCustomerViolation = true;
+      } else if (targetType === 'PROVIDER') {
+        isCustomerViolation = false;
+      } else {
+        isCustomerViolation = c.reportedBy === actorId;
+      }
+
+      const reportView = isCustomerViolation ? 'REPORTED_BY_ME' : 'REPORTED_AGAINST_ME';
+      const canProviderProcess = isCustomerViolation && c.status === 'REPORTED';
+      const canProviderAppeal = !isCustomerViolation && c.status === 'REPORTED';
+
+      return {
+        id: c.id,
+        contractId: c.contractId,
+        contractNumber: c.contract?.contractNumber || '',
+        roomId: c.contract?.roomId,
+        customerId: c.contract?.customerId,
+        violationType: c.violationRule?.name || ViolationType.OTHER,
+        description: c.description,
+        status: c.status,
+        violationDate: c.occurredAt,
+        reportView,
+        canProviderProcess,
+        canProviderAppeal,
+        actions: c.actions.map(a => ({
+          id: a.id,
+          actionType: a.actionType,
+          description: a.reason || '',
+          createdAt: a.createdAt
+        })),
+        appeals: c.appeals.map(ap => ({
+          id: ap.id,
+          reason: ap.reason,
+          status: ap.status,
+          resolutionNote: ap.resolutionNote,
+          createdAt: ap.createdAt
+        }))
+      };
+    });
   }
 
   async countByProvider(providerId: string, status?: string): Promise<number> {
@@ -141,7 +161,15 @@ export class ViolationsService {
     const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
       const violation = await tx.violationCase.findFirst({
-        where: { id: data.violationCaseId, providerId: data.providerId, reportedBy: data.performedBy, status: 'REPORTED' },
+        where: {
+          id: data.violationCaseId,
+          providerId: data.providerId,
+          status: 'REPORTED',
+          OR: [
+            { reportedBy: data.performedBy },
+            { violationRule: { targetType: { in: ['CUSTOMER', 'BOTH'] } } },
+          ],
+        },
         include: { contract: { select: { id: true, customerId: true, status: true } } },
       });
       if (!violation) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể xử lý.' });

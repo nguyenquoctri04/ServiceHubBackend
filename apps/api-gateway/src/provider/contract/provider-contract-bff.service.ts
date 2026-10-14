@@ -31,20 +31,50 @@ export class ProviderContractBffService {
     const roomsById = new Map((rooms || []).map((r: any) => [r.id, r]));
     const pricesById = new Map((prices || []).map((p: any) => [p.id, p]));
 
+    const templateIds = [
+      ...new Set([
+        ...contracts.map((c) => c.templateId).filter(Boolean),
+        ...(prices || []).map((p: any) => p.service?.contractTemplateId).filter(Boolean),
+      ]),
+    ];
+
+    const templates = templateIds.length > 0
+      ? await Promise.all(
+          templateIds.map((templateId) =>
+            this.proxy.send<any>(this.contractClient, { cmd: ProviderContractPatterns.TEMPLATES_FIND_ONE }, { providerId, templateId }).catch(() => null),
+          ),
+        )
+      : [];
+    const templatesById = new Map((templates || []).filter(Boolean).map((t: any) => [t.id, t]));
+
     return contracts.map((contract) => {
       const customer = contract.customerId ? identitiesById.get(contract.customerId) : null;
       const room = contract.roomId ? roomsById.get(contract.roomId) : null;
+      const resolvedTemplateId = contract.templateId ||
+        contract.services?.map((s: any) => pricesById.get(s.servicePriceId)?.service?.contractTemplateId).find(Boolean) ||
+        null;
+      const template = resolvedTemplateId ? (templatesById.get(resolvedTemplateId) || contract.template || null) : (contract.template || null);
+
       return {
         ...contract,
         customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
         customerPhone: customer?.phone || '',
-        roomName: room?.roomNumber || 'Chưa xếp phòng',
+        customerEmail: customer?.email || '',
+        customerCccd: customer?.cccd || '',
+        customerAddress: customer?.address || '',
+        customerGender: customer?.gender || '',
+        customerDob: customer?.dateOfBirth || '',
+        isEkycVerified: customer?.isEkycVerified ?? false,
+        roomName: room?.roomNumber || (contract.roomId ? 'Chưa xếp phòng' : null),
+        templateId: resolvedTemplateId,
+        template,
         services: contract.services?.map((service: any) => {
           const price = pricesById.get(service.servicePriceId);
           return {
             ...service,
             serviceName: price?.service?.name || 'Chưa có tên dịch vụ',
             price: Number(price?.price ?? 0),
+            contractTemplateId: price?.service?.contractTemplateId,
           };
         }) || [],
       };
@@ -105,9 +135,11 @@ export class ProviderContractBffService {
   }
 
   async getCustomers(providerId: string) {
-    const customers = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId });
+    const rawCustomers = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CUSTOMERS_FIND }, { providerId });
     
-    if (!customers || !customers.length) return customers;
+    if (!rawCustomers || !rawCustomers.length) return rawCustomers;
+
+    const customers = await this.enrichContracts(providerId, rawCustomers);
 
     const contractIds = customers.map((c: any) => c.id).filter(Boolean);
     const outstandingTotals = contractIds.length > 0 ? await this.proxy.send(

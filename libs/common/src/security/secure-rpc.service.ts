@@ -20,7 +20,7 @@ export class SecureRpcService {
         client: ClientProxy,
         pattern: string | object,
         data: any = {},
-        timeoutMs: number = 5000,
+        timeoutMs: number = 60000,
     ): Promise<T> {
         const patternKey =
             typeof pattern === "string" ? pattern : JSON.stringify(pattern);
@@ -34,7 +34,7 @@ export class SecureRpcService {
 
         return firstValueFrom(
             client.send<T>(pattern, request).pipe(
-                timeout(15000),
+                timeout(timeoutMs || 60000),
                 catchError(err => {
                     if (err && err.name === 'TimeoutError') {
                         return throwError(() => new RequestTimeoutException('Service unavailable or timed out'));

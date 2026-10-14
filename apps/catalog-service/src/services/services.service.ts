@@ -81,7 +81,33 @@ export class ServicesService {
   async findServicePricesForProvider(_providerId: string, priceIds: string[]) {
     return this.prisma.servicePrice.findMany({
       where: { id: { in: priceIds } },
-      select: { id: true, price: true, service: { select: { id: true, name: true } } },
+      select: {
+        id: true,
+        price: true,
+        service: {
+          select: {
+            id: true,
+            name: true,
+            contractTemplateId: true,
+            requirements: {
+              where: { status: 'ACTIVE' },
+              include: {
+                additionalService: {
+                  select: {
+                    id: true,
+                    name: true,
+                    prices: {
+                      orderBy: { effectiveFrom: 'desc' },
+                      take: 1,
+                      select: { id: true, price: true, unit: true },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -190,7 +216,8 @@ export class ServicesService {
           status: 'ACTIVE',
           serviceType: dto.serviceType || 'NORMAL',
           requiresPrepayment: dto.requiresPrepayment ?? false,
-          requiresContract: dto.requiresContract ?? false,
+          requiresContract: dto.requiresContract ?? true,
+          contractTemplateId: dto.contractTemplateId,
           roomTypeId: dto.roomTypeId,
           billingRuleId: rule.id,
           createdAt: new Date(),
@@ -376,6 +403,7 @@ export class ServicesService {
           ...(dto.roomTypeId !== undefined && { roomTypeId: dto.roomTypeId }),
           ...(dto.requiresPrepayment !== undefined && { requiresPrepayment: dto.requiresPrepayment }),
           ...(dto.requiresContract !== undefined && { requiresContract: dto.requiresContract }),
+          ...(dto.contractTemplateId !== undefined && { contractTemplateId: dto.contractTemplateId }),
           ...(dto.status !== undefined && { status: dto.status }),
           updatedAt: new Date(),
         },

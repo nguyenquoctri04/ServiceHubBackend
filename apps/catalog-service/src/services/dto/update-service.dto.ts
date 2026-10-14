@@ -53,6 +53,10 @@ export class UpdateServiceDto {
   requiresContract?: boolean;
 
   @IsOptional()
+  @IsUUID()
+  contractTemplateId?: string;
+
+  @IsOptional()
   @IsEnum(['ACTIVE', 'INACTIVE'])
   status?: 'ACTIVE' | 'INACTIVE';
 

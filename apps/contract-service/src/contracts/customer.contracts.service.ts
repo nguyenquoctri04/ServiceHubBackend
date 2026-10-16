@@ -336,6 +336,20 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             fromEmail,
         } = command;
 
+        const customerInformation = await this.secureRpc.send<{
+            identity?: { isEkycVerified?: boolean };
+        }>(
+            this.identityClient,
+            { cmd: CustomerPatterns.GET_CUSTOMER_INFORMATION },
+            { customerId },
+        );
+
+        if (customerInformation?.identity?.isEkycVerified !== true) {
+            throw new ForbiddenException(
+                "Bạn cần xác thực eKYC trước khi đăng ký dịch vụ.",
+            );
+        }
+
         if (quantity < 1) {
             throw new BadRequestException("Số lượng không hợp lệ");
         }
@@ -418,23 +432,23 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
 
         const providerIdentityId = activeProviders[0].identityId;
 
-        try {
-            await this.secureRpc.send(
-                this.notificationClient,
-                { cmd: CustomerPatterns.NOTIFY_SERVICE_REGISTRATION },
-                {
-                    providerUserId: providerIdentityId,
-                    providerId,
-                    fromEmail: fromEmail ?? "Người dùng ẩn danh",
-                    serviceName: priceInfo.serviceName,
-                    contractNumber: result.contract.contractNumber,
-                    requireSignature,
-                    occurredAt: now.toISOString(),
-                },
-            );
-        } catch (err) {
-            console.error("Gửi thông báo cho provider thất bại:", err);
-        }
+        // try {
+        //     await this.secureRpc.send(
+        //         this.notificationClient,
+        //         { cmd: CustomerPatterns.NOTIFY_SERVICE_REGISTRATION },
+        //         {
+        //             providerUserId: providerIdentityId,
+        //             providerId,
+        //             fromEmail: fromEmail ?? "Người dùng ẩn danh",
+        //             serviceName: priceInfo.serviceName,
+        //             contractNumber: result.contract.contractNumber,
+        //             requireSignature,
+        //             occurredAt: now.toISOString(),
+        //         },
+        //     );
+        // } catch (err) {
+        //     console.error("Gửi thông báo cho provider thất bại:", err);
+        // }
 
         return true;
     }
@@ -621,15 +635,17 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
 
     private usedServiceInclude() {
         return {
-            services: { take: 1 },
+            services: true,
             billingPeriods: { orderBy: { periodStart: "asc" as const } },
             files: true,
             terms: { include: { term: true } },
             violationCases: {
-                where: { status: "REPORTED" as const },
                 orderBy: { createdAt: "desc" as const },
-                take: 1,
-                include: { violationRule: true, evidence: true },
+                include: {
+                    violationRule: true,
+                    evidence: true,
+                    actions: { select: { actionType: true } },
+                },
             },
         };
     }
@@ -666,7 +682,9 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
         const servicePriceIds = [
             ...new Set(
                 contracts
-                    .map((c) => c.services[0]?.servicePriceId)
+                    .flatMap((c) =>
+                        c.services.map((service: any) => service.servicePriceId),
+                    )
                     .filter((x): x is string => !!x),
             ),
         ];
@@ -714,15 +732,36 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
         }
 
         return contracts.map((contract) => {
-            const contractService = contract.services[0] ?? null;
+            const contractService =
+                contract.services.find(
+                    (item: any) =>
+                        priceMap.get(item.servicePriceId)?.service?.serviceType ===
+                        "NORMAL",
+                ) ?? contract.services[0] ?? null;
             const priceDetail = contractService
                 ? priceMap.get(contractService.servicePriceId)
                 : undefined;
             const provider = providerMap.get(contract.providerId);
             const file = contract.files[0] ?? null;
-            const violation = contract.violationCases[0] ?? null;
-
             const status = this.deriveStatus(contract.status);
+            const contractViolations = contract.violationCases;
+            const violation =
+                status === "ACTIVE"
+                    ? contractViolations.find(
+                          (item: any) =>
+                              item.reportedBy === contract.customerId &&
+                              item.status !== "CANCELLED",
+                      ) ?? null
+                    : status === "TERMINATED"
+                      ? contractViolations.find((item: any) =>
+                            item.actions.some(
+                                (action: any) =>
+                                    action.actionType === "TERMINATE_CONTRACT",
+                            ),
+                        ) ?? null
+                      : contractViolations.find(
+                            (item: any) => item.status === "REPORTED",
+                        ) ?? null;
             const requiresPrepayment =
                 priceDetail?.service?.billingRule?.billingFrequency === "ONE_TIME";
 
@@ -959,6 +998,61 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             ));
         }
         return this.transitionAfterCustomerApproval(contract.id);
+    }
+
+    async cancelService(customerId: string, contractId: string) {
+        const contract = await this.prisma.contract.findFirst({
+            where: { id: contractId, customerId },
+            select: { id: true, status: true },
+        });
+        if (!contract) {
+            throw new RpcException(
+                new NotFoundException("Không tìm thấy dịch vụ đã đăng ký."),
+            );
+        }
+
+        const cancellableStatuses = [
+            "DRAFT",
+            "PENDING_SIGNATURE",
+            "PENDING_PAYMENT",
+        ] as const;
+        if (
+            !cancellableStatuses.includes(
+                contract.status as (typeof cancellableStatuses)[number],
+            )
+        ) {
+            throw new RpcException(
+                new ConflictException(
+                    "Chỉ có thể hủy dịch vụ đang chờ nhà cung cấp duyệt, chờ xác nhận hoặc chờ thanh toán.",
+                ),
+            );
+        }
+
+        if (contract.status === "PENDING_PAYMENT") {
+            await this.secureRpc.send(
+                this.billingClient,
+                { cmd: CustomerPatterns.CANCEL_CONTRACT_PREPAYMENT_INVOICE },
+                { contractId },
+            );
+        }
+
+        const updated = await this.prisma.contract.updateMany({
+            where: {
+                id: contractId,
+                customerId,
+                status: contract.status,
+            },
+            data: { status: "CANCELLED", updatedAt: new Date() },
+        });
+        if (updated.count !== 1) {
+            throw new RpcException(
+                new ConflictException(
+                    "Trạng thái dịch vụ đã thay đổi. Vui lòng tải lại danh sách.",
+                ),
+            );
+        }
+
+        return { contractId, status: "CANCELLED" as const };
     }
 
     private async transitionAfterCustomerApproval(contractId: string) {

@@ -99,6 +99,8 @@ export class CustomerPatterns {
 
     public static readonly GET_VIOLATION_RULES =
         this.VIOLATIONS + "get-violation-rules";
+    public static readonly CREATE_VIOLATION_REPORT =
+        this.VIOLATIONS + "create-violation-report";
 
     public static readonly GET_CONTRACT_FILE_FOR_VIEWING =
         this.CONTRACTS + "get-contract-file-for-viewing";
@@ -108,10 +110,14 @@ export class CustomerPatterns {
 
     public static readonly CONFIRM_CONTRACT_TERMS =
         this.CONTRACTS + "confirm-contract-terms";
+    public static readonly CANCEL_CUSTOMER_CONTRACT =
+        this.CONTRACTS + "cancel-customer-contract";
     public static readonly CREATE_CONTRACT_PREPAYMENT_INVOICE =
         this.CONTRACTS + "create-prepayment-invoice";
     public static readonly DELETE_CONTRACT_PREPAYMENT_INVOICE =
         this.CONTRACTS + "delete-prepayment-invoice";
+    public static readonly CANCEL_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "cancel-prepayment-invoice";
 
     /*
         ===============================

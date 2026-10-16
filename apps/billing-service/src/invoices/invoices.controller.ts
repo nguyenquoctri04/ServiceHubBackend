@@ -24,59 +24,59 @@ export class InvoicesController {
     return this.service.findOutstandingTotals(payload.providerId, payload.contractIds);
   }
 
-  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_PAY })
-  payInvoice(
-    @Payload()
-    payload: {
-      providerId:     string;
-      invoiceId:      string;
-      dto:            PayInvoiceDto;
-      idempotencyKey: string;
-      ipAddr?:        string;
-    },
-  ) {
-    return this.service.payInvoice(
-      payload.providerId,
-      payload.invoiceId,
-      payload.dto,
-      payload.idempotencyKey,
-      payload.ipAddr,
-    );
-  }
+  // @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_PAY })
+  // payInvoice(
+  //   @Payload()
+  //   payload: {
+  //     providerId:     string;
+  //     invoiceId:      string;
+  //     dto:            PayInvoiceDto;
+  //     idempotencyKey: string;
+  //     ipAddr?:        string;
+  //   },
+  // ) {
+  //   return this.service.payInvoice(
+  //     payload.providerId,
+  //     payload.invoiceId,
+  //     payload.dto,
+  //     payload.idempotencyKey,
+  //     payload.ipAddr,
+  //   );
+  // }
 
   // ── Customer patterns ──────────────────────────────────────────────────────
 
-  @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_FIND })
-  findCustomerInvoices(
-    @Payload() payload: { customerId: string; query: InvoiceQueryDto },
-  ) {
-    return this.service.findCustomerInvoices(payload.customerId, payload.query);
-  }
+  // @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_FIND })
+  // findCustomerInvoices(
+  //   @Payload() payload: { customerId: string; query: InvoiceQueryDto },
+  // ) {
+  //   return this.service.findCustomerInvoices(payload.customerId, payload.query);
+  // }
 
-  @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_FIND_ONE })
-  findOneCustomerInvoice(
-    @Payload() payload: { customerId: string; invoiceId: string },
-  ) {
-    return this.service.findOneCustomerInvoice(payload.customerId, payload.invoiceId);
-  }
+  // @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_FIND_ONE })
+  // findOneCustomerInvoice(
+  //   @Payload() payload: { customerId: string; invoiceId: string },
+  // ) {
+  //   return this.service.findOneCustomerInvoice(payload.customerId, payload.invoiceId);
+  // }
 
-  @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_PAY })
-  customerPayInvoice(
-    @Payload()
-    payload: {
-      customerId: string;
-      invoiceId:  string;
-      dto:        PayInvoiceDto;
-      ipAddr?:    string;
-    },
-  ) {
-    return this.service.customerPayInvoice(
-      payload.customerId,
-      payload.invoiceId,
-      payload.dto,
-      payload.ipAddr,
-    );
-  }
+  // @MessagePattern({ cmd: CustomerBillingPatterns.INVOICES_PAY })
+  // customerPayInvoice(
+  //   @Payload()
+  //   payload: {
+  //     customerId: string;
+  //     invoiceId:  string;
+  //     dto:        PayInvoiceDto;
+  //     ipAddr?:    string;
+  //   },
+  // ) {
+  //   return this.service.customerPayInvoice(
+  //     payload.customerId,
+  //     payload.invoiceId,
+  //     payload.dto,
+  //     payload.ipAddr,
+  //   );
+  // }
 
   @MessagePattern({ cmd: 'billing.invoices.dashboardStats' })
   async getDashboardStats(@Payload() payload: { providerId: string }) {

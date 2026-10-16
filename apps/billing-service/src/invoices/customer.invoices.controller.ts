@@ -43,4 +43,9 @@ export class CustomerInvoicesController {
     deleteContractPrepaymentInvoice(@Payload() payload: { contractId: string }) {
         return this.service.deleteContractPrepaymentInvoice(payload.contractId);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.CANCEL_CONTRACT_PREPAYMENT_INVOICE })
+    cancelContractPrepaymentInvoice(@Payload() payload: { contractId: string }) {
+        return this.service.cancelContractPrepaymentInvoice(payload.contractId);
+    }
 }

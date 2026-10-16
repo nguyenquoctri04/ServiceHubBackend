@@ -87,7 +87,14 @@ export class AuthService {
           mode: 'insensitive',
         },
       },
-      include: { role: true },
+      include: {
+        role: true,
+        providers: {
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
     });
 
     if (!identity) {
@@ -106,7 +113,34 @@ export class AuthService {
         email: identity.email,
         role: identity.role.name,
         isEkycVerified: identity.isEkycVerified,
+        providerId: identity.providers[0]?.id ?? null,
       },
+    };
+  }
+
+  async getUserProfile(userId: string) {
+    const identity = await this.prisma.identity.findUnique({
+      where: { id: userId },
+      include: {
+        role: true,
+        providers: {
+          select: { id: true },
+          orderBy: { createdAt: 'asc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!identity) {
+      throw new RpcException({ message: 'Account does not exist', statusCode: 401 });
+    }
+
+    return {
+      id: identity.id,
+      email: identity.email,
+      role: identity.role.name,
+      isEkycVerified: identity.isEkycVerified,
+      providerId: identity.providers[0]?.id ?? null,
     };
   }
 

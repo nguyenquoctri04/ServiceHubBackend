@@ -24,14 +24,6 @@ export class CustomerContractsController {
         );
     }
 
-    @MessagePattern({ cmd: CustomerPatterns.CREATE_SERVICE_REQUEST })
-    async createServiceRequest(@Payload() payload: {
-        customerId: string;
-        dto: { providerId: string; servicePriceIds: string[]; requireSignature?: boolean };
-    }) {
-        return this.service.createServiceRequest(payload.customerId, payload.dto);
-    }
-
     @MessagePattern({
         cmd: CustomerPatterns.GET_MARKETPLACE_RESTRICTIONS,
     })
@@ -148,6 +140,16 @@ export class CustomerContractsController {
         @Payload() payload: { customerId: string; contractId: string },
     ) {
         return this.service.confirmContractTerms(
+            payload.customerId,
+            payload.contractId,
+        );
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.CANCEL_CUSTOMER_CONTRACT })
+    async cancelCustomerContract(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        return this.service.cancelService(
             payload.customerId,
             payload.contractId,
         );

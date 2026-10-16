@@ -1,7 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import { RpcException } from "@nestjs/microservices";
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
+import { ClientProxy, RpcException } from "@nestjs/microservices";
 import { PrismaService } from "../prisma/prisma.service";
 import { DigitalSignature } from "@app/common/dto/customer/identity";
+import { SecureRpcService } from "@app/common";
+import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
@@ -26,7 +28,30 @@ export class KeysService {
     private readonly gnupgHome =
         process.env.GNUPGHOME ?? "/var/lib/signature-service/gnupg";
 
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        @Inject("IDENTITY_SERVICE")
+        private readonly identityClient: ClientProxy,
+        private readonly secureRpc: SecureRpcService,
+    ) {}
+
+    async assertIdentityEkycVerified(identityId: string, action: string) {
+        const customerInformation = await this.secureRpc.send<{
+            identity?: { isEkycVerified?: boolean };
+        }>(
+            this.identityClient,
+            { cmd: CustomerPatterns.GET_CUSTOMER_INFORMATION },
+            { customerId: identityId },
+        );
+
+        if (customerInformation?.identity?.isEkycVerified !== true) {
+            throw new RpcException(
+                new ForbiddenException(
+                    `Tài khoản cần xác thực eKYC trước khi ${action}.`,
+                ),
+            );
+        }
+    }
 
     /**
      * =========================================================
@@ -127,6 +152,8 @@ export class KeysService {
                 message: "Identity, tên, email và passphrase là bắt buộc",
             });
         }
+
+        await this.assertIdentityEkycVerified(identityId, "tạo chữ ký số");
 
         if (passphrase.length < 8) {
             throw new RpcException({

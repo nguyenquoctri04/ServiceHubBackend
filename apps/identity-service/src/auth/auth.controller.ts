@@ -19,6 +19,11 @@ export class AuthController {
     return await this.authService.login(payload);
   }
 
+  @MessagePattern({ cmd: Patterns.AUTH_GET_USER_PROFILE })
+  async getUserProfile(@Payload() payload: { userId: string }) {
+    return await this.authService.getUserProfile(payload.userId);
+  }
+
   @MessagePattern({cmd: Patterns.CHECK_USER_ACTIVE})
   async checkUserActive(@Payload() data: {userId: string}) {
     return await this.authService.checkUserActive(data.userId);

@@ -50,12 +50,16 @@ export const CUSTOMER_TEMPLATES =
 export const CUSTOMER_TERMS = CUSTOMER_CONTRACT_SERVICE_PREFIX + "/terms";
 export const CUSTOMER_VIOLATIONS =
     CUSTOMER_CONTRACT_SERVICE_PREFIX + "/violations";
+export const CUSTOMER_VIOLATION_REPORTS_ROUTE = "reports";
+export const CUSTOMER_VIOLATION_REPORTS =
+    CUSTOMER_VIOLATIONS + "/" + CUSTOMER_VIOLATION_REPORTS_ROUTE;
 
 export const CUSTOMER_CONTRACT_ENDPOINT = {
     CREATE_SERVICE_BOOKING: "booking",
     GET_USED_SERVICES: "used",
     VIEW_CONTRACT: ":contractId/file",
     CONFIRM_TERMS: ":contractId/confirm-terms",
+    CANCEL_SERVICE: ":contractId/cancel",
 };
 
 /*

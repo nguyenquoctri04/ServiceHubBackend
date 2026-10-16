@@ -33,6 +33,7 @@ export interface ServiceDetailData {
     name: string;
     description: string | null;
     address: string | null;
+    requiresContract: boolean;
     image: string | null;
     images: string[];
     distanceKm: number | null;

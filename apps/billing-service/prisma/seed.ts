@@ -15,6 +15,7 @@ const customers = [
     "30000000-0000-0000-0000-000000000003",
     "30000000-0000-0000-0000-000000000004",
     "30000000-0000-0000-0000-000000000008",
+    ...Array.from({ length: 12 }, (_, i) => `30000000-0000-0000-0000-${String(i + 15).padStart(12, "0")}`),
 ];
 const service = (n: number) =>
     `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
@@ -34,12 +35,25 @@ const item = (n: number) =>
     `84000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const payment = (n: number) =>
     `85000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const firstBillingMonthForContract = (contractNumber: number) =>
+    [3, 4, 6].includes((contractNumber - 1) % 7)
+        ? 1
+        : ((contractNumber - 1) % 6) + 1;
+const isOneTimeContract = (contractNumber: number) => (contractNumber - 1) % 4 === 0;
+const recurringContracts = Array.from({ length: 36 }, (_, i) => i + 1).filter(
+    (contractNumber) => !isOneTimeContract(contractNumber),
+);
+const quantityForContract = (contractNumber: number) => ((contractNumber - 1) % 3) + 1;
+const unitPriceForContract = (contractNumber: number) =>
+    80000 + (((contractNumber - 1) % 4) * 25000);
+const totalForContract = (contractNumber: number) =>
+    unitPriceForContract(contractNumber) * quantityForContract(contractNumber);
 
 async function main() {
     const meters = Array.from({ length: 30 }, (_, i) => ({
         id: meter(i + 1),
-        providerId: providers[i % providers.length],
-        serviceId: service(1 + (i % 60)),
+        providerId: providers[0],
+        serviceId: service(59 + (i % 3)),
         name: ["Điện", "Nước", "Gas"][i % 3],
         unit: ["kWh", "m³", "kg"][i % 3],
         status: "ACTIVE" as const,
@@ -49,13 +63,18 @@ async function main() {
     await prisma.meter.createMany({ data: meters, skipDuplicates: true });
 
     await prisma.meterReading.createMany({
-        data: Array.from({ length: 240 }, (_, i) => ({
+        data: Array.from({ length: 240 }, (_, i) => {
+            const pairIndex = Math.floor(i / 2);
+            const contractNumber = recurringContracts[pairIndex % recurringContracts.length];
+            const monthIndex = Math.floor(pairIndex / recurringContracts.length) % 3;
+            const month = firstBillingMonthForContract(contractNumber) + monthIndex;
+            return {
             id: reading(i + 1),
-            roomId: `6b000000-0000-0000-0000-${String((i % 300) + 1).padStart(12, "0")}`,
-            contractId: contract((i % 36) + 1),
-            meterId: meter((i % 30) + 1),
+            roomId: `6b000000-0000-0000-0000-${String(contractNumber).padStart(12, "0")}`,
+            contractId: contract(contractNumber),
+            meterId: meter((pairIndex % 30) + 1),
             recordedBy: "30000000-0000-0000-0000-000000000001",
-            value: String(50 + (i % 200) + i / 10),
+            value: String(100 + Math.floor(i / 2) * 12 + (i % 2) * 5),
             imgUrl: `https://example.com/chi-so/${i + 1}.jpg`,
             source:
                 i % 5 === 0
@@ -63,72 +82,113 @@ async function main() {
                     : i % 7 === 0
                       ? ("EXCEL_IMPORT" as const)
                       : ("MANUAL" as const),
-            status: i % 19 === 0 ? ("VOID" as const) : ("VALID" as const),
-            createdAt: new Date(
-                `2026-${String((i % 6) + 1).padStart(2, "0")}-01`,
-            ),
+            status: Math.floor(i / 2) % 17 === 0 ? ("VOID" as const) : ("VALID" as const),
+            createdAt: new Date(Date.UTC(2026, month - 1, i % 2 === 0 ? 1 : 28)),
             updatedAt: now,
-        })),
+            };
+        }),
         skipDuplicates: true,
     });
 
+    const validUsagePairs = Array.from({ length: 120 }, (_, i) => i).filter((i) => i % 17 !== 0);
     await prisma.serviceUsage.createMany({
-        data: Array.from({ length: 120 }, (_, i) => ({
-            id: usage(i + 1),
-            billingPeriodId: period((i % 108) + 1),
-            startReadingId: reading(i * 2 + 1),
-            endReadingId: reading(i * 2 + 2),
-            createdAt: now,
-        })),
+        data: validUsagePairs.map((pairIndex, i) => {
+            const contractNumber = recurringContracts[pairIndex % recurringContracts.length];
+            const monthIndex = Math.floor(pairIndex / recurringContracts.length) % 3;
+            const billingPeriodNumber = (contractNumber - 1) * 3 + monthIndex + 1;
+            return {
+                id: usage(i + 1),
+                billingPeriodId: period(billingPeriodNumber),
+                startReadingId: reading(pairIndex * 2 + 1),
+                endReadingId: reading(pairIndex * 2 + 2),
+                createdAt: now,
+            };
+        }),
         skipDuplicates: true,
     });
 
-    const invoices = Array.from({ length: 108 }, (_, i) => ({
-        id: invoice(i + 1),
-        invoiceNumber: `HDN-2026-${String(i + 1).padStart(5, "0")}`,
-        customerId: customers[i % customers.length],
-        contractId: contract((i % 36) + 1),
-        billingPeriodId: period(i + 1),
-        providerId: providers[i % providers.length],
-        total: String(900000 + (i % 10) * 125000),
-        status:
-            i % 5 === 0
-                ? ("PAID" as const)
-                : i % 7 === 0
-                  ? ("OVERDUE" as const)
-                  : ("UNPAID" as const),
-        createdAt: now,
-        updatedAt: now,
-    }));
+    const invoiceRows: Array<{
+        id: string;
+        invoiceNumber: string;
+        customerId: string;
+        contractId: string;
+        billingPeriodId: string | null;
+        providerId: string;
+        total: string;
+        status: "PAID" | "OVERDUE" | "UNPAID";
+        createdAt: Date;
+        updatedAt: Date;
+    }> = [];
+
+    for (const contractNumber of recurringContracts) {
+        for (let monthIndex = 0; monthIndex < 3; monthIndex++) {
+            const sequence = invoiceRows.length;
+            const status = sequence % 5 === 0
+                ? "PAID"
+                : sequence % 7 === 0
+                  ? "OVERDUE"
+                  : "UNPAID";
+            invoiceRows.push({
+                id: invoice(sequence + 1),
+                invoiceNumber: `HDN-2026-${String(sequence + 1).padStart(5, "0")}`,
+                customerId: customers[(contractNumber - 1) % customers.length],
+                contractId: contract(contractNumber),
+                billingPeriodId: period((contractNumber - 1) * 3 + monthIndex + 1),
+                providerId: providers[(contractNumber - 1) % providers.length],
+                total: String(totalForContract(contractNumber)),
+                status,
+                createdAt: now,
+                updatedAt: now,
+            });
+        }
+    }
+
+    for (const contractNumber of [1, 9, 17, 25, 33]) {
+        const sequence = invoiceRows.length;
+        const paid = contractNumber === 25 || contractNumber === 33;
+        invoiceRows.push({
+            id: invoice(sequence + 1),
+            invoiceNumber: `HDN-PRE-2026-${String(contractNumber).padStart(4, "0")}`,
+            customerId: customers[(contractNumber - 1) % customers.length],
+            contractId: contract(contractNumber),
+            billingPeriodId: null,
+            providerId: providers[(contractNumber - 1) % providers.length],
+            total: String(totalForContract(contractNumber)),
+            status: paid ? "PAID" : "UNPAID",
+            createdAt: now,
+            updatedAt: now,
+        });
+    }
+    const invoices = invoiceRows;
     await prisma.invoice.createMany({ data: invoices, skipDuplicates: true });
 
     await prisma.invoiceItem.createMany({
-        data: Array.from({ length: 324 }, (_, i) => ({
+        data: invoices.map((row, i) => ({
             id: item(i + 1),
-            invoiceId: invoice((i % 108) + 1),
-            servicePriceId: `62000000-0000-0000-0000-${String((i % 120) + 1).padStart(12, "0")}`,
-            quantity: String((i % 4) + 1),
-            unit: i % 3 === 0 ? "tháng" : "lần",
-            unitPrice: String(100000 + (i % 15) * 25000),
-            amount: String(((i % 4) + 1) * (100000 + (i % 15) * 25000)),
+            invoiceId: row.id,
+            servicePriceId: `62000000-0000-0000-0000-${String((((Number(row.contractId.slice(-12)) - 1) % 4) * 2) + 1).padStart(12, "0")}`,
+            quantity: String(quantityForContract(Number(row.contractId.slice(-12)))),
+            unit: "tháng",
+            unitPrice: String(unitPriceForContract(Number(row.contractId.slice(-12)))),
+            amount: row.total,
             createdAt: now,
         })),
         skipDuplicates: true,
     });
 
     await prisma.payment.createMany({
-        data: Array.from({ length: 108 }, (_, i) => ({
+        data: Array.from({ length: invoices.length }, (_, i) => ({
             id: payment(i + 1),
-            invoiceId: invoice(i + 1),
+            invoiceId: invoices[i].id,
             paymentMethod: i % 2 === 0 ? ("CARD" as const) : ("CASH" as const),
             paymentLinkId: i % 5 === 0 ? `LIEN-KET-${i + 1}` : null,
             status:
-                i % 5 === 0
+                invoices[i].status === "PAID"
                     ? ("SUCCESS" as const)
-                    : i % 7 === 0
+                    : invoices[i].status === "OVERDUE"
                       ? ("FAILED" as const)
                       : ("PENDING" as const),
-            paidAt: i % 5 === 0 ? now : null,
+            paidAt: invoices[i].status === "PAID" ? now : null,
             createdAt: now,
         })),
         skipDuplicates: true,

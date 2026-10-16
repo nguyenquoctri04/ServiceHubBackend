@@ -60,6 +60,14 @@ export class CustomerContractsService {
         );
     }
 
+    async confirmContractTerms(customerId: string, contractId: string) {
+        return this.secureRpc.send(
+            this.contractClient,
+            { cmd: CustomerPatterns.CONFIRM_CONTRACT_TERMS },
+            { customerId, contractId },
+        );
+    }
+
     async viewContract(contractId: string, identityId: string) {
         // Ném lỗi ngay tại đây nếu không có quyền hoặc file bị đổi —
         // KHÔNG bao giờ đi tới bước trả pdfUrl trong 2 trường hợp đó.

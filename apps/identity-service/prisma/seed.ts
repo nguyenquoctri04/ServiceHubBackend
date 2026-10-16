@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client-identity";
 import * as bcrypt from "bcrypt";
-import { randomUUID } from "crypto";
 
 const prisma = new PrismaClient();
 
@@ -48,6 +47,8 @@ const roleIds = {
 };
 
 const now = new Date();
+const identityDocumentId = (n: number) => `52000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const providerLegalDocumentId = (n: number) => `53000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 
 async function main() {
     const passwordHash = await bcrypt.hash("123456", 10);
@@ -180,15 +181,25 @@ async function main() {
         ],
     ] as const;
 
+    const additionalCustomerAccounts = Array.from({ length: 24 }, (_, i) => [
+        `30000000-0000-0000-0000-${String(i + 15).padStart(12, "0")}`,
+        `khachhang${i + 4}@servicehub.vn`,
+        `0902${String(i + 1).padStart(6, "0")}`,
+        roleIds.CUSTOMER,
+        i >= 12 && i % 9 === 0 ? "INACTIVE" : "ACTIVE",
+    ] as const);
+
     await prisma.identity.createMany({
-        data: accounts.map(([id, email, phone, roleId, status]) => ({
+        data: [...accounts, ...additionalCustomerAccounts].map(([id, email, phone, roleId, status]) => ({
             id,
             email,
             phone,
             passwordHash,
             roleId,
-            status: status as "ACTIVE",
+            status: status as "ACTIVE" | "INACTIVE",
             isEkycVerified:
+                status === "ACTIVE" &&
+                Number(id.slice(-12)) % 4 !== 0 &&
                 id !== IDS.identities.PROVIDER_PENDING &&
                 id !== IDS.identities.PROVIDER_REJECTED,
             createdAt: now,
@@ -315,7 +326,12 @@ async function main() {
                         ? "Nguyễn Văn Trí"
                         : "Nguyễn Văn " + name.split(" ").at(-1),
                 representativePosition: "Chủ hộ kinh doanh",
-                businessType: "COMPANY" as const,
+                businessType:
+                    key === "PROVIDER_1" || key === "PROVIDER_3" || key === "PROVIDER_SUSPENDED" || key === "PROVIDER_EXPIRED"
+                        ? ("COMPANY" as const)
+                        : key === "PROVIDER_NO_IMAGES"
+                          ? ("INDIVIDUAL" as const)
+                          : ("HOUSEHOLD" as const),
                 providerType: type as "PROPERTY_MANAGER" | "EXTERNAL_SERVICE",
                 status: status as "PENDING" | "ACTIVE" | "SUSPENDED",
                 createdAt: now,
@@ -388,7 +404,7 @@ async function main() {
 
     const documents = verifications.map(
         ([id, identityId, documentType, fullName, status], i) => ({
-            id: randomUUID(),
+            id: identityDocumentId(i + 1),
             verificationId: id,
             documentType,
             documentNumber: `0792${String(i + 1).padStart(8, "0")}`,
@@ -420,7 +436,7 @@ async function main() {
     await prisma.providerLegalDocument.createMany({
         data: providerRows.flatMap(([key, providerId], i) => [
             {
-                id: randomUUID(),
+                id: providerLegalDocumentId(i * 2 + 1),
                 providerId,
                 documentType: "BUSINESS_LICENSE",
                 documentName: "Giấy chứng nhận đăng ký kinh doanh",
@@ -435,7 +451,11 @@ async function main() {
                         : key === "PROVIDER_PENDING"
                           ? "PENDING"
                           : "VERIFIED",
-                verifiedAt: key === "PROVIDER_PENDING" ? null : now,
+                verifiedBy:
+                    key === "PROVIDER_PENDING" || key === "PROVIDER_REJECTED"
+                        ? null
+                        : IDS.identities.ADMIN,
+                verifiedAt: key === "PROVIDER_PENDING" || key === "PROVIDER_REJECTED" ? null : now,
                 note:
                     key === "PROVIDER_REJECTED"
                         ? "Hồ sơ chưa đáp ứng yêu cầu."
@@ -443,7 +463,7 @@ async function main() {
                 createdAt: now,
             },
             {
-                id: randomUUID(),
+                id: providerLegalDocumentId(i * 2 + 2),
                 providerId,
                 documentType: legalTypes[1],
                 documentName: "Giấy chứng nhận đăng ký thuế",
@@ -452,8 +472,16 @@ async function main() {
                 issueDate: new Date("2024-02-01"),
                 expiryDate: null,
                 verificationStatus:
-                    key === "PROVIDER_REJECTED" ? "REJECTED" : "VERIFIED",
-                verifiedAt: key === "PROVIDER_REJECTED" ? null : now,
+                    key === "PROVIDER_REJECTED"
+                        ? "REJECTED"
+                        : key === "PROVIDER_PENDING"
+                          ? "PENDING"
+                          : "VERIFIED",
+                verifiedBy:
+                    key === "PROVIDER_PENDING" || key === "PROVIDER_REJECTED"
+                        ? null
+                        : IDS.identities.ADMIN,
+                verifiedAt: key === "PROVIDER_PENDING" || key === "PROVIDER_REJECTED" ? null : now,
                 note: null,
                 createdAt: now,
             },

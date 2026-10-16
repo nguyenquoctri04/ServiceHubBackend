@@ -681,6 +681,7 @@ export class CustomerServicesService {
             name: service.name,
             description: service.description,
             address: service.address,
+            requiresContract: service.requiresContract,
             image: service.images[0]?.imageUrl ?? null,
             images: service.images.map((img) => img.imageUrl),
             distanceKm: null,
@@ -1222,7 +1223,13 @@ export class CustomerServicesService {
                 price: true,
                 unit: true,
                 service: {
-                    select: { id: true, name: true, providerId: true },
+                    select: {
+                        id: true,
+                        name: true,
+                        providerId: true,
+                        requiresPrepayment: true,
+                        billingRule: { select: { billingFrequency: true } },
+                    },
                 },
             },
         });
@@ -1234,6 +1241,8 @@ export class CustomerServicesService {
             serviceId: servicePrice.service.id,
             serviceName: servicePrice.service.name,
             providerId: servicePrice.service.providerId,
+            requiresPrepayment: servicePrice.service.requiresPrepayment,
+            billingFrequency: servicePrice.service.billingRule.billingFrequency,
             price: Number(servicePrice.price),
             unit: servicePrice.unit,
         };

@@ -98,22 +98,31 @@ export class InvoicesService {
       throw new RpcException(new ConflictException('There is an ongoing pending payment. Please wait or cancel it.'));
     }
 
+    const paidAt = new Date();
     const payment = await this.prisma.$transaction(async (tx) => {
+      const invoiceUpdate = await tx.invoice.updateMany({
+        where: {
+          id: invoice.id,
+          status: { in: ['UNPAID', 'OVERDUE'] },
+        },
+        data: {
+          status: 'PAID',
+          updatedAt: paidAt,
+        },
+      });
+      if (invoiceUpdate.count === 0) {
+        throw new RpcException(
+          new ConflictException('Invoice is no longer payable'),
+        );
+      }
+
       const p = await tx.payment.create({
         data: {
           invoiceId: invoice.id,
           paymentMethod: dto.paymentMethod as any,
           status: 'SUCCESS',
-          paidAt: new Date(),
-          createdAt: new Date(),
-        }
-      });
-
-      await tx.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          status: 'PAID',
-          updatedAt: new Date(),
+          paidAt,
+          createdAt: paidAt,
         }
       });
 

@@ -30,7 +30,6 @@ export class CustomerContractsController {
         @CurrentUser() user: CurrentUserPayload,
         @Body() dto: CreateServiceBookingDto,
     ) {
-        console.log(dto);
         return this.service.createServiceBooking(user.id, user.email, dto);
     }
 
@@ -50,6 +49,15 @@ export class CustomerContractsController {
         @Param("contractId") contractId: string,
     ) {
         return this.service.getUsedServiceDetail(customerId, contractId);
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Post(CUSTOMER_CONTRACT_ENDPOINT.CONFIRM_TERMS)
+    async confirmContractTerms(
+        @CurrentUser("id") customerId: string,
+        @Param("contractId") contractId: string,
+    ) {
+        return this.service.confirmContractTerms(customerId, contractId);
     }
 
     @UseGuards(JwtAuthGuard)

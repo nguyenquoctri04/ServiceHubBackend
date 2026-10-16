@@ -136,6 +136,16 @@ export class CustomerContractsController {
         return result;
     }
 
+    @MessagePattern({ cmd: CustomerPatterns.CONFIRM_CONTRACT_TERMS })
+    async confirmContractTerms(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        return this.service.confirmContractTerms(
+            payload.customerId,
+            payload.contractId,
+        );
+    }
+
     @MessagePattern({ cmd: CustomerPatterns.GET_CONTRACT_FILE_FOR_VIEWING })
     async getContractFileForViewing(
         @Payload() payload: { contractId: string; identityId: string },

@@ -14,6 +14,7 @@ const users = [
     "30000000-0000-0000-0000-000000000007",
     "30000000-0000-0000-0000-000000000008",
     "30000000-0000-0000-0000-000000000009",
+    ...Array.from({ length: 24 }, (_, i) => `30000000-0000-0000-0000-${String(i + 15).padStart(12, "0")}`),
 ];
 
 const templateId = (n: number) =>
@@ -52,7 +53,7 @@ async function main() {
         data: Array.from({ length: 300 }, (_, i) => ({
             id: notificationId(i + 1),
             userId: users[i % users.length],
-            templateId: templateId((i % 20) + 1),
+            templateId: i % 9 === 0 ? null : templateId((i % 20) + 1),
             title: [
                 "Hợp đồng sắp hết hạn",
                 "Hóa đơn mới",
@@ -69,9 +70,11 @@ async function main() {
             ][i % 5],
             channel: ["IN_APP", "EMAIL", "SMS", "PUSH"][i % 4] as any,
             status: ["PENDING", "SENT", "READ", "FAILED"][i % 4] as any,
-            sendAt: new Date(Date.now() - (i % 30) * 86400000),
+            sendAt: i % 4 === 0
+                ? new Date(Date.now() + 86400000)
+                : new Date(Date.now() - (i % 30) * 86400000),
             providerId:
-                i % 3 === 0 ? "40000000-0000-0000-0000-000000000001" : null,
+                i % 3 === 0 ? `40000000-0000-0000-0000-${String((i % 4) + 1).padStart(12, "0")}` : null,
         })),
         skipDuplicates: true,
     });

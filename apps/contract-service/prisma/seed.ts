@@ -14,6 +14,13 @@ const identities = {
     PROVIDER_3: "40000000-0000-0000-0000-000000000003",
     PROVIDER_TRI: "40000000-0000-0000-0000-000000000004",
 };
+const customers = [
+    identities.CUSTOMER_1,
+    identities.CUSTOMER_2,
+    identities.CUSTOMER_3,
+    identities.CUSTOMER_TRI,
+    ...Array.from({ length: 12 }, (_, i) => `30000000-0000-0000-0000-${String(i + 15).padStart(12, "0")}`),
+];
 const servicePrice = (n: number) =>
     `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const room = (n: number) =>
@@ -22,8 +29,13 @@ const contract = (n: number) =>
     `70000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const period = (n: number) =>
     `71000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const firstBillingMonthForContract = (contractNumber: number) =>
+    [3, 4, 6].includes((contractNumber - 1) % 7)
+        ? 1
+        : ((contractNumber - 1) % 6) + 1;
 const contractService = (n: number) =>
     `72000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
+const isOneTimeContract = (n: number) => (n - 1) % 4 === 0;
 const fileId = (n: number) =>
     `73000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
 const termId = (n: number) =>
@@ -113,12 +125,7 @@ async function main() {
                 identities.PROVIDER_3,
                 identities.PROVIDER_TRI,
             ][i % 4];
-            const customer = [
-                identities.CUSTOMER_1,
-                identities.CUSTOMER_2,
-                identities.CUSTOMER_3,
-                identities.CUSTOMER_TRI,
-            ][i % 4];
+            const customer = customers[i % customers.length];
             const status = [
                 "ACTIVE",
                 "ACTIVE",
@@ -126,25 +133,37 @@ async function main() {
                 "EXPIRED",
                 "TERMINATED",
                 "PENDING_SIGNATURE",
-            ][i % 6] as any;
+                "CANCELLED",
+            ][i % 7] as any;
+            const contractStatus = [0, 8, 16].includes(i)
+                ? ("PENDING_PAYMENT" as const)
+                : [24, 32].includes(i)
+                  ? ("ACTIVE" as const)
+                  : status;
             return {
                 id: contract(i + 1),
                 contractNumber: `HD-2026-${String(i + 1).padStart(4, "0")}`,
                 providerId: provider,
-                roomId: room(i + 1),
+                roomId: provider === identities.PROVIDER_1 ? room(i + 1) : null,
                 customerId: customer,
-                startDate: new Date(
-                    `2026-${String((i % 6) + 1).padStart(2, "0")}-01`,
-                ),
+                startDate:
+                    contractStatus === "EXPIRED" || contractStatus === "TERMINATED" || contractStatus === "CANCELLED"
+                        ? new Date("2026-01-01")
+                        : new Date(`2026-${String((i % 6) + 1).padStart(2, "0")}-01`),
                 endDate:
-                    status === "EXPIRED"
+                    contractStatus === "EXPIRED"
                         ? new Date("2026-06-30")
-                        : status === "TERMINATED"
-                          ? new Date("2026-07-15")
+                        : contractStatus === "TERMINATED" || contractStatus === "CANCELLED"
+                          ? new Date("2026-08-15")
                           : new Date("2027-06-30"),
-                status,
-                requireSignature: status === "PENDING_SIGNATURE",
-                signedAt: status === "PENDING_SIGNATURE" ? null : now,
+                status: contractStatus,
+                requireSignature: contractStatus === "PENDING_SIGNATURE",
+                signedAt:
+                    contractStatus === "PENDING_SIGNATURE"
+                        ? null
+                        : contractStatus === "PENDING_PAYMENT"
+                          ? new Date(now.getTime() - 30 * 60 * 1000)
+                          : now,
                 createdAt: now,
                 updatedAt: now,
             };
@@ -153,30 +172,34 @@ async function main() {
     });
 
     await prisma.billingPeriod.createMany({
-        data: Array.from({ length: 108 }, (_, i) => {
-            const c = (i % 36) + 1;
-            const month = (i % 12) + 1;
-            return {
-                id: period(i + 1),
-                contractId: contract(c),
-                periodStart: new Date(
-                    `2026-${String(month).padStart(2, "0")}-01`,
-                ),
-                periodEnd: new Date(
-                    `2026-${String(month).padStart(2, "0")}-${[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]}`,
-                ),
-                createdAt: now,
-                updatedAt: now,
-            };
-        }),
+        data: Array.from({ length: 36 }, (_, i) => i + 1)
+            .filter((c) => !isOneTimeContract(c))
+            .flatMap((c) =>
+                Array.from({ length: 3 }, (_, monthIndex) => {
+                    const month = firstBillingMonthForContract(c) + monthIndex;
+                    const periodNumber = (c - 1) * 3 + monthIndex + 1;
+                    return {
+                        id: period(periodNumber),
+                        contractId: contract(c),
+                        periodStart: new Date(
+                            `2026-${String(month).padStart(2, "0")}-01`,
+                        ),
+                        periodEnd: new Date(
+                            `2026-${String(month).padStart(2, "0")}-${[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]}`,
+                        ),
+                        createdAt: now,
+                        updatedAt: now,
+                    };
+                }),
+            ),
         skipDuplicates: true,
     });
 
     await prisma.contractService.createMany({
-        data: Array.from({ length: 72 }, (_, i) => ({
+        data: Array.from({ length: 36 }, (_, i) => ({
             id: contractService(i + 1),
-            contractId: contract((i % 36) + 1),
-            servicePriceId: servicePrice((i % 100) + 1),
+            contractId: contract(i + 1),
+            servicePriceId: servicePrice(((i % 4) * 2) + 1),
             quantity: String((i % 3) + 1),
             createdAt: now,
         })),
@@ -273,7 +296,8 @@ async function main() {
                 "FINE",
                 "RESTRICT",
                 "NO_ACTION",
-            ][i % 5] as any,
+                "TERMINATE_CONTRACT",
+            ][i % 6] as any,
             reason: "Xử lý theo quy định của hệ thống.",
             amount: i % 5 === 2 ? String(100000 + i * 10000) : null,
             createdAt: now,

@@ -13,9 +13,12 @@ import { createHash, randomUUID } from "crypto";
 import { ClientProxy, RpcException } from "@nestjs/microservices";
 import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
+import { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
 @Injectable()
-export class CustomerContractsService {
+export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
+    private paymentExpiryTimer?: NodeJS.Timeout;
+
     constructor(
         private readonly prisma: PrismaService,
         @Inject("CATALOG_SERVICE")
@@ -30,8 +33,24 @@ export class CustomerContractsService {
         @Inject("SIGNATURE_SERVICE")
         private readonly signatureClient: ClientProxy,
 
+        @Inject("BILLING_SERVICE")
+        private readonly billingClient: ClientProxy,
+
         private readonly secureRpc: SecureRpcService,
     ) {}
+
+    onModuleInit() {
+        this.paymentExpiryTimer = setInterval(() => {
+            void this.processPrepaymentDeadlines().catch((error) => {
+                console.error("Unable to process prepayment contracts", error);
+            });
+        }, 60_000);
+        this.paymentExpiryTimer.unref();
+    }
+
+    onModuleDestroy() {
+        if (this.paymentExpiryTimer) clearInterval(this.paymentExpiryTimer);
+    }
 
     async getPopularServices(servicePriceIds: string[], limit: number) {
         if (servicePriceIds.length === 0) {
@@ -160,31 +179,51 @@ export class CustomerContractsService {
     }
 
     /**
-     * Dùng cho trang chi tiết 1 service — kiểm tra cả 2 khả năng:
-     * bị cấm ở cấp provider (scopeType=PROVIDER) HOẶC cấp service này
-     * (scopeType=SERVICE), chỉ cần 1 query.
+     * Kiểm tra restriction còn hiệu lực ở cấp platform của customer, hoặc
+     * cấp service/provider áp dụng toàn hệ thống hay riêng cho customer.
      */
     async checkServiceAccess(
         serviceId: string,
         providerId: string,
         customerId?: string,
     ): Promise<{ blocked: boolean }> {
-        if (!customerId) return { blocked: false };
-
         const now = new Date();
 
         const restriction = await this.prisma.restriction.findFirst({
             where: {
-                customerId,
                 isDeleted: false,
                 startAt: { lte: now },
-                OR: [{ endAt: null }, { endAt: { gte: now } }],
-                AND: {
-                    OR: [
-                        { scopeType: "PROVIDER", providerId },
-                        { scopeType: "SERVICE", serviceId },
-                    ],
-                },
+                OR: [{ endAt: null }, { endAt: { gt: now } }],
+                AND: [
+                    {
+                        OR: [
+                            ...(customerId
+                                ? [
+                                      {
+                                          scopeType: "PLATFORM" as const,
+                                          customerId,
+                                      },
+                                  ]
+                                : []),
+                            {
+                                scopeType: "PROVIDER",
+                                providerId,
+                                OR: [
+                                    { customerId: null },
+                                    ...(customerId ? [{ customerId }] : []),
+                                ],
+                            },
+                            {
+                                scopeType: "SERVICE",
+                                serviceId,
+                                OR: [
+                                    { customerId: null },
+                                    ...(customerId ? [{ customerId }] : []),
+                                ],
+                            },
+                        ],
+                    },
+                ],
             },
             select: { id: true },
         });
@@ -516,6 +555,7 @@ export class CustomerContractsService {
         customerId: string,
         query: { status?: string; page: number; pageSize: number },
     ) {
+        await this.processPrepaymentDeadlines();
         const where = this.buildUsedServicesWhere(customerId, query.status);
         const skip = (query.page - 1) * query.pageSize;
 
@@ -564,13 +604,16 @@ export class CustomerContractsService {
                 return { ...base, status: "DRAFT" };
             case "PENDING_SIGNATURE":
                 return { ...base, status: "PENDING_SIGNATURE" };
+            case "PENDING_PAYMENT":
+                return { ...base, status: "PENDING_PAYMENT" };
             case "ACTIVE":
                 return { ...base, status: "ACTIVE" };
             case "EXPIRED":
-                return {
-                    ...base,
-                    status: { in: ["EXPIRED", "TERMINATED", "CANCELLED"] },
-                };
+                return { ...base, status: "EXPIRED" };
+            case "TERMINATED":
+                return { ...base, status: "TERMINATED" };
+            case "CANCELLED":
+                return { ...base, status: "CANCELLED" };
             default:
                 return base;
         }
@@ -579,6 +622,7 @@ export class CustomerContractsService {
     private usedServiceInclude() {
         return {
             services: { take: 1 },
+            billingPeriods: { orderBy: { periodStart: "asc" as const } },
             files: true,
             terms: { include: { term: true } },
             violationCases: {
@@ -596,14 +640,16 @@ export class CustomerContractsService {
                 return "PENDING_PROVIDER_APPROVAL";
             case "PENDING_SIGNATURE":
                 return "PENDING_SIGNATURE";
+            case "PENDING_PAYMENT":
+                return "PENDING_PAYMENT";
             case "ACTIVE":
                 return "ACTIVE";
             case "EXPIRED":
                 return "EXPIRED";
             case "TERMINATED":
-                return "EXPIRED";
+                return "TERMINATED";
             case "CANCELLED":
-                return "EXPIRED";
+                return "CANCELLED";
             default:
                 return "ACTIVE";
         }
@@ -677,10 +723,19 @@ export class CustomerContractsService {
             const violation = contract.violationCases[0] ?? null;
 
             const status = this.deriveStatus(contract.status);
+            const requiresPrepayment =
+                priceDetail?.service?.billingRule?.billingFrequency === "ONE_TIME";
 
             return {
                 id: contract.id,
-                service: priceDetail?.service ?? null,
+                billingPeriods: contract.billingPeriods.map((period) => ({
+                    id: period.id,
+                    periodStart: period.periodStart.toISOString(),
+                    periodEnd: period.periodEnd.toISOString(),
+                })),
+                service: priceDetail?.service
+                    ? { ...priceDetail.service, requiresPrepayment }
+                    : null,
                 provider: provider ?? null,
                 price: priceDetail
                     ? {
@@ -701,6 +756,10 @@ export class CustomerContractsService {
                     endDate: contract.endDate?.toISOString() ?? null,
                     status: contract.status,
                     requireSignature: contract.requireSignature,
+                    requiresPrepayment,
+                    paymentDeadlineAt: contract.signedAt
+                        ? new Date(contract.signedAt.getTime() + 2 * 60 * 60 * 1000).toISOString()
+                        : null,
                     signedAt: contract.signedAt?.toISOString() ?? null,
                     createdAt: contract.createdAt.toISOString(),
                     updatedAt: contract.updatedAt.toISOString(),
@@ -877,63 +936,205 @@ export class CustomerContractsService {
 
     async activateContractAfterCustomerSign(contractFileId: string) {
         const contractFile = await this.prisma.contractFile.findUnique({
-            where: {
-                id: contractFileId,
-            },
-            select: {
-                id: true,
-                contractId: true,
-            },
+            where: { id: contractFileId },
+            select: { contractId: true },
         });
-
         if (!contractFile) {
-            throw new RpcException({
-                statusCode: 404,
-                message: "Không tìm thấy file hợp đồng.",
-            });
+            throw new RpcException({ statusCode: 404, message: "Không tìm thấy file hợp đồng." });
         }
+        return this.transitionAfterCustomerApproval(contractFile.contractId);
+    }
 
-        const contract = await this.prisma.contract.findUnique({
-            where: {
-                id: contractFile.contractId,
-            },
-            select: {
-                id: true,
-                status: true,
-            },
+    async confirmContractTerms(customerId: string, contractId: string) {
+        const contract = await this.prisma.contract.findFirst({
+            where: { id: contractId, customerId },
+            select: { id: true, status: true, requireSignature: true },
         });
-
         if (!contract) {
-            throw new RpcException({
-                statusCode: 404,
-                message: "Không tìm thấy hợp đồng.",
-            });
+            throw new RpcException(new NotFoundException("Không tìm thấy hợp đồng."));
         }
+        if (contract.requireSignature) {
+            throw new RpcException(new BadRequestException(
+                "Hợp đồng này yêu cầu ký điện tử và không thể xác nhận theo cách này.",
+            ));
+        }
+        return this.transitionAfterCustomerApproval(contract.id);
+    }
 
-        // Đã ACTIVE thì không cần cập nhật lại
+    private async transitionAfterCustomerApproval(contractId: string) {
+        const contract = await this.prisma.contract.findUnique({
+            where: { id: contractId },
+            include: { services: { take: 1 } },
+        });
+        if (!contract) {
+            throw new RpcException(new NotFoundException("Không tìm thấy hợp đồng."));
+        }
         if (contract.status === "ACTIVE") {
+            return { contractId, status: contract.status };
+        }
+        const service = contract.services[0];
+        const billingFrequency = service
+            ? await this.getServiceBillingFrequency(service.servicePriceId)
+            : null;
+        const isPrepayment = billingFrequency === "ONE_TIME";
+        const paymentDeadlineAt = contract.signedAt
+            ? new Date(contract.signedAt.getTime() + 2 * 60 * 60 * 1000)
+            : null;
+        if (contract.status === "PENDING_PAYMENT" && paymentDeadlineAt) {
+            await this.createPrepaymentInvoice(contract);
             return {
-                contractId: contract.id,
+                contractId,
                 status: contract.status,
+                paymentDeadlineAt: paymentDeadlineAt.toISOString(),
             };
         }
+        if (contract.status !== "PENDING_SIGNATURE") {
+            throw new RpcException(new ConflictException(
+                "Hợp đồng không ở trạng thái chờ khách hàng xác nhận.",
+            ));
+        }
 
-        const updatedContract = await this.prisma.contract.update({
-            where: {
-                id: contract.id,
-            },
+        const now = new Date();
+        const nextStatus = isPrepayment ? "PENDING_PAYMENT" : "ACTIVE";
+
+        const updated = await this.prisma.contract.updateMany({
+            where: { id: contractId, status: "PENDING_SIGNATURE" },
             data: {
-                status: "ACTIVE",
-            },
-            select: {
-                id: true,
-                status: true,
+                status: nextStatus,
+                signedAt: now,
+                updatedAt: now,
             },
         });
+        if (updated.count === 0) {
+            const current = await this.prisma.contract.findUnique({
+                where: { id: contractId },
+                select: { status: true, signedAt: true },
+            });
+            if (current?.status === "PENDING_PAYMENT" && current.signedAt) {
+                await this.createPrepaymentInvoice(contract);
+                return {
+                    contractId,
+                    status: current.status,
+                    paymentDeadlineAt: new Date(current.signedAt.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+                };
+            }
+            if (current?.status === "ACTIVE") return { contractId, status: current.status };
+            throw new RpcException(new ConflictException(
+                "Trạng thái hợp đồng đã thay đổi. Vui lòng tải lại trang.",
+            ));
+        }
 
+        if (isPrepayment) {
+            await this.createPrepaymentInvoice({ ...contract, signedAt: now });
+        }
         return {
-            contractId: updatedContract.id,
-            status: updatedContract.status,
+            contractId,
+            status: nextStatus,
+            paymentDeadlineAt: isPrepayment
+                ? new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString()
+                : null,
+            signedAt: now.toISOString(),
         };
+    }
+
+    private async getServiceBillingFrequency(servicePriceId: string) {
+        const [detail] = await this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: CustomerPatterns.GET_SERVICE_PRICE_DETAILS },
+            { servicePriceIds: [servicePriceId] },
+        );
+        return detail?.service?.billingRule?.billingFrequency ?? null;
+    }
+
+    private async createPrepaymentInvoice(contract: {
+        id: string;
+        customerId: string;
+        providerId: string;
+        signedAt?: Date | null;
+        services: Array<{
+            servicePriceId: string;
+            quantity: Prisma.Decimal | null;
+        }>;
+    }) {
+        const service = contract.services[0];
+        if (!service) {
+            throw new RpcException(new BadRequestException(
+                "Thiếu thông tin dịch vụ để tạo hóa đơn trả trước.",
+            ));
+        }
+        const [priceDetail] = await this.secureRpc.send<any[]>(
+            this.catalogClient,
+            { cmd: CustomerPatterns.GET_SERVICE_PRICE_DETAILS },
+            { servicePriceIds: [service.servicePriceId] },
+        );
+        if (!priceDetail || priceDetail.service?.billingRule?.billingFrequency !== "ONE_TIME") {
+            throw new RpcException(new BadRequestException(
+                "Chỉ dịch vụ thanh toán một lần mới tạo hóa đơn trả trước.",
+            ));
+        }
+        await this.secureRpc.send(
+            this.billingClient,
+            { cmd: CustomerPatterns.CREATE_CONTRACT_PREPAYMENT_INVOICE },
+            {
+                contractId: contract.id,
+                customerId: contract.customerId,
+                providerId: contract.providerId,
+                servicePriceId: service.servicePriceId,
+                quantity: Number(service.quantity ?? 1),
+                unit: priceDetail.unit,
+                unitPrice: Number(priceDetail.price),
+            },
+        );
+    }
+
+    async expirePendingPrepaymentContracts() {
+        const now = new Date();
+        const deadlineCutoff = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        const expired = await this.prisma.contract.findMany({
+            where: {
+                status: "PENDING_PAYMENT",
+                signedAt: { lte: deadlineCutoff },
+            },
+            select: { id: true },
+        });
+        for (const contract of expired) {
+            await this.secureRpc.send(
+                this.billingClient,
+                { cmd: CustomerPatterns.DELETE_CONTRACT_PREPAYMENT_INVOICE },
+                { contractId: contract.id },
+            );
+            await this.prisma.contract.updateMany({
+                where: {
+                    id: contract.id,
+                    status: "PENDING_PAYMENT",
+                    signedAt: { lte: deadlineCutoff },
+                },
+                data: { status: "CANCELLED", updatedAt: now },
+            });
+        }
+        return { count: expired.length };
+    }
+
+    private async processPrepaymentDeadlines() {
+        await this.expirePendingPrepaymentContracts();
+        const pending = await this.prisma.contract.findMany({
+            where: {
+                status: "PENDING_PAYMENT",
+                signedAt: { gt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+            },
+            include: { services: { take: 1 } },
+        });
+
+        await Promise.all(
+            pending.map((contract) =>
+                this.createPrepaymentInvoice(contract).catch((error) => {
+                    console.error(
+                        "Unable to ensure prepayment invoice for contract",
+                        contract.id,
+                        error,
+                    );
+                }),
+            ),
+        );
     }
 }

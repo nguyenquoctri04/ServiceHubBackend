@@ -14,6 +14,8 @@ export class CustomerPatterns {
     public static readonly INVOICES = "customer.invoices.";
     public static readonly PAYMENTS = "customer.payments.";
 
+    public static readonly FETCH_INVOICES = this.INVOICES + "fetch";
+
     /*
         ===============================
             Catalog Service
@@ -101,6 +103,13 @@ export class CustomerPatterns {
 
     public static readonly ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN =
         this.CONTRACTS + "activate-contract-after-customer-sign";
+
+    public static readonly CONFIRM_CONTRACT_TERMS =
+        this.CONTRACTS + "confirm-contract-terms";
+    public static readonly CREATE_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "create-prepayment-invoice";
+    public static readonly DELETE_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "delete-prepayment-invoice";
 
     /*
         ===============================

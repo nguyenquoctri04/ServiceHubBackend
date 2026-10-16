@@ -433,6 +433,27 @@ const serviceNames = [
         "REPAIR",
         "Kiểm tra và bảo trì hệ thống điện.",
     ],
+    [
+        "Điện sinh hoạt theo chỉ số",
+        "METERED",
+        "ADDITION",
+        "OTHER",
+        "Thanh toán điện sinh hoạt theo chỉ số công tơ hàng tháng.",
+    ],
+    [
+        "Nước sinh hoạt theo chỉ số",
+        "METERED",
+        "ADDITION",
+        "OTHER",
+        "Thanh toán nước sinh hoạt dựa trên lượng tiêu thụ thực tế.",
+    ],
+    [
+        "Gas theo chỉ số sử dụng",
+        "METERED",
+        "ADDITION",
+        "OTHER",
+        "Tính phí gas theo lượng sử dụng được ghi nhận.",
+    ],
 ] as const;
 
 function uuid(n: number) {
@@ -485,7 +506,7 @@ async function main() {
     const rules = serviceNames.map(([, calculation], i) => ({
         id: ruleId(i + 1),
         calculationMethod: calculation as "FIXED" | "QUANTITY" | "METERED",
-        billingFrequency: "RECURRING" as const,
+        billingFrequency: calculation === "METERED" ? ("RECURRING" as const) : i % 5 === 0 ? ("ONE_TIME" as const) : ("RECURRING" as const),
         billingIntervalValue: 1,
         billingIntervalUnit: "MONTH" as const,
         prorationMethod: i % 3 === 0 ? ("DAILY" as const) : ("NONE" as const),
@@ -500,15 +521,12 @@ async function main() {
 
     const services = serviceNames.map(
         ([name, calculation, type, category, description], i) => {
-            const provider = providerKeys[i % providerKeys.length];
+            const provider = calculation === "METERED" ? "PROVIDER_1" : providerKeys[i % 4];
             return {
                 id: uuid(i + 1),
                 name,
                 description,
-                status:
-                    provider === "PROVIDER_SUSPENDED"
-                        ? ("INACTIVE" as const)
-                        : ("ACTIVE" as const),
+                status: i % 17 === 0 ? ("INACTIVE" as const) : ("ACTIVE" as const),
                 address: `Đường số ${(i % 20) + 1}, Thành phố Hồ Chí Minh`,
                 latitude: 10.76 + (i % 15) * 0.002,
                 longitude: 106.68 + (i % 18) * 0.002,
@@ -527,14 +545,17 @@ async function main() {
     );
     await prisma.service.createMany({ data: services, skipDuplicates: true });
 
-    const schedules = services.map((s, i) => ({
-        id: scheduleId(i + 1),
-        serviceId: s.id,
-        billingDay: (i % 25) + 1,
-        dueDays: 5 + (i % 5),
-        createdAt: now,
-        updatedAt: now,
-    }));
+    const schedules = services.flatMap((s, i) => {
+        if (serviceNames[i][1] !== "METERED" && i % 5 === 0) return [];
+        return [{
+            id: scheduleId(i + 1),
+            serviceId: s.id,
+            billingDay: (i % 25) + 1,
+            dueDays: 5 + (i % 5),
+            createdAt: now,
+            updatedAt: now,
+        }];
+    });
     await prisma.billingSchedule.createMany({
         data: schedules,
         skipDuplicates: true,
@@ -547,11 +568,17 @@ async function main() {
             serviceId: s.id,
             price: String(80000 + (i % 12) * 25000),
             unit:
-                s.serviceType === "NORMAL"
-                    ? "tháng"
-                    : i % 3 === 0
-                      ? "lần"
-                      : "suất",
+                serviceNames[i][1] === "METERED"
+                    ? s.name.startsWith("Điện")
+                        ? "kWh"
+                        : s.name.startsWith("Nước")
+                          ? "m³"
+                          : "kg"
+                    : s.serviceType === "NORMAL"
+                      ? "tháng"
+                      : i % 3 === 0
+                        ? "lần"
+                        : "suất",
             effectiveFrom: new Date("2026-01-01"),
             effectiveTo: null,
             createdAt: now,
@@ -599,7 +626,7 @@ async function main() {
 
     const properties = Array.from({ length: 15 }, (_, i) => ({
         id: propertyId(i + 1),
-        providerId: IDS.providers[providerKeys[i % 4]],
+        providerId: IDS.providers.PROVIDER_1,
         propertyName: `Khu nhà ở ${["An Bình", "Phúc Gia", "Hưng Thịnh", "Minh Khai"][i % 4]} ${i + 1}`,
         description: "Khu nhà ở sạch sẽ, an ninh và thuận tiện sinh hoạt.",
         address: `Số ${10 + i} đường Nguyễn Văn Linh, Thành phố Hồ Chí Minh`,
@@ -665,7 +692,11 @@ async function main() {
             id: requirementId(i + 1),
             serviceId: services[i].id,
             additionalServiceId: services[6 + (i % 24)].id,
-            status: "ACTIVE" as const,
+            status:
+                services[i].status === "INACTIVE" ||
+                services[6 + (i % 24)].status === "INACTIVE"
+                    ? ("INACTIVE" as const)
+                    : ("ACTIVE" as const),
         })),
         skipDuplicates: true,
     });

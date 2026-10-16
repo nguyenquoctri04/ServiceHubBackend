@@ -1,5 +1,6 @@
 import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
+import { ProviderIdentityPatterns } from '@app/common';
 import { ProvidersService } from './providers.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
@@ -13,7 +14,7 @@ export class ProvidersController {
    * Lấy hồ sơ Provider đầy đủ kèm legalDocuments.
    * Caller: API Gateway (provider.controller.ts) → GET /api/provider/profile
    */
-  @MessagePattern({ cmd: 'providers.getProfile' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.GET_PROFILE })
   async getProfile(
     @Payload() payload: { identityId: string; providerId?: string },
   ) {
@@ -27,7 +28,7 @@ export class ProvidersController {
    * Cập nhật hồ sơ Provider.
    * Caller: API Gateway (provider.controller.ts) → PUT /api/provider/profile
    */
-  @MessagePattern({ cmd: 'providers.updateProfile' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.UPDATE_PROFILE })
   async updateProfile(
     @Payload()
     payload: {
@@ -48,7 +49,7 @@ export class ProvidersController {
    * Caller: Catalog Service, Contract Service
    * Pattern: 'get.provider.by.id'
    */
-  @MessagePattern({ cmd: 'get.provider.by.id' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.GET_BY_ID })
   async getProviderById(@Payload() id: string) {
     const provider = await this.providersService.getProviderById(id);
     if (!provider) {
@@ -62,7 +63,7 @@ export class ProvidersController {
    * Xác nhận provider trong JWT thuộc identity đang đăng nhập.
    * Chỉ API Gateway sử dụng để scope workspace hiện hành.
    */
-  @MessagePattern({ cmd: 'providers.getByIdForIdentity' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.GET_BY_ID_FOR_IDENTITY })
   async getProviderByIdForIdentity(
     @Payload() payload: { identityId: string; providerId: string },
   ) {
@@ -75,7 +76,7 @@ export class ProvidersController {
   /**
    * Thêm giấy tờ pháp lý.
    */
-  @MessagePattern({ cmd: 'providers.addLegalDocument' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.ADD_LEGAL_DOCUMENT })
   async addLegalDocument(
     @Payload()
     payload: {
@@ -95,7 +96,7 @@ export class ProvidersController {
    * Lấy danh sách tất cả providers thuộc một identity (dùng cho workspace switcher).
    * Caller: API Gateway → GET /api/provider/my-providers
    */
-  @MessagePattern({ cmd: 'providers.getMyProviders' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.GET_MY_PROVIDERS })
   async getMyProviders(@Payload('identityId') identityId: string) {
     return this.providersService.getMyProviders(identityId);
   }
@@ -104,7 +105,7 @@ export class ProvidersController {
    * Đăng ký một provider mới dưới identity hiện tại.
    * Caller: API Gateway → POST /api/provider/register
    */
-  @MessagePattern({ cmd: 'providers.create' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.CREATE })
   async createProvider(
     @Payload() payload: { identityId: string; dto: CreateProviderDto },
   ) {

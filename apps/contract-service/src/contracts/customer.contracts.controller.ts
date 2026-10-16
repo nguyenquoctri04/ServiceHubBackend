@@ -6,7 +6,7 @@ import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 
 @Controller()
 export class CustomerContractsController {
-    constructor(private readonly service: CustomerContractsService) {}
+    constructor(private readonly service: CustomerContractsService) { }
 
     @MessagePattern({
         cmd: CustomerPatterns.GET_POPULAR_SERVICES,
@@ -22,14 +22,6 @@ export class CustomerContractsController {
             payload.servicePriceIds,
             payload.limit,
         );
-    }
-
-    @MessagePattern({ cmd: CustomerPatterns.CREATE_SERVICE_REQUEST })
-    async createServiceRequest(@Payload() payload: {
-        customerId: string;
-        dto: { providerId: string; servicePriceIds: string[]; requireSignature?: boolean };
-    }) {
-        return this.service.createServiceRequest(payload.customerId, payload.dto);
     }
 
     @MessagePattern({

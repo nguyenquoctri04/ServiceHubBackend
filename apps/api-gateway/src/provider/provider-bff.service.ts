@@ -1,7 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { GatewayProxyService } from '../proxy/gateway-proxy.service';
-import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
+import { ProviderContractPatterns, ProviderIdentityPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { AggregatedRoomResponseDto } from './dto/aggregated-room.dto';
 
@@ -32,7 +32,7 @@ export class ProviderBffService {
         : this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_FIND }, { providerId, contractIds }),
       contractIds.length === 0
         ? Promise.resolve([])
-        : this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: contracts.map((c: any) => c.customerId) }).catch(() => [])
+        : this.proxy.send<any[]>(this.identityClient, { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH }, { identityIds: contracts.map((c: any) => c.customerId) }).catch(() => [])
     ]);
     const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
 

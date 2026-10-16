@@ -1,6 +1,7 @@
-﻿import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { ForbiddenException } from '@nestjs/common';
+import { ProviderIdentityPatterns } from '@app/common';
 import { GatewayProxyService } from '../proxy/gateway-proxy.service';
 
 interface CacheEntry {
@@ -38,7 +39,7 @@ export class ProviderCacheService {
     }
     const provider = await this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.getByIdForIdentity' },
+      { cmd: ProviderIdentityPatterns.GET_BY_ID_FOR_IDENTITY },
       { identityId, providerId },
     );
     if (provider?.id !== providerId) {

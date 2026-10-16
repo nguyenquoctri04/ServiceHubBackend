@@ -170,7 +170,7 @@ export class PropertiesController {
     return this.propertiesService.getRoomsByIds(roomIds);
   }
 
-  @MessagePattern({ cmd: 'catalog.rooms.findByIdsForProvider' })
+  @MessagePattern({ cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER })
   async findRoomsByIdsForProvider(@Payload() payload: { providerId: string; roomIds: string[] }) {
     return this.propertiesService.findRoomsByIdsForProvider(payload.providerId, payload.roomIds);
   }

@@ -1,6 +1,6 @@
 import { Controller, Get, Put, Param, UseGuards, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '@app/common';
+import { CurrentUser, JwtAuthGuard, NotificationPatterns, Roles, RolesGuard } from '@app/common';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
 import { ProviderCacheService } from '../provider-cache.service';
 import { CurrentUserPayload } from '../provider.controller';
@@ -20,7 +20,7 @@ export class ProviderNotificationController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.notificationClient,
-      { cmd: 'notifications.getUserNotifications' },
+      { cmd: NotificationPatterns.GET_USER_NOTIFICATIONS },
       { userId: user.id, providerId },
     );
   }
@@ -30,7 +30,7 @@ export class ProviderNotificationController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.notificationClient,
-      { cmd: 'notifications.markAllRead' },
+      { cmd: NotificationPatterns.MARK_ALL_READ },
       { userId: user.id, providerId },
     );
   }
@@ -40,10 +40,11 @@ export class ProviderNotificationController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id') notificationId: string,
   ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.notificationClient,
-      { cmd: 'notifications.markRead' },
-      { notificationId, userId: user.id },
+      { cmd: NotificationPatterns.MARK_READ },
+      { notificationId, userId: user.id, providerId },
     );
   }
 }

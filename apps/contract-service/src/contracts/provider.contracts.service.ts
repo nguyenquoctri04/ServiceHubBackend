@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ContractStatus, Contract } from '@prisma/client-contract';
-import { ProviderBillingPatterns, SecureRpcService } from '@app/common';
+import { CatalogPatterns, NotificationPatterns, ProviderBillingPatterns, ProviderIdentityPatterns, SecureRpcService } from '@app/common';
 import { CustomerPatterns } from '@app/common/constants/customer.patterns';
 import { ContractTemplate, Term } from '@prisma/client-contract';
 import { createHash } from 'node:crypto';
@@ -99,7 +99,7 @@ export class ProviderContractsService {
     try {
       const response = await this.secureRpc.send<CustomerIdentity>(
         this.identityClient,
-        { cmd: 'get.customer.by.id' },
+        { cmd: ProviderIdentityPatterns.GET_CUSTOMER_BY_ID },
         { customerId }
       );
       if (!response) {
@@ -149,7 +149,7 @@ export class ProviderContractsService {
       try {
         const prices = await this.secureRpc.send<any[]>(
           this.catalogClient,
-          { cmd: 'services.prices.findForProvider' },
+          { cmd: CatalogPatterns.SERVICES_PRICES_FIND_FOR_PROVIDER },
           { providerId, priceIds: ids },
           10000,
         );
@@ -233,7 +233,7 @@ export class ProviderContractsService {
 
     if (dto.roomId) {
       const rooms = await this.secureRpc.send<{ id: string }[]>(
-        this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [dto.roomId] },
+        this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds: [dto.roomId] },
       );
       if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
     }
@@ -246,7 +246,7 @@ export class ProviderContractsService {
       try {
         const prices = await this.secureRpc.send<any[]>(
           this.catalogClient,
-          { cmd: 'services.prices.findForProvider' },
+          { cmd: CatalogPatterns.SERVICES_PRICES_FIND_FOR_PROVIDER },
           { providerId, priceIds: ids },
           10000,
         );
@@ -327,7 +327,7 @@ export class ProviderContractsService {
 
         void this.secureRpc.send(
           this.notificationClient,
-          { cmd: 'notifications.createInApp' },
+          { cmd: NotificationPatterns.CREATE_IN_APP },
           {
             userId: existing.customerId,
             providerId,
@@ -379,7 +379,7 @@ export class ProviderContractsService {
 
     await this.secureRpc.send(
       this.notificationClient,
-      { cmd: 'notifications.createInApp' },
+      { cmd: NotificationPatterns.CREATE_IN_APP },
       {
         userId: contract.customerId,
         providerId,
@@ -413,7 +413,7 @@ export class ProviderContractsService {
       priceIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
-            { cmd: 'services.prices.findForProvider' },
+            { cmd: CatalogPatterns.SERVICES_PRICES_FIND_FOR_PROVIDER },
             { providerId, priceIds },
             20000,
           ).catch((err) => {
@@ -423,7 +423,7 @@ export class ProviderContractsService {
         : Promise.resolve([]),
       this.secureRpc.send<any>(
         this.identityClient,
-        { cmd: 'get.provider.by.id' },
+        { cmd: ProviderIdentityPatterns.GET_BY_ID },
         providerId,
         20000,
       ).catch((err) => {
@@ -442,7 +442,7 @@ export class ProviderContractsService {
       contract.roomId
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
-            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER },
             { providerId, roomIds: [contract.roomId] },
             20000,
           ).catch((err) => {
@@ -685,7 +685,7 @@ export class ProviderContractsService {
     });
     await this.secureRpc.send(
       this.notificationClient,
-      { cmd: 'notifications.createInApp' },
+      { cmd: NotificationPatterns.CREATE_IN_APP },
       {
         userId: contract.customerId,
         providerId,
@@ -708,21 +708,21 @@ export class ProviderContractsService {
       customerIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.identityClient,
-            { cmd: 'provider.identities.batch' },
+            { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
             { identityIds: customerIds },
           ).catch(() => [])
         : [],
       roomIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
-            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER },
             { providerId, roomIds },
           ).catch(() => [])
         : [],
       priceIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
-            { cmd: 'services.prices.findForProvider' },
+            { cmd: CatalogPatterns.SERVICES_PRICES_FIND_FOR_PROVIDER },
             { providerId, priceIds },
           ).catch(() => [])
         : [],
@@ -860,14 +860,14 @@ export class ProviderContractsService {
       customerIds.length > 0
         ? this.secureRpc.send<CustomerIdentity[]>(
             this.identityClient,
-            { cmd: 'provider.identities.batch' },
+            { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
             { identityIds: customerIds },
           ).catch(() => [])
         : [],
       roomIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
-            { cmd: 'catalog.rooms.findByIdsForProvider' },
+            { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER },
             { providerId, roomIds },
           ).catch(() => [])
         : [],
@@ -898,7 +898,7 @@ export class ProviderContractsService {
     const identities = customerIds.length > 0
       ? await this.secureRpc.send<CustomerIdentity[]>(
           this.identityClient,
-          { cmd: 'provider.identities.batch' },
+          { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
           { identityIds: customerIds },
         ).catch(() => [])
       : [];
@@ -918,7 +918,7 @@ export class ProviderContractsService {
       where: {
         providerId,
         roomId,
-        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.ACTIVE] },
+        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.PENDING_PAYMENT, ContractStatus.ACTIVE] },
       },
     });
     return { hasReferences: count > 0 };
@@ -947,7 +947,7 @@ export class ProviderContractsService {
     const identities = customerIds.length > 0
       ? await this.secureRpc.send<CustomerIdentity[]>(
           this.identityClient,
-          { cmd: 'provider.identities.batch' },
+          { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
           { identityIds: customerIds },
         ).catch(() => [])
       : [];
@@ -1079,10 +1079,120 @@ export class ProviderContractsService {
         where: { providerId, status: 'ACTIVE' }
       }),
       this.prisma.contract.count({
-        where: { providerId, status: 'PENDING_SIGNATURE' }
+        where: { providerId, status: { in: ['PENDING_SIGNATURE', 'PENDING_PAYMENT'] } }
       })
     ]);
 
     return { activeContracts, pendingRequests };
+  }
+
+  async getStatusDistribution(providerId: string) {
+    const stats = await this.prisma.contract.groupBy({
+      by: ['status'],
+      where: { providerId },
+      _count: { id: true },
+    });
+
+    let active = 0, pending = 0, churn = 0;
+    stats.forEach((s) => {
+      if (s.status === 'ACTIVE') active += s._count.id;
+      if (s.status === 'PENDING_SIGNATURE' || s.status === 'DRAFT' || s.status === 'PENDING_PAYMENT') pending += s._count.id;
+      if (s.status === 'EXPIRED' || s.status === 'TERMINATED' || s.status === 'CANCELLED') churn += s._count.id;
+    });
+
+    const total = active + pending + churn;
+    if (total === 0) return { active: 0, pending: 0, churn: 0 };
+
+    return {
+      active: Math.round((active / total) * 100),
+      pending: Math.round((pending / total) * 100),
+      churn: Math.round((churn / total) * 100),
+    };
+  }
+
+  async getExpiringContracts(providerId: string) {
+    const nextMonth = new Date();
+    nextMonth.setMonth(nextMonth.getMonth() + 1);
+
+    const expiring = await this.prisma.contract.findMany({
+      where: {
+        providerId,
+        status: 'ACTIVE',
+        endDate: { lte: nextMonth, not: null },
+      },
+      select: { contractNumber: true, endDate: true },
+    });
+    return expiring;
+  }
+
+  async getRecentContracts(providerId: string) {
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+
+    return contracts.map((c) => ({
+      id: c.id,
+      customerName: 'Khách hàng',
+      roomName: c.roomId ? 'Phòng ' + c.roomId.slice(-3) : 'Chưa xếp phòng',
+      startDate: c.startDate ? c.startDate.toISOString().split('T')[0] : 'N/A',
+      status: c.status,
+    }));
+  }
+
+  async findCustomersByProvider(providerId: string, options?: { status?: string; page?: number; limit?: number; search?: string }) {
+    const page = options?.page || 1;
+    const limit = options?.limit || 10;
+
+    const contracts = await this.prisma.contract.findMany({
+      where: { providerId },
+      distinct: ['customerId'],
+      orderBy: [
+        { customerId: 'asc' },
+        { createdAt: 'desc' },
+      ],
+      select: {
+        id: true,
+        contractNumber: true,
+        customerId: true,
+        roomId: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+
+    let results = contracts.map((contract) => ({
+      id: contract.customerId,
+      name: 'Khách hàng',
+      phone: '',
+      contractId: contract.id,
+      room: contract.roomId ? 'Phòng ' + contract.roomId.slice(-3) : 'Chưa xếp phòng',
+      status: contract.status,
+      joinDate: contract.startDate,
+    }));
+
+    if (options?.search) {
+      const search = options.search.toLowerCase();
+      results = results.filter((r) => r.name.toLowerCase().includes(search) || r.phone.includes(search));
+    }
+
+    if (options?.status && options.status !== 'ALL') {
+      results = results.filter((r) => r.status === options.status);
+    }
+
+    const total = results.length;
+    const paginated = results.slice((page - 1) * limit, page * limit);
+
+    return {
+      data: paginated,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }

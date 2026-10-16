@@ -55,7 +55,7 @@ export class ProviderCatalogController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
-      { cmd: 'services.find' },
+      { cmd: CatalogPatterns.SERVICES_FIND },
       { providerId, ...query },
     );
   }
@@ -63,7 +63,7 @@ export class ProviderCatalogController {
   @Get('service-categories')
   async getServiceCategories(@CurrentUser() user: CurrentUserPayload) {
     await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: 'services.categories.find' }, {});
+    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.SERVICES_CATEGORIES_FIND }, {});
   }
 
   @Get('services/:id')
@@ -74,7 +74,7 @@ export class ProviderCatalogController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
-      { cmd: 'services.findOne' },
+      { cmd: CatalogPatterns.SERVICES_FIND_ONE },
       { providerId, serviceId },
     );
   }
@@ -87,7 +87,7 @@ export class ProviderCatalogController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
-      { cmd: 'services.create' },
+      { cmd: CatalogPatterns.SERVICES_CREATE },
       { providerId, dto },
     );
   }
@@ -101,7 +101,7 @@ export class ProviderCatalogController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.catalogClient,
-      { cmd: 'services.update' },
+      { cmd: CatalogPatterns.SERVICES_UPDATE },
       { providerId, serviceId, dto },
     );
   }

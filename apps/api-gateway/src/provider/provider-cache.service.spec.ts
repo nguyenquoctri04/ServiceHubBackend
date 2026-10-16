@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { ProviderCacheService } from './provider-cache.service';
+import { ProviderIdentityPatterns } from '@app/common/constants/provider.patterns';
 
 describe('ProviderCacheService', () => {
   const identityClient = {} as any;
@@ -23,7 +24,7 @@ describe('ProviderCacheService', () => {
 
     expect(proxy.send).toHaveBeenCalledWith(
       identityClient,
-      { cmd: 'providers.getByIdForIdentity' },
+      { cmd: ProviderIdentityPatterns.GET_BY_ID_FOR_IDENTITY },
       { identityId: 'identity-1', providerId: 'provider-b' },
     );
   });

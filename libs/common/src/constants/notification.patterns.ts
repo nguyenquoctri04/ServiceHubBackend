@@ -1,3 +1,17 @@
+export enum NotificationChannelValue {
+  EMAIL = "EMAIL",
+  SMS = "SMS",
+  PUSH = "PUSH",
+  IN_APP = "IN_APP",
+}
+
+export enum NotificationStatusValue {
+  PENDING = "PENDING",
+  SENT = "SENT",
+  FAILED = "FAILED",
+  READ = "READ",
+}
+
 export enum NotificationKindValue {
   BROADCAST = "BROADCAST",
   EVENT = "EVENT",
@@ -20,6 +34,7 @@ export enum NotificationEventType {
 }
 
 export class NotificationPatterns {
+  // Platform & Admin & User patterns
   public static readonly ADMIN_CREATE = "notifications.admin.create";
   public static readonly EVENT_CREATE = "notifications.event.create";
   public static readonly USER_LIST = "notifications.user.list";
@@ -28,6 +43,16 @@ export class NotificationPatterns {
     "notifications.user.mark-all-read";
   public static readonly USER_UNREAD_COUNT =
     "notifications.user.unread-count";
+
+  // Provider / In-App patterns
+  public static readonly GET_USER_NOTIFICATIONS =
+    "notifications.getUserNotifications";
+  public static readonly CREATE_IN_APP =
+    "notifications.createInApp";
+  public static readonly MARK_ALL_READ =
+    "notifications.markAllRead";
+  public static readonly MARK_READ =
+    "notifications.markRead";
 }
 
 export class IdentityNotificationPatterns {

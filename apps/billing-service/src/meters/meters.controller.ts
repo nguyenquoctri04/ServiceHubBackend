@@ -52,7 +52,7 @@ export class MetersController {
     return this.service.confirmImport(payload.providerId, payload.dto.rows, payload.recordedBy);
   }
 
-  @MessagePattern({ cmd: 'billing.meters.dashboardStats' })
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_DASHBOARD_STATS })
   async getMeterStats(@Payload() payload: { providerId: string }) {
     return this.service.getMeterDashboardStats(payload.providerId);
   }

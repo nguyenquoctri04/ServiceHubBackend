@@ -28,4 +28,13 @@ export const CatalogPatterns = {
     ROOMS_FIND_BY_IDS: 'catalog.rooms.findByIds',
 
     ROOMS_COUNT_BY_PROVIDER: 'catalog.rooms.countByProvider',
+    ROOMS_FIND_BY_IDS_FOR_PROVIDER: 'catalog.rooms.findByIdsForProvider',
+
+    // Provider Services Catalog
+    SERVICES_FIND: 'services.find',
+    SERVICES_CATEGORIES_FIND: 'services.categories.find',
+    SERVICES_FIND_ONE: 'services.findOne',
+    SERVICES_CREATE: 'services.create',
+    SERVICES_UPDATE: 'services.update',
+    SERVICES_PRICES_FIND_FOR_PROVIDER: 'services.prices.findForProvider',
 } as const;

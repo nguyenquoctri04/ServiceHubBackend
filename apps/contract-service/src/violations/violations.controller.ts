@@ -12,17 +12,17 @@ export class ViolationsController {
     return this.service.findByProvider(data.providerId, data.actorId, data.status, data.contractIds);
   }
 
-  @MessagePattern({ cmd: 'provider.violations.count' })
+  @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_COUNT })
   async countViolations(@Payload() data: { providerId: string, status?: string }) {
     return this.service.countByProvider(data.providerId, data.status);
   }
 
-  @MessagePattern({ cmd: 'provider.violations.create' })
+  @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_CREATE })
   async createReport(@Payload() data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
     return this.service.createReport(data);
   }
 
-  @MessagePattern({ cmd: 'provider.violations.appeals.create' })
+  @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_APPEALS_CREATE })
   async createAppeal(@Payload() data: { providerId: string, violationCaseId: string, reason: string, appellantId: string }) {
     return this.service.createAppeal(data);
   }
@@ -31,7 +31,7 @@ export class ViolationsController {
    * Xử lý hành động đối với vi phạm (tạo ViolationAction, tuỳ chọn đóng case).
    * Caller: API Gateway → POST /api/provider/violations/:id/actions
    */
-  @MessagePattern({ cmd: 'provider.violations.handleAction' })
+  @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_HANDLE_ACTION })
   async handleAction(
     @Payload() data: {
       providerId: string;
@@ -44,6 +44,11 @@ export class ViolationsController {
     },
   ) {
     return this.service.handleAction(data);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_RULES })
+  async getViolationRules(@Payload() data?: { targetType?: 'CUSTOMER' | 'PROVIDER' }) {
+    return this.service.getViolationRules(data?.targetType);
   }
 }
 

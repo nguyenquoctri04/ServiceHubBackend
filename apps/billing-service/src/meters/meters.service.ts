@@ -4,7 +4,7 @@ import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { Prisma, Meter } from '@prisma/client-billing';
-import { SecureRpcService } from '@app/common';
+import { CatalogPatterns, ProviderContractPatterns, SecureRpcService } from '@app/common';
 import { ExcelRowDto } from './dto/meter.dto';
 
 export interface MeterContext {
@@ -94,7 +94,7 @@ export class MetersService {
 
     if (data.roomId) {
       try {
-        const rooms = await this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds: [data.roomId] });
+        const rooms = await this.secureRpc.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds: [data.roomId] });
 
 
 
@@ -106,7 +106,7 @@ export class MetersService {
       }
     } else if (data.contractId) {
       try {
-        const contractsMap = await this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds: [data.contractId] });
+        const contractsMap = await this.secureRpc.send<any>(this.contractClient, { cmd: ProviderContractPatterns.FIND_BY_IDS }, { providerId, contractIds: [data.contractId] });
 
 
 
@@ -156,8 +156,8 @@ export class MetersService {
     const contractIds = [...new Set(rows.map(r => r.contractId).filter(Boolean))];
 
     const [rooms, contractsMap] = await Promise.all([
-      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
-      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: ProviderContractPatterns.FIND_BY_IDS }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
     const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
 
@@ -188,8 +188,8 @@ export class MetersService {
 
     // 1. Batch fetch external data
     const [rooms, contractsMap] = await Promise.all([
-      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
-      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: 'contracts.findByIds' }, { providerId, contractIds }).catch(() => ({})) : {}
+      roomIds.length > 0 ? this.secureRpc.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds }).catch(() => []) : [],
+      contractIds.length > 0 ? this.secureRpc.send<any>(this.contractClient, { cmd: ProviderContractPatterns.FIND_BY_IDS }, { providerId, contractIds }).catch(() => ({})) : {}
     ]);
     const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
 

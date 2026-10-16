@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
-import { SecureRpcService, ViolationType } from '@app/common';
+import { NotificationPatterns, SecureRpcService, ViolationType } from '@app/common';
 
 @Injectable()
 export class ViolationsService {
@@ -141,7 +141,7 @@ export class ViolationsService {
     if (!rule) rule = await this.prisma.violationRule.create({ data: { name: ruleName, targetType: 'CUSTOMER', isActive: true, createdAt: new Date(), updatedAt: new Date() } });
     const now = new Date();
     const violation = await this.prisma.violationCase.create({ data: { violationRuleId: rule.id, contractId: contract.id, providerId: data.providerId, reportedBy: data.reportedBy, status: 'REPORTED', description: data.description, occurredAt: now, createdAt: now, updatedAt: now } });
-    await this.secureRpc.send(this.notificationClient, { cmd: 'notifications.createInApp' }, { userId: contract.customerId, providerId: data.providerId, title: 'Có báo cáo vi phạm mới', content: 'Một báo cáo vi phạm liên quan đến hợp đồng của bạn đã được tạo. Vui lòng mở hợp đồng để theo dõi.' });
+    await this.secureRpc.send(this.notificationClient, { cmd: NotificationPatterns.CREATE_IN_APP }, { userId: contract.customerId, providerId: data.providerId, title: 'Có báo cáo vi phạm mới', content: 'Một báo cáo vi phạm liên quan đến hợp đồng của bạn đã được tạo. Vui lòng mở hợp đồng để theo dõi.' });
     return violation;
   }
 
@@ -189,12 +189,29 @@ export class ViolationsService {
       return { success: true, action, contractId: violation.contractId, customerId: violation.contract.customerId, terminated: terminates };
     }, { isolationLevel: 'Serializable' });
     if (result.terminated) {
-      await this.secureRpc.send(this.notificationClient, { cmd: 'notifications.createInApp' }, {
+      await this.secureRpc.send(this.notificationClient, { cmd: NotificationPatterns.CREATE_IN_APP }, {
         userId: result.customerId, providerId: data.providerId,
         title: 'Hợp đồng đã bị chấm dứt',
         content: 'Nhà cung cấp đã chấm dứt hợp đồng do vi phạm. Vui lòng xem chi tiết hợp đồng và liên hệ nhà cung cấp nếu cần.',
       });
     }
     return result;
+  }
+
+  async getViolationRules(targetType?: 'CUSTOMER' | 'PROVIDER') {
+    const where: any = { isActive: true };
+    if (targetType) {
+      where.targetType = targetType;
+    }
+    return this.prisma.violationRule.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        targetType: true,
+      },
+      orderBy: { name: 'asc' },
+    });
   }
 }

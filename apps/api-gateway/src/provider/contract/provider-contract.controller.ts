@@ -12,6 +12,7 @@ import {
 import { ClientProxy } from '@nestjs/microservices';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '@app/common';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
+import { CustomerPatterns } from '@app/common/constants/customer.patterns';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import {
   ContractActionDto,
@@ -102,7 +103,7 @@ export class ProviderContractController {
 
   @Get('signature/status')
   async getSignatureStatus(@CurrentUser() user: CurrentUserPayload) {
-    return this.proxy.send(this.signatureClient, { cmd: 'customer.keys.get-digital-signature-in-setting' }, { identityId: user.id });
+    return this.proxy.send(this.signatureClient, { cmd: CustomerPatterns.GET_DIGITAL_SIGNATURE_IN_SETTING }, { identityId: user.id });
   }
 
   @Post('contracts/:id/revoke')
@@ -117,6 +118,11 @@ export class ProviderContractController {
     return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId, contractId, dto });
   }
 
+  @Get('violations/rules')
+  async getViolationRules(@Query('targetType') targetType?: 'CUSTOMER' | 'PROVIDER') {
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_RULES }, { targetType });
+  }
+
   @Get('violations')
   async getViolations(@CurrentUser() user: CurrentUserPayload, @Query() query: ViolationQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
@@ -126,7 +132,7 @@ export class ProviderContractController {
   @Post('violations')
   async createViolation(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateViolationDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: 'provider.violations.create' }, { providerId, reportedBy: user.id, ...dto });
+    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_CREATE }, { providerId, reportedBy: user.id, ...dto });
   }
 
   @Post('violations/:id/appeals')
@@ -138,7 +144,7 @@ export class ProviderContractController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient,
-      { cmd: 'provider.violations.appeals.create' },
+      { cmd: ProviderContractPatterns.VIOLATIONS_APPEALS_CREATE },
       { providerId, violationCaseId, reason: dto.reason, appellantId: user.id }
     );
   }
@@ -152,7 +158,7 @@ export class ProviderContractController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient,
-      { cmd: 'provider.violations.handleAction' },
+      { cmd: ProviderContractPatterns.VIOLATIONS_HANDLE_ACTION },
       {
         providerId,
         violationCaseId,
@@ -180,7 +186,7 @@ export class ProviderContractController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.contractClient, 
-      { cmd: 'provider.customers.block' }, 
+      { cmd: ProviderContractPatterns.CUSTOMERS_BLOCK }, 
       { providerId, customerId, reason: dto.reason, blockBy: user.id, contractId: dto.contractId }
     );
   }

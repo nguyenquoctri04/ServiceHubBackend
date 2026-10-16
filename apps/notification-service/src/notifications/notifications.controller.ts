@@ -13,39 +13,81 @@ export class NotificationsController {
 
   constructor(private readonly service: NotificationsService) {}
 
-  // ── Admin & Event & User Broadcast patterns (ef66d5b) ───────────────────
+  // // ── Provider / In-app patterns (HEAD) ───────────────────────────────────
 
-  @MessagePattern({ cmd: NotificationPatterns.ADMIN_CREATE })
-  createAdminNotification(@Payload() payload: any) {
-    this.logger.log(`[RPC] createAdminNotification payload: ${JSON.stringify(payload)}`);
-    return this.service.createAdminNotification(
-      payload,
-      payload?.currentUser?.id,
-    );
-  }
+  // /**
+  //  * Lấy danh sách thông báo IN_APP của user.
+  //  * Caller: API Gateway → GET /api/provider/notifications
+  //  */
+  // @MessagePattern({ cmd: 'notifications.getUserNotifications' })
+  // async getUserNotifications(
+  //   @Payload() data: { userId: string; providerId?: string },
+  // ) {
+  //   return this.service.getUserNotifications(data.userId, data.providerId);
+  // }
 
-  @MessagePattern({ cmd: NotificationPatterns.EVENT_CREATE })
-  createEventNotification(@Payload() payload: CreateEventNotificationDto) {
-    return this.service.createEventNotification(payload);
-  }
+  // @MessagePattern({ cmd: 'notifications.createInApp' })
+  // async createInAppNotification(
+  //   @Payload() data: { userId: string; providerId?: string; title: string; content: string },
+  // ) {
+  //   return this.service.createInAppNotification(data);
+  // }
 
-  @MessagePattern({ cmd: NotificationPatterns.USER_LIST })
-  listForUser(@Payload() payload: ListNotificationsDto) {
-    return this.service.listForUser(payload);
-  }
+  // /**
+  //  * Đánh dấu tất cả thông báo là đã đọc.
+  //  * Caller: API Gateway → PUT /api/provider/notifications/read-all
+  //  */
+  // @MessagePattern({ cmd: 'notifications.markAllRead' })
+  // async markAllReadProvider(
+  //   @Payload() data: { userId: string; providerId?: string },
+  // ) {
+  //   return this.service.markAllRead(data.userId, data.providerId);
+  // }
 
-  @MessagePattern({ cmd: NotificationPatterns.USER_MARK_READ })
-  markRead(@Payload() payload: MarkNotificationReadDto) {
-    return this.service.markRead(payload);
-  }
+  // /**
+  //  * Đánh dấu một thông báo cụ thể là đã đọc.
+  //  * Caller: API Gateway → PUT /api/provider/notifications/:id/read
+  //  */
+  // @MessagePattern({ cmd: 'notifications.markRead' })
+  // async markReadProvider(
+  //   @Payload() data: { notificationId: string; userId: string },
+  // ) {
+  //   return this.service.markReadInApp(data.notificationId, data.userId);
+  // }
 
-  @MessagePattern({ cmd: NotificationPatterns.USER_MARK_ALL_READ })
-  markAllRead(@Payload() payload: { userId: string }) {
-    return this.service.markAllRead(payload.userId);
-  }
+  // // ── Admin & Event & User Broadcast patterns (ef66d5b) ───────────────────
 
-  @MessagePattern({ cmd: NotificationPatterns.USER_UNREAD_COUNT })
-  unreadCount(@Payload() payload: { userId: string }) {
-    return this.service.unreadCount(payload.userId);
-  }
+  // @MessagePattern({ cmd: NotificationPatterns.ADMIN_CREATE })
+  // createAdminNotification(@Payload() payload: any) {
+  //   this.logger.log(`[RPC] createAdminNotification payload: ${JSON.stringify(payload)}`);
+  //   return this.service.createAdminNotification(
+  //     payload,
+  //     payload?.currentUser?.id,
+  //   );
+  // }
+
+  // @MessagePattern({ cmd: NotificationPatterns.EVENT_CREATE })
+  // createEventNotification(@Payload() payload: CreateEventNotificationDto) {
+  //   return this.service.createEventNotification(payload);
+  // }
+
+  // @MessagePattern({ cmd: NotificationPatterns.USER_LIST })
+  // listForUser(@Payload() payload: ListNotificationsDto) {
+  //   return this.service.listForUser(payload);
+  // }
+
+  // @MessagePattern({ cmd: NotificationPatterns.USER_MARK_READ })
+  // markRead(@Payload() payload: MarkNotificationReadDto) {
+  //   return this.service.markRead(payload);
+  // }
+
+  // @MessagePattern({ cmd: NotificationPatterns.USER_MARK_ALL_READ })
+  // markAllRead(@Payload() payload: { userId: string }) {
+  //   return this.service.markAllRead(payload.userId);
+  // }
+
+  // @MessagePattern({ cmd: NotificationPatterns.USER_UNREAD_COUNT })
+  // unreadCount(@Payload() payload: { userId: string }) {
+  //   return this.service.unreadCount(payload.userId);
+  // }
 }

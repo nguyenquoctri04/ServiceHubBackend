@@ -9,13 +9,13 @@ import { CustomerNotificationsService } from "./customer.notifications.service";
 export class CustomerNotificationsController {
     constructor(private readonly service: CustomerNotificationsService) {}
 
-    @MessagePattern({ cmd: CustomerPatterns.NOTIFY_SERVICE_REGISTRATION })
-    async notifyServiceRegistration(
-        @Payload() payload: NotifyServiceRegistrationInput,
-    ) {
-        return this.service.notifyServiceRegistration({
-            ...payload,
-            occurredAt: new Date(payload.occurredAt),
-        });
-    }
+    // @MessagePattern({ cmd: CustomerPatterns.NOTIFY_SERVICE_REGISTRATION })
+    // async notifyServiceRegistration(
+    //     @Payload() payload: NotifyServiceRegistrationInput,
+    // ) {
+    //     return this.service.notifyServiceRegistration({
+    //         ...payload,
+    //         occurredAt: new Date(payload.occurredAt),
+    //     });
+    // }
 }

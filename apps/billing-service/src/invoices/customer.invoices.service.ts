@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
+import { ClientProxy, RpcException } from "@nestjs/microservices";
 import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { PrismaService } from "../prisma/prisma.service";
@@ -178,8 +178,43 @@ export class CustomerInvoicesService {
 
         const ids = expired.map(({ id }) => id);
         await this.prisma.$transaction([
-            this.prisma.payment.deleteMany({ where: { invoiceId: { in: ids } } }),
-            this.prisma.invoiceItem.deleteMany({ where: { invoiceId: { in: ids } } }),
+            this.prisma.payment.deleteMany({
+                where: { invoiceId: { in: ids } },
+            }),
+            this.prisma.invoiceItem.deleteMany({
+                where: { invoiceId: { in: ids } },
+            }),
+            this.prisma.invoice.deleteMany({ where: { id: { in: ids } } }),
+        ]);
+        return { count: ids.length };
+    }
+
+    async cancelContractPrepaymentInvoice(contractId: string) {
+        const invoices = await this.prisma.invoice.findMany({
+            where: {
+                contractId,
+                status: { in: ["UNPAID", "OVERDUE", "PAID"] },
+            },
+            select: { id: true, status: true },
+        });
+
+        if (invoices.some((invoice) => invoice.status === "PAID")) {
+            throw new RpcException({
+                statusCode: 409,
+                message: "Hóa đơn của dịch vụ đã được thanh toán nên không thể hủy dịch vụ.",
+            });
+        }
+
+        const ids = invoices.map(({ id }) => id);
+        if (ids.length === 0) return { count: 0 };
+
+        await this.prisma.$transaction([
+            this.prisma.payment.deleteMany({
+                where: { invoiceId: { in: ids } },
+            }),
+            this.prisma.invoiceItem.deleteMany({
+                where: { invoiceId: { in: ids } },
+            }),
             this.prisma.invoice.deleteMany({ where: { id: { in: ids } } }),
         ]);
         return { count: ids.length };

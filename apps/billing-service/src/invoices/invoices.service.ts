@@ -264,54 +264,54 @@ export class InvoicesService {
   }
 
   // ─── Customer: danh sách hóa đơn ─────────────────────────────────────────
-  async findCustomerInvoices(customerId: string, query: InvoiceQueryDto) {
-    const where: Prisma.InvoiceWhereInput = { customerId };
-    if (query.status) where.status = query.status as any;
-    if (query.search) where.invoiceNumber = { contains: query.search, mode: 'insensitive' };
+  // async findCustomerInvoices(customerId: string, query: InvoiceQueryDto) {
+  //   const where: Prisma.InvoiceWhereInput = { customerId };
+  //   if (query.status) where.status = query.status as any;
+  //   if (query.search) where.invoiceNumber = { contains: query.search, mode: 'insensitive' };
 
-    const page  = query.page  ? Number(query.page)  : 1;
-    const limit = query.limit ? Number(query.limit) : 10;
-    const skip  = (page - 1) * limit;
+  //   const page  = query.page  ? Number(query.page)  : 1;
+  //   const limit = query.limit ? Number(query.limit) : 10;
+  //   const skip  = (page - 1) * limit;
 
-    const [total, data] = await Promise.all([
-      this.prisma.invoice.count({ where }),
-      this.prisma.invoice.findMany({
-        where, skip, take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: { items: true, payments: true },
-      }),
-    ]);
+  //   const [total, data] = await Promise.all([
+  //     this.prisma.invoice.count({ where }),
+  //     this.prisma.invoice.findMany({
+  //       where, skip, take: limit,
+  //       orderBy: { createdAt: 'desc' },
+  //       include: { items: true, payments: true },
+  //     }),
+  //   ]);
 
-    return { data, total, page, limit };
-  }
+  //   return { data, total, page, limit };
+  // }
 
   // ─── Customer: chi tiết hóa đơn ──────────────────────────────────────────
-  async findOneCustomerInvoice(customerId: string, invoiceId: string) {
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { id: invoiceId, customerId },
-      include: { items: true, payments: true },
-    });
-    if (!invoice) throw new RpcException(new NotFoundException('Invoice not found'));
-    return invoice;
-  }
+  // async findOneCustomerInvoice(customerId: string, invoiceId: string) {
+  //   const invoice = await this.prisma.invoice.findFirst({
+  //     where: { id: invoiceId, customerId },
+  //     include: { items: true, payments: true },
+  //   });
+  //   if (!invoice) throw new RpcException(new NotFoundException('Invoice not found'));
+  //   return invoice;
+  // }
 
   // ─── Customer: thanh toán hóa đơn ────────────────────────────────────────
-  async customerPayInvoice(
-    customerId: string,
-    invoiceId: string,
-    dto: PayInvoiceDto,
-    ipAddr?: string,
-  ) {
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { id: invoiceId, customerId },
-      include: { payments: true },
-    });
-    if (!invoice) throw new RpcException(new NotFoundException('Invoice not found'));
-    if (invoice.status === 'PAID')
-      throw new RpcException(new ConflictException('Invoice is already paid'));
+  // async customerPayInvoice(
+  //   customerId: string,
+  //   invoiceId: string,
+  //   dto: PayInvoiceDto,
+  //   ipAddr?: string,
+  // ) {
+  //   const invoice = await this.prisma.invoice.findFirst({
+  //     where: { id: invoiceId, customerId },
+  //     include: { payments: true },
+  //   });
+  //   if (!invoice) throw new RpcException(new NotFoundException('Invoice not found'));
+  //   if (invoice.status === 'PAID')
+  //     throw new RpcException(new ConflictException('Invoice is already paid'));
 
-    return this.processPayment(invoice, dto, ipAddr);
-  }
+  //   return this.processPayment(invoice, dto, ipAddr);
+  // }
 
   // ─── Shared: xử lý thanh toán (CASH / VNPAY / ZALOPAY) ────────────────────
   private async processPayment(

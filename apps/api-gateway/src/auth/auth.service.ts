@@ -101,7 +101,15 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token is invalid or revoked");
     }
 
-    const user = { id: userId, email: payload.email, role: payload.role, providerId: payload.providerId };
+    const user = await this.secureRpc.send<AuthenticatedUser>(
+      this.identityClient,
+      { cmd: Patterns.AUTH_GET_USER_PROFILE },
+      { userId },
+    );
+    // Keep the provider profile selected before refresh when the token has one.
+    if (payload.providerId) {
+      user.providerId = payload.providerId;
+    }
     return await this.generateTokens(user);
   }
 
@@ -144,28 +152,39 @@ export class AuthService {
   }
 
   private async generateTokens(user: AuthenticatedUser) {
-    const payload = { sub: user.id, role: user.role, email: user.email, providerId: user.providerId };
+    const normalizedUser: AuthenticatedUser = {
+      ...user,
+      isEkycVerified: user.isEkycVerified ?? false,
+      providerId: user.providerId ?? null,
+    };
+    const payload = {
+      sub: normalizedUser.id,
+      role: normalizedUser.role,
+      email: normalizedUser.email,
+      isEkycVerified: normalizedUser.isEkycVerified,
+      providerId: normalizedUser.providerId,
+    };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: "15m" });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });
 
     // Save Access Token in Redis (15m TTL)
     await this.redisService.set(
-      `access_token:${user.id}`,
+      `access_token:${normalizedUser.id}`,
       accessToken,
       15 * 60,
     );
 
     // Save Refresh Token in Redis (7d TTL)
     await this.redisService.set(
-      `refresh_token:${user.id}`,
+      `refresh_token:${normalizedUser.id}`,
       refreshToken,
       7 * 24 * 60 * 60,
     );
 
     // Prime user_active cache (60s TTL)
     await this.redisService.set(
-      `user_active:${user.id}`,
+      `user_active:${normalizedUser.id}`,
       '1',
       60,
     );
@@ -173,7 +192,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      user,
+      user: normalizedUser,
     };
   }
 }

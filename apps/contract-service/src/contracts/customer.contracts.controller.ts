@@ -145,6 +145,16 @@ export class CustomerContractsController {
         );
     }
 
+    @MessagePattern({ cmd: CustomerPatterns.CANCEL_CUSTOMER_CONTRACT })
+    async cancelCustomerContract(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        return this.service.cancelService(
+            payload.customerId,
+            payload.contractId,
+        );
+    }
+
     @MessagePattern({ cmd: CustomerPatterns.GET_CONTRACT_FILE_FOR_VIEWING })
     async getContractFileForViewing(
         @Payload() payload: { contractId: string; identityId: string },

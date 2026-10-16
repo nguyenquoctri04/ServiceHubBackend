@@ -918,7 +918,7 @@ export class ProviderContractsService {
       where: {
         providerId,
         roomId,
-        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.ACTIVE] },
+        status: { in: [ContractStatus.DRAFT, ContractStatus.PENDING_SIGNATURE, ContractStatus.PENDING_PAYMENT, ContractStatus.ACTIVE] },
       },
     });
     return { hasReferences: count > 0 };
@@ -1079,7 +1079,7 @@ export class ProviderContractsService {
         where: { providerId, status: 'ACTIVE' }
       }),
       this.prisma.contract.count({
-        where: { providerId, status: 'PENDING_SIGNATURE' }
+        where: { providerId, status: { in: ['PENDING_SIGNATURE', 'PENDING_PAYMENT'] } }
       })
     ]);
 
@@ -1096,7 +1096,7 @@ export class ProviderContractsService {
     let active = 0, pending = 0, churn = 0;
     stats.forEach((s) => {
       if (s.status === 'ACTIVE') active += s._count.id;
-      if (s.status === 'PENDING_SIGNATURE' || s.status === 'DRAFT') pending += s._count.id;
+      if (s.status === 'PENDING_SIGNATURE' || s.status === 'DRAFT' || s.status === 'PENDING_PAYMENT') pending += s._count.id;
       if (s.status === 'EXPIRED' || s.status === 'TERMINATED' || s.status === 'CANCELLED') churn += s._count.id;
     });
 

@@ -18,4 +18,11 @@ export class ProviderBillingPatterns {
   public static readonly CATALOG_ROOMS_BY_IDS = 'catalog.rooms.findByIds';
   public static readonly CONTRACTS_BY_IDS = 'contracts.byIds';
 
+  // Provider Dashboard & Analytics
+  public static readonly INVOICES_DASHBOARD_STATS = 'billing.invoices.dashboardStats';
+  public static readonly INVOICES_REVENUE_GROWTH = 'billing.invoices.revenueGrowth';
+  public static readonly INVOICES_AGING = 'billing.invoices.aging';
+  public static readonly INVOICES_RECENT_PAYMENTS = 'billing.invoices.recentPayments';
+  public static readonly METERS_DASHBOARD_STATS = 'billing.meters.dashboardStats';
+
 }

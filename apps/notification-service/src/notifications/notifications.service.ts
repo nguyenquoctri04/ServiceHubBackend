@@ -33,7 +33,7 @@ export interface NotificationListItem {
   status: string;
   channel: string;
   sendAt: Date;
-  providerId: string | null;
+  createdBy?: string | null;
 }
 
 @Injectable()
@@ -46,7 +46,7 @@ export class NotificationsService implements OnModuleInit {
     private readonly secureRpc: SecureRpcService,
     @Inject("IDENTITY_SERVICE")
     private readonly identityClient: ClientProxy,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     try {

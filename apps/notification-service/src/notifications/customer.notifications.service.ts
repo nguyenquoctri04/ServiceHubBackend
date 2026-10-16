@@ -4,7 +4,7 @@ import { NotifyServiceRegistrationInput } from "@app/common/dto/customer/contrac
 
 @Injectable()
 export class CustomerNotificationsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService) { }
 
     // async notifyServiceRegistration(input: NotifyServiceRegistrationInput) {
     //     const title = "Đăng ký dịch vụ";

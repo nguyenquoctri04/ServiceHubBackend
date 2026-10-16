@@ -7,8 +7,6 @@ import {
 } from "@nestjs/microservices";
 import { parseRedisUrl } from "@app/common";
 
-import { ContractsController } from "./contracts.controller";
-import { ContractsService } from "./contracts.service";
 import { CustomerContractsController } from "./customer.contracts.controller";
 import { CustomerContractsService } from "./customer.contracts.service";
 import { ProviderContractsController } from "./provider.contracts.controller";
@@ -38,12 +36,10 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
 @Module({
   imports: [ClientsModule.registerAsync(clientProviders)],
   controllers: [
-    ContractsController,
     CustomerContractsController,
     ProviderContractsController,
   ],
   providers: [
-    ContractsService,
     CustomerContractsService,
     ProviderContractsService,
     ContractPdfRendererService,

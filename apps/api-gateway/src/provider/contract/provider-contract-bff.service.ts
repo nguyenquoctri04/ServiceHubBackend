@@ -1,8 +1,9 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
-import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
+import { ProviderContractPatterns, ProviderIdentityPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
+import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
 import { ViolationQueryDto } from '../dto/contract.dto';
 
 @Injectable()
@@ -22,9 +23,9 @@ export class ProviderContractBffService {
     const priceIds = [...new Set(contracts.flatMap((c) => c.services?.map((s: any) => s.servicePriceId) || []).filter(Boolean))];
 
     const [identities, rooms, prices] = await Promise.all([
-      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [],
-      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
-      priceIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'services.prices.findForProvider' }, { providerId, priceIds }).catch(() => []) : [],
+      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH }, { identityIds: customerIds }).catch(() => []) : [],
+      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds }).catch(() => []) : [],
+      priceIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.SERVICES_PRICES_FIND_FOR_PROVIDER }, { providerId, priceIds }).catch(() => []) : [],
     ]);
 
     const identitiesById = new Map((identities || []).map((id: any) => [id.id, id]));
@@ -115,8 +116,8 @@ export class ProviderContractBffService {
     const roomIds = [...new Set(violations.map(v => v.roomId).filter(Boolean))];
 
     const [identities, rooms] = await Promise.all([
-      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: 'provider.identities.batch' }, { identityIds: customerIds }).catch(() => []) : [],
-      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: 'catalog.rooms.findByIdsForProvider' }, { providerId, roomIds }).catch(() => []) : [],
+      customerIds.length > 0 ? this.proxy.send<any[]>(this.identityClient, { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH }, { identityIds: customerIds }).catch(() => []) : [],
+      roomIds.length > 0 ? this.proxy.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds }).catch(() => []) : [],
     ]);
 
     const identitiesById = new Map((identities || []).map(identity => [identity.id, identity]));

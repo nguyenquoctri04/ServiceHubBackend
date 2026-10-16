@@ -1,3 +1,4 @@
+import { NotificationPatterns } from '@app/common';
 import { ProviderContractsService } from './provider.contracts.service';
 
 describe('ProviderContractsService.findContracts', () => {
@@ -51,7 +52,7 @@ describe('ProviderContractsService.findContracts', () => {
     await expect(service.cancelContract('provider-1', 'contract-1', '')).rejects.toMatchObject({ message: expect.stringContaining('lý do') });
 
     await expect(service.cancelContract('provider-1', 'contract-1', 'Không còn năng lực cung cấp dịch vụ.')).resolves.toMatchObject({ id: 'contract-1', status: 'CANCELLED' });
-    expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: 'notifications.createInApp' }, expect.objectContaining({
+    expect(secureRpc.send).toHaveBeenCalledWith(expect.anything(), { cmd: NotificationPatterns.CREATE_IN_APP }, expect.objectContaining({
       userId: 'customer-1',
       providerId: 'provider-1',
       content: expect.stringContaining('Không còn năng lực cung cấp dịch vụ.'),

@@ -6,7 +6,7 @@ import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 
 @Controller()
 export class CustomerContractsController {
-    constructor(private readonly service: CustomerContractsService) {}
+    constructor(private readonly service: CustomerContractsService) { }
 
     @MessagePattern({
         cmd: CustomerPatterns.GET_POPULAR_SERVICES,

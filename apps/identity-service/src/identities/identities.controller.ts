@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   IdentityNotificationPatterns,
   NotificationTargetTypeValue,
+  ProviderIdentityPatterns,
 } from '@app/common';
 import { IdentitiesService } from './identities.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -38,12 +39,12 @@ export class IdentitiesController {
     return this.identitiesService.resolveNotificationRecipients(payload);
   }
 
-  @MessagePattern({ cmd: 'provider.identities.batch' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.IDENTITIES_BATCH })
   async getIdentitiesBatch(@Payload() payload: { identityIds: string[] }) {
     return this.identitiesService.getIdentitiesBatch(payload?.identityIds || []);
   }
 
-  @MessagePattern({ cmd: 'get.customer.by.id' })
+  @MessagePattern({ cmd: ProviderIdentityPatterns.GET_CUSTOMER_BY_ID })
   async getCustomerById(@Payload() payload: { customerId: string }) {
     const list = await this.identitiesService.getIdentitiesBatch([payload?.customerId]);
     return list[0] || null;

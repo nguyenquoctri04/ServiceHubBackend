@@ -214,7 +214,7 @@ async function main() {
             // cIdx 10: ACTIVE (Không yêu cầu ký số)
             // cIdx 11: EXPIRED (Hết hạn lưu trú)
             // cIdx 12: TERMINATED (Chấm dứt trước hạn do vi phạm hoặc thỏa thuận)
-            let status: "DRAFT" | "PENDING_SIGNATURE" | "ACTIVE" | "EXPIRED" | "TERMINATED" = "ACTIVE";
+            let status: "DRAFT" | "PENDING_SIGNATURE" | "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED" | "TERMINATED" = "ACTIVE";
             let requireSignature = true;
             let contractCode = `HD-2026-${String(currentContractNum).padStart(4, "0")}`;
             let signedAt: Date | null = new Date("2026-01-05T10:00:00Z");
@@ -232,9 +232,14 @@ async function main() {
                 signedAt = null;
                 startDate = new Date("2026-02-15");
                 endDate = new Date("2027-02-14");
-            } else if (cIdx === 3 || cIdx === 4) {
+            } else if (cIdx === 3) {
                 status = "PENDING_SIGNATURE";
                 signedAt = null;
+                startDate = new Date("2026-02-01");
+                endDate = new Date("2027-01-31");
+            } else if (cIdx === 4) {
+                status = "PENDING_PAYMENT";
+                signedAt = new Date("2026-02-03T08:30:00Z");
                 startDate = new Date("2026-02-01");
                 endDate = new Date("2027-01-31");
             } else if (cIdx === 10) {
@@ -351,7 +356,7 @@ async function main() {
         const pNum = 11 + ((extIdx - 1) % 15); // Provider 11 -> 25
         const custId = userId(101 + ((extIdx * 3) % 60));
 
-        let status: "DRAFT" | "PENDING_SIGNATURE" | "ACTIVE" | "CANCELLED" = "ACTIVE";
+        let status: "DRAFT" | "PENDING_SIGNATURE" | "PENDING_PAYMENT" | "ACTIVE" | "CANCELLED" = "ACTIVE";
         let contractCode = `HD-DV-${String(currentContractNum).padStart(4, "0")}`;
         let startDate = new Date("2026-01-10");
         let endDate: Date | null = new Date("2026-07-10");
@@ -361,9 +366,12 @@ async function main() {
             status = "DRAFT";
             contractCode = `YCDV-${String(currentContractNum).padStart(4, "0")}`;
             signedAt = null;
-        } else if (extIdx <= 10) {
+        } else if (extIdx <= 8) {
             status = "PENDING_SIGNATURE";
             signedAt = null;
+        } else if (extIdx <= 10) {
+            status = "PENDING_PAYMENT";
+            signedAt = new Date("2026-01-11T09:30:00Z");
         } else if (extIdx > 35) {
             status = "CANCELLED";
             signedAt = null;

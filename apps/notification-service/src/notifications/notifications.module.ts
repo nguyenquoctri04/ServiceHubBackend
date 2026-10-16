@@ -4,6 +4,8 @@ import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { CustomerNotificationsController } from './customer.notifications.controller';
 import { CustomerNotificationsService } from './customer.notifications.service';
+import { ProviderNotificationsController } from './provider.notifications.controller';
+import { ProviderNotificationsService } from './provider.notifications.service';
 import { ClientsModule, ClientsModuleAsyncOptions, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
@@ -33,8 +35,17 @@ const clientProviders: ClientsModuleAsyncOptions = [
       inject: [ConfigService],
     }),
   ],
-  controllers: [NotificationsController, CustomerNotificationsController],
-  providers: [NotificationsService, CustomerNotificationsService, NotificationsGateway],
+  controllers: [
+    NotificationsController,
+    CustomerNotificationsController,
+    ProviderNotificationsController,
+  ],
+  providers: [
+    NotificationsService,
+    CustomerNotificationsService,
+    ProviderNotificationsService,
+    NotificationsGateway,
+  ],
   exports: [NotificationsGateway],
 })
 export class NotificationsModule {}

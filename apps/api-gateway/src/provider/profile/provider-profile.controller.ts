@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '@app/common';
+import { CurrentUser, JwtAuthGuard, ProviderBillingPatterns, ProviderContractPatterns, ProviderIdentityPatterns, Roles, RolesGuard } from '@app/common';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
 import { ProviderCacheService } from '../provider-cache.service';
 import { ProviderBffService } from '../provider-bff.service';
@@ -30,7 +30,7 @@ export class ProviderProfileController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.getProfile' },
+      { cmd: ProviderIdentityPatterns.GET_PROFILE },
       { identityId: user.id, providerId },
     );
   }
@@ -43,7 +43,7 @@ export class ProviderProfileController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.updateProfile' },
+      { cmd: ProviderIdentityPatterns.UPDATE_PROFILE },
       { identityId: user.id, providerId, dto },
     );
   }
@@ -56,7 +56,7 @@ export class ProviderProfileController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.addLegalDocument' },
+      { cmd: ProviderIdentityPatterns.ADD_LEGAL_DOCUMENT },
       { identityId: user.id, providerId, dto },
     );
   }
@@ -65,7 +65,7 @@ export class ProviderProfileController {
   getMyProviders(@CurrentUser() user: CurrentUserPayload) {
     return this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.getMyProviders' },
+      { cmd: ProviderIdentityPatterns.GET_MY_PROVIDERS },
       { identityId: user.id },
     );
   }
@@ -77,7 +77,7 @@ export class ProviderProfileController {
   ) {
     return this.proxy.send(
       this.identityClient,
-      { cmd: 'providers.create' },
+      { cmd: ProviderIdentityPatterns.CREATE },
       { identityId: user.id, dto },
     );
   }
@@ -87,11 +87,11 @@ export class ProviderProfileController {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const [properties, contractStats, invoiceStats, roomCount, violationCount, meterStats] = await Promise.allSettled([
       this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: 'contract.dashboardStats' }, { providerId }),
-      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.dashboardStats' }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.DASHBOARD_STATS }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_DASHBOARD_STATS }, { providerId }),
       this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOMS_COUNT_BY_PROVIDER }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: 'provider.violations.count' }, { providerId, status: 'REPORTED' }),
-      this.proxy.send(this.billingClient, { cmd: 'billing.meters.dashboardStats' }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_COUNT }, { providerId, status: 'REPORTED' }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.METERS_DASHBOARD_STATS }, { providerId }),
     ]);
 
     const meters = meterStats.status === 'fulfilled' ? meterStats.value : { totalMeters: 0, recordedMeters: 0 };
@@ -147,12 +147,12 @@ export class ProviderProfileController {
       recentContracts,
       expiringContracts,
     ] = await Promise.allSettled([
-      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.revenueGrowth' }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: 'contract.statusDistribution' }, { providerId }),
-      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.aging' }, { providerId }),
-      this.proxy.send(this.billingClient, { cmd: 'billing.invoices.recentPayments' }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: 'contract.recent' }, { providerId }),
-      this.proxy.send(this.contractClient, { cmd: 'contract.expiring' }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_REVENUE_GROWTH }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.STATUS_DISTRIBUTION }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_AGING }, { providerId }),
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_RECENT_PAYMENTS }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.RECENT }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.EXPIRING }, { providerId }),
     ]);
 
     const alerts = [];

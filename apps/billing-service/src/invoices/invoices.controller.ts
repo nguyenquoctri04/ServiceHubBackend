@@ -78,22 +78,22 @@ export class InvoicesController {
     );
   }
 
-  @MessagePattern({ cmd: 'billing.invoices.dashboardStats' })
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_DASHBOARD_STATS })
   async getDashboardStats(@Payload() payload: { providerId: string }) {
     return this.service.getDashboardStats(payload.providerId);
   }
 
-  @MessagePattern({ cmd: 'billing.invoices.revenueGrowth' })
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_REVENUE_GROWTH })
   async getRevenueGrowth(@Payload() payload: { providerId: string }) {
     return this.service.getRevenueGrowth(payload.providerId);
   }
 
-  @MessagePattern({ cmd: 'billing.invoices.aging' })
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_AGING })
   async getInvoiceAging(@Payload() payload: { providerId: string }) {
     return this.service.getInvoiceAging(payload.providerId);
   }
 
-  @MessagePattern({ cmd: 'billing.invoices.recentPayments' })
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_RECENT_PAYMENTS })
   async getRecentPayments(@Payload() payload: { providerId: string }) {
     return this.service.getRecentPayments(payload.providerId);
   }

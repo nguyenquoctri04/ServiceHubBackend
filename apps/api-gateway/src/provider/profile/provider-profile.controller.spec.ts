@@ -5,6 +5,7 @@ import { ProviderBffService } from '../provider-bff.service';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
 import { UpdateProviderProfileDto } from '../dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from '../dto/create-legal-document.dto';
+import { ProviderIdentityPatterns } from '@app/common/constants/provider.patterns';
 
 const mockProviderCacheService = {
   resolveActiveProvider: jest.fn().mockResolvedValue('provider-1'),
@@ -53,7 +54,7 @@ describe('ProviderProfileController', () => {
       expect(result).toEqual({ id: 'provider-1' });
       expect(proxy.send).toHaveBeenCalledWith(
         expect.anything(),
-        { cmd: 'providers.getProfile' },
+        { cmd: ProviderIdentityPatterns.GET_PROFILE },
         { identityId: 'user-1', providerId: 'provider-1' }
       );
     });
@@ -68,7 +69,7 @@ describe('ProviderProfileController', () => {
       expect(result).toEqual({ id: 'provider-1' });
       expect(proxy.send).toHaveBeenCalledWith(
         expect.anything(),
-        { cmd: 'providers.updateProfile' },
+        { cmd: ProviderIdentityPatterns.UPDATE_PROFILE },
         { identityId: 'user-1', providerId: 'provider-1', dto }
       );
     });
@@ -83,7 +84,7 @@ describe('ProviderProfileController', () => {
       expect(result).toEqual({ id: 'doc-1' });
       expect(proxy.send).toHaveBeenCalledWith(
         expect.anything(),
-        { cmd: 'providers.addLegalDocument' },
+        { cmd: ProviderIdentityPatterns.ADD_LEGAL_DOCUMENT },
         { identityId: 'user-1', providerId: 'provider-1', dto }
       );
     });

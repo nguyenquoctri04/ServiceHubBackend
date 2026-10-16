@@ -48,7 +48,7 @@ export class ProviderContractsController {
     return this.providerContractsService.findContracts(payload);
   }
 
-  @MessagePattern({ cmd: 'provider.customers.block' })
+  @MessagePattern({ cmd: ProviderContractPatterns.CUSTOMERS_BLOCK })
   async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string; contractId?: string }) {
     return this.providerContractsService.blockCustomer(payload);
   }
@@ -109,8 +109,23 @@ export class ProviderContractsController {
     return this.providerContractsService.getContractsByIds(contractIds);
   }
 
-  @MessagePattern({ cmd: 'contract.dashboardStats' })
+  @MessagePattern({ cmd: ProviderContractPatterns.DASHBOARD_STATS })
   async getDashboardStats(@Payload() payload: { providerId: string }) {
     return this.providerContractsService.getDashboardStats(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.STATUS_DISTRIBUTION })
+  async getStatusDistribution(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getStatusDistribution(data.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.EXPIRING })
+  async getExpiringContracts(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getExpiringContracts(data.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.RECENT })
+  async getRecentContracts(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getRecentContracts(data.providerId);
   }
 }

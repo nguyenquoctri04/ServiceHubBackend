@@ -67,6 +67,8 @@ export class CustomerPatterns {
 
     public static readonly GET_POPULAR_SERVICES =
         this.CONTRACTS + "get-popular-services";
+    public static readonly CREATE_SERVICE_REQUEST =
+        this.CONTRACTS + "create-service-request";
 
     public static readonly GET_MARKETPLACE_RESTRICTIONS =
         this.CONTRACTS + "get-marketplace-restrictions";
@@ -117,6 +119,8 @@ export class CustomerPatterns {
         ===============================
     */
     public static readonly EKYC = "customer.ekyc.";
+    public static readonly EKYC_OCR = this.EKYC + "ocr";
+    public static readonly EKYC_VERIFY_FACE = this.EKYC + "verify-face";
     public static readonly IDENTITIES = "customer.identities.";
 
     public static readonly GET_PROVIDER_IN_POPULAR =

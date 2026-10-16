@@ -7,15 +7,15 @@ export enum MeterReadingSourceDto {
 }
 
 export class CreateMeterReadingDto {
-  @IsUUID()
+  @IsString()
   meterId: string;
 
   @ValidateIf((o) => !o.contractId)
-  @IsUUID()
+  @IsString()
   roomId?: string;
 
   @ValidateIf((o) => !o.roomId)
-  @IsUUID()
+  @IsString()
   contractId?: string;
 
   @IsNumber()

@@ -5,7 +5,7 @@ import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { ServicesService } from './services.service';
 import { LocationService } from '../location/location.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { of, throwError } from 'rxjs';
+import { SecureRpcService } from '@app/common';
 import { ServiceType, CalculationMethod, BillingFrequency, BillingIntervalUnit } from './dto/create-service.dto';
 
 describe('ServicesService', () => {
@@ -13,6 +13,7 @@ describe('ServicesService', () => {
   let prismaService: any;
   let locationService: any;
   let identityClient: any;
+  let secureRpc: any;
   let configService: any;
 
   beforeEach(async () => {
@@ -20,13 +21,23 @@ describe('ServicesService', () => {
       $transaction: jest.fn((cb) => cb(prismaService)),
       service: {
         create: jest.fn().mockResolvedValue({ id: 'service-1' }),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        update: jest.fn(),
       },
+      category: {
+        findMany: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue({ id: 'cat-1' }),
+      },
+      roomType: { findFirst: jest.fn() },
+      serviceRequirement: { createMany: jest.fn(), deleteMany: jest.fn() },
       servicePrice: {
         create: jest.fn(),
       },
       serviceBillingRule: {
         findFirst: jest.fn().mockResolvedValue({ id: 'rule-1' }),
-        create: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'rule-1' }),
       },
       $queryRaw: jest.fn(),
     };
@@ -37,6 +48,10 @@ describe('ServicesService', () => {
     };
 
     identityClient = {
+      send: jest.fn(),
+    };
+
+    secureRpc = {
       send: jest.fn(),
     };
 
@@ -54,6 +69,7 @@ describe('ServicesService', () => {
         { provide: LocationService, useValue: locationService },
         { provide: ConfigService, useValue: configService },
         { provide: 'IDENTITY_SERVICE', useValue: identityClient },
+        { provide: SecureRpcService, useValue: secureRpc },
       ],
     }).compile();
 
@@ -64,8 +80,37 @@ describe('ServicesService', () => {
     expect(service).toBeDefined();
   });
 
-  it('Nhánh 1: Loại PROPERTY_MANAGER -> Không chạy logic tính khoảng cách', async () => {
-    identityClient.send.mockReturnValue(of({ providerType: 'PROPERTY_MANAGER' }));
+  it('chỉ trả về danh mục từ nguồn dữ liệu thật theo thứ tự tên', async () => {
+    prismaService.category.findMany.mockResolvedValue([{ id: 'cat-1', name: 'Điện' }]);
+
+    await expect(service.findCategories()).resolves.toEqual([{ id: 'cat-1', name: 'Điện' }]);
+    expect(prismaService.category.findMany).toHaveBeenCalledWith({
+      select: { id: true, name: true, description: true },
+      orderBy: { name: 'asc' },
+    });
+  });
+
+  it('không cho cập nhật dịch vụ không thuộc provider đang hoạt động', async () => {
+    prismaService.service.findFirst.mockResolvedValue(null);
+
+    await expect(service.updateService('provider-1', 'service-1', { name: 'Tên mới' }))
+      .rejects.toThrow(RpcException);
+    expect(prismaService.service.update).not.toHaveBeenCalled();
+  });
+
+  it('tìm chi tiết dịch vụ bằng điều kiện id và providerId', async () => {
+    prismaService.service.findFirst.mockResolvedValue(null);
+
+    await expect(service.findOneService('provider-1', 'service-1')).rejects.toThrow(RpcException);
+    expect(prismaService.service.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'service-1', providerId: 'provider-1' },
+    }));
+  });
+
+  // Note: Tests for cross-service validation (external service, property distances) 
+  // were removed because validation was moved to the BFF layer in API Gateway.
+  it('không gọi cross-service validation do đã dời sang BFF', async () => {
+    secureRpc.send.mockResolvedValue({ providerType: 'PROPERTY_MANAGER' });
     
     await service.createService('provider-1', {
       name: 'Test',
@@ -84,8 +129,8 @@ describe('ServicesService', () => {
     expect(prismaService.service.create).toHaveBeenCalled();
   });
 
-  it('Nhánh 2: EXTERNAL_SERVICE xa Property > 5km chưa confirm -> throw HTTP 400', async () => {
-    identityClient.send.mockReturnValue(of({ providerType: 'EXTERNAL_SERVICE' }));
+  it.skip('Nhánh 2: EXTERNAL_SERVICE xa Property > 5km chưa confirm -> throw HTTP 400', async () => {
+    secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns a property
     prismaService.$queryRaw.mockResolvedValueOnce([{ id: 'prop-1', propertyName: 'Test Prop', latitude: 11, longitude: 11 }]);
@@ -107,8 +152,8 @@ describe('ServicesService', () => {
     ).rejects.toThrow(RpcException);
   });
 
-  it('Nhánh 3: EXTERNAL_SERVICE xa Service khác > 5km (do không có Property) -> throw HTTP 400', async () => {
-    identityClient.send.mockReturnValue(of({ providerType: 'EXTERNAL_SERVICE' }));
+  it.skip('Nhánh 3: EXTERNAL_SERVICE xa Service khác > 5km (do không có Property) -> throw HTTP 400', async () => {
+    secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns empty
     prismaService.$queryRaw.mockResolvedValueOnce([]);
@@ -133,8 +178,8 @@ describe('ServicesService', () => {
     ).rejects.toThrow(RpcException);
   });
 
-  it('Nhánh 4: Không có Property, Không có Service -> Pass luôn', async () => {
-    identityClient.send.mockReturnValue(of({ providerType: 'EXTERNAL_SERVICE' }));
+  it.skip('Nhánh 4: Không có Property, Không có Service -> Pass luôn', async () => {
+    secureRpc.send.mockResolvedValue({ providerType: 'EXTERNAL_SERVICE' });
     locationService.geocode.mockResolvedValue({ lat: 10, lng: 10 });
     // Mock getNearestProperty returns empty
     prismaService.$queryRaw.mockResolvedValueOnce([]);
@@ -157,9 +202,9 @@ describe('ServicesService', () => {
     expect(prismaService.service.create).toHaveBeenCalled();
   });
 
-  it('Nhánh 5: External API bị timeout -> Ném lỗi 400 (Không còn Fail-open nữa)', async () => {
+  it.skip('Nhánh 5: External API bị timeout -> Ném lỗi 400 (Không còn Fail-open nữa)', async () => {
     // Giả lập Identity Service timeout
-    identityClient.send.mockReturnValue(throwError(() => new Error('Timeout')));
+    secureRpc.send.mockRejectedValue(new Error('Timeout'));
     
     await expect(
       service.createService('provider-1', {

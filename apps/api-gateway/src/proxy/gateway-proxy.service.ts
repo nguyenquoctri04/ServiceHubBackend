@@ -11,6 +11,7 @@ export class GatewayProxyService {
     pattern: string | object,
     data: any = {},
     currentUser?: any,
+    timeoutMs: number = 60000,
   ): Promise<T> {
     const payload =
       typeof data === 'object' && data !== null && !Array.isArray(data)
@@ -18,7 +19,7 @@ export class GatewayProxyService {
         : { data, currentUser };
 
     try {
-      return await this.secureRpc.send<T>(client, pattern, payload);
+      return await this.secureRpc.send<T>(client, pattern, payload, timeoutMs);
     } catch (err: any) {
       require('fs').appendFileSync('/tmp/rpc_errors.log', `Pattern: ${JSON.stringify(pattern)}\nError: ${err?.message || err}\nStack: ${err?.stack || ''}\n\n`);
       console.error(`RPC Exception [Pattern: ${JSON.stringify(pattern)}]:`, err);

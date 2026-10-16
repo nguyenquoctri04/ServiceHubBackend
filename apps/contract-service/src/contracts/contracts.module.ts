@@ -13,6 +13,7 @@ import { CustomerContractsController } from "./customer.contracts.controller";
 import { CustomerContractsService } from "./customer.contracts.service";
 import { ProviderContractsController } from "./provider.contracts.controller";
 import { ProviderContractsService } from "./provider.contracts.service";
+import { ContractPdfRendererService } from "./contract-pdf-renderer.service";
 
 const microservices = [
   "IDENTITY_SERVICE",
@@ -45,6 +46,8 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
     ContractsService,
     CustomerContractsService,
     ProviderContractsService,
+    ContractPdfRendererService,
   ],
+  exports: [ContractPdfRendererService],
 })
 export class ContractsModule {}

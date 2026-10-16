@@ -11,4 +11,19 @@ export class ContractsController {
   async findCustomers(@Payload() data: { providerId: string, status?: string, page?: number, limit?: number, search?: string }) {
     return this.service.findCustomersByProvider(data.providerId, data);
   }
+
+  @MessagePattern({ cmd: 'contract.statusDistribution' })
+  async getStatusDistribution(@Payload() data: { providerId: string }) {
+    return this.service.getStatusDistribution(data.providerId);
+  }
+
+  @MessagePattern({ cmd: 'contract.expiring' })
+  async getExpiringContracts(@Payload() data: { providerId: string }) {
+    return this.service.getExpiringContracts(data.providerId);
+  }
+
+  @MessagePattern({ cmd: 'contract.recent' })
+  async getRecentContracts(@Payload() data: { providerId: string }) {
+    return this.service.getRecentContracts(data.providerId);
+  }
 }

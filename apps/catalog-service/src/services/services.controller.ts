@@ -2,6 +2,7 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import { ServicesService } from './services.service';
 import { CreateServiceDto } from './dto/create-service.dto';
+import { UpdateServiceDto } from './dto/update-service.dto';
 import { ServiceQueryDto } from './dto/service-query.dto';
 
 @Controller()
@@ -20,9 +21,24 @@ export class ServicesController {
     return this.servicesService.findServices(payload.providerId, payload);
   }
 
+  @MessagePattern({ cmd: 'services.categories.find' })
+  async findCategories() {
+    return this.servicesService.findCategories();
+  }
+
+  @MessagePattern({ cmd: 'services.prices.findForProvider' })
+  async findServicePricesForProvider(@Payload() payload: { providerId: string; priceIds: string[] }) {
+    return this.servicesService.findServicePricesForProvider(payload.providerId, payload.priceIds);
+  }
+
   @MessagePattern({ cmd: 'services.findOne' })
   async getServiceDetail(@Payload() payload: { providerId: string; serviceId: string }) {
     return this.servicesService.findOneService(payload.providerId, payload.serviceId);
+  }
+
+  @MessagePattern({ cmd: 'services.update' })
+  async updateService(@Payload() payload: { providerId: string; serviceId: string; dto: UpdateServiceDto }) {
+    return this.servicesService.updateService(payload.providerId, payload.serviceId, payload.dto);
   }
 
   @MessagePattern({ cmd: 'get.service.by.id' })

@@ -24,7 +24,7 @@ export class CustomerContractsService {
         fromEmail: string,
         dto: CreateServiceBookingDto,
     ): Promise<boolean> {
-        console.log(dto.servicePriceId);
+
         return this.secureRpc.send<boolean>(
             this.contractClient,
             { cmd: CustomerPatterns.CREATE_SERVICE_BOOKING },

@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { parseRedisUrl } from '@app/common/utils/redis.config';
 import { CustomerInvoicesController } from './customer.invoices.controller';
 import { CustomerInvoicesService } from './customer.invoices.service';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
   imports: [
@@ -20,8 +21,9 @@ import { CustomerInvoicesService } from './customer.invoices.service';
         inject: [ConfigService],
       },
     ]),
+    PaymentsModule,
   ],
   controllers: [InvoicesController, CustomerInvoicesController],
   providers: [InvoicesService, CustomerInvoicesService],
 })
-export class InvoicesModule {}
+export class InvoicesModule { }

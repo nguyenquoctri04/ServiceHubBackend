@@ -24,6 +24,14 @@ export class CustomerContractsController {
         );
     }
 
+    @MessagePattern({ cmd: CustomerPatterns.CREATE_SERVICE_REQUEST })
+    async createServiceRequest(@Payload() payload: {
+        customerId: string;
+        dto: { providerId: string; servicePriceIds: string[]; requireSignature?: boolean };
+    }) {
+        return this.service.createServiceRequest(payload.customerId, payload.dto);
+    }
+
     @MessagePattern({
         cmd: CustomerPatterns.GET_MARKETPLACE_RESTRICTIONS,
     })
@@ -80,7 +88,6 @@ export class CustomerContractsController {
         @Payload()
         command: CreateServiceBookingCommand,
     ) {
-        console.log(command.servicePriceId);
         return this.service.createServiceBooking(command);
     }
 

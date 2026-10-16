@@ -5,8 +5,15 @@ import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "@app/common";
 import { CurrentUserPayload } from "apps/api-gateway/src/provider/provider.controller";
 
 @Controller(CUSTOMER_IDENTITIES)
+@UseGuards(JwtAuthGuard)
 export class CustomerIdentitiesController {
     constructor(private readonly service: CustomerIdentitiesService) {}
+
+    /** GET /api/customer/identity/identities/me — lấy profile + IdentityDocument */
+    @Get("me")
+    async getMyProfile(@CurrentUser() user: CurrentUserPayload) {
+        return this.service.getMyProfile(user.id);
+    }
 
     @UseGuards(OptionalJwtAuthGuard)
     @Get(CUSTOMER_IDENTITY_ENDPOINT.FETCH_PROVIDER_DETAIL)

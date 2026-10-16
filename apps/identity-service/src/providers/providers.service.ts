@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdateProviderProfileDto } from './dto/update-provider-profile.dto';
 import { ProviderRpcSummary } from './dto/provider-rpc-summary.dto';
 import { CreateLegalDocumentDto } from './dto/create-legal-document.dto';
+import { CreateProviderDto } from './dto/create-provider.dto';
 
 @Injectable()
 export class ProvidersService {
@@ -19,11 +20,11 @@ export class ProvidersService {
    * Get the entire Provider profile along with legal documents.
    * Search by identityId (foreign key from Identity table).
    */
-  async getProviderProfile(identityId: string) {
+  async getProviderProfile(identityId: string, providerId?: string) {
     this.logger.log(`Fetching provider profile for identityId: ${identityId}`);
 
     const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
       include: { 
         legalDocuments: true,
         identity: {
@@ -63,12 +64,16 @@ export class ProvidersService {
    * Update Provider profile information.
    * Only nullable fields are allowed to be updated - cannot update providerType, status, identityId.
    */
-  async updateProviderProfile(identityId: string, dto: UpdateProviderProfileDto) {
+  async updateProviderProfile(
+    identityId: string,
+    dto: UpdateProviderProfileDto,
+    providerId?: string,
+  ) {
     this.logger.log(`Updating provider profile for identityId: ${identityId}`);
 
     // Ensure Provider exists before update
     const existing = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
     });
 
     if (!existing) {
@@ -121,6 +126,16 @@ export class ProvidersService {
         providerType: true,
         status: true,
         address: true,
+        phone: true,
+        email: true,
+        companyName: true,
+        taxCode: true,
+        businessLicenseNumber: true,
+        representativeName: true,
+        representativePosition: true,
+        businessType: true,
+        numberCard: true,
+        nameBank: true,
       },
     });
 
@@ -137,18 +152,48 @@ export class ProvidersService {
       providerName: provider.providerName,
       providerType: provider.providerType as ProviderRpcSummary['providerType'],
       status: provider.status as ProviderRpcSummary['status'],
-      address: provider.address,
+      address: provider.address || undefined,
+      phone: provider.phone || undefined,
+      email: provider.email || undefined,
+      companyName: provider.companyName || undefined,
+      taxCode: provider.taxCode || undefined,
+      businessLicenseNumber: provider.businessLicenseNumber || undefined,
+      representativeName: provider.representativeName || undefined,
+      representativePosition: provider.representativePosition || undefined,
+      businessType: provider.businessType || undefined,
+      accountNumber: provider.numberCard || undefined,
+      bankName: provider.nameBank || undefined,
     };
+  }
+
+  /**
+   * Authorize an active provider workspace against the caller's identity.
+   * A missing record deliberately returns null so the gateway can map it to 403.
+   */
+  async getProviderByIdForIdentity(identityId: string, providerId: string) {
+    return this.prisma.provider.findFirst({
+      where: {
+        id: providerId,
+        identityId,
+      },
+      select: {
+        id: true,
+      },
+    });
   }
 
   /**
    * Add a new legal document for Provider.
    */
-  async addLegalDocument(identityId: string, dto: CreateLegalDocumentDto) {
+  async addLegalDocument(
+    identityId: string,
+    dto: CreateLegalDocumentDto,
+    providerId?: string,
+  ) {
     this.logger.log(`Adding legal document for identityId: ${identityId}`);
 
     const provider = await this.prisma.provider.findFirst({
-      where: { identityId },
+      where: { identityId, ...(providerId ? { id: providerId } : {}) },
     });
 
     if (!provider) {
@@ -173,5 +218,92 @@ export class ProvidersService {
     });
   }
 
+
+  /**
+   * Get all provider profiles belonging to an identity.
+   * Returns a compact list suitable for workspace-switcher UI.
+   */
+  async getMyProviders(identityId: string) {
+    this.logger.log(`Fetching all providers for identityId: ${identityId}`);
+    const providers = await this.prisma.provider.findMany({
+      where: { identityId },
+      select: {
+        id: true,
+        providerName: true,
+        logoUrl: true,
+        providerType: true,
+        status: true,
+        address: true,
+        identity: {
+          select: {
+            verifications: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                documents: {
+                  select: { fullName: true }
+                }
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    return providers.map(p => {
+      const docs = (p as any).identity?.verifications?.[0]?.documents;
+      const ownerName = docs && docs.length > 0 ? docs[0].fullName : null;
+      return {
+        id: p.id,
+        providerName: p.providerName,
+        logoUrl: p.logoUrl,
+        providerType: p.providerType,
+        status: p.status,
+        address: p.address,
+        ownerName: ownerName,
+      };
+    });
+  }
+
+  /**
+   * Register a new provider profile under an existing identity.
+   * providerType and businessType are required enum values from the schema.
+   */
+  async createProvider(identityId: string, dto: CreateProviderDto) {
+    this.logger.log(`Creating new provider for identityId: ${identityId}, name: ${dto.providerName}`);
+
+    // Ensure identity exists before creating a provider
+    const identity = await this.prisma.identity.findUnique({
+      where: { id: identityId },
+    });
+
+    if (!identity) {
+      throw new RpcException({ status: 404, message: 'Identity not found' });
+    }
+
+    const now = new Date();
+    const provider = await this.prisma.provider.create({
+      data: {
+        identityId,
+        providerName: dto.providerName,
+        providerType: dto.providerType,
+        businessType: dto.businessType ?? 'INDIVIDUAL',
+        address: dto.address,
+        status: 'PENDING',
+        createdAt: now,
+        updatedAt: now,
+      },
+      select: {
+        id: true,
+        providerName: true,
+        logoUrl: true,
+        providerType: true,
+        status: true,
+        address: true,
+      },
+    });
+
+    return provider;
+  }
 
 }

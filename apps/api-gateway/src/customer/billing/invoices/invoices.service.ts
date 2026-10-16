@@ -1,59 +1,71 @@
-import { Inject, Injectable } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
-import { SecureRpcService } from '@app/common';
-import { CustomerBillingPatterns } from '@app/common/constants/customer.billing.patterns';
-import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
-import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
+import { SecureRpcService } from "@app/common";
+import { CustomerPatterns } from "@app/common/constants/customer.patterns";
+import { CustomerInvoicesQueryDto } from "@app/common/dto/customer/billing";
+import { Inject, Injectable } from "@nestjs/common";
+import { ClientProxy } from "@nestjs/microservices";
+import { CurrentUserPayload } from "apps/api-gateway/src/provider/provider.controller";
 
 @Injectable()
 export class CustomerInvoicesService {
     constructor(
-        @Inject('BILLING_SERVICE')
+        @Inject("BILLING_SERVICE")
         private readonly billingClient: ClientProxy,
+
+        @Inject("CATALOG_SERVICE")
+        private readonly catalogClient: ClientProxy,
+
         private readonly secureRpc: SecureRpcService,
     ) {}
 
-    /**
-     * GET /api/customer/billing/invoices
-     * Danh sách hóa đơn của customer, có phân trang và filter theo status.
-     */
-    async findInvoices(customerId: string, query: InvoiceQueryDto) {
-        return this.secureRpc.send(
+    async fetchInvoices(query: CustomerInvoicesQueryDto, user: CurrentUserPayload) {
+        const invoices = await this.secureRpc.send<any[]>(
             this.billingClient,
-            { cmd: CustomerBillingPatterns.INVOICES_FIND },
-            { customerId, query },
+            {
+                cmd: CustomerPatterns.FETCH_INVOICES,
+            },
+            { query: query, customerId: user?.id ?? null },
         );
-    }
 
-    /**
-     * GET /api/customer/billing/invoices/:id
-     * Chi tiết một hóa đơn — chỉ trả về nếu thuộc customerId này.
-     */
-    async findOneInvoice(customerId: string, invoiceId: string) {
-        return this.secureRpc.send(
-            this.billingClient,
-            { cmd: CustomerBillingPatterns.INVOICES_FIND_ONE },
-            { customerId, invoiceId },
-        );
-    }
+        if (!Array.isArray(invoices) || invoices.length === 0) {
+            return invoices;
+        }
 
-    /**
-     * POST /api/customer/billing/invoices/:id/pay
-     * Thanh toán hóa đơn.
-     *   CASH    → { paymentMethod: 'CASH', status: 'SUCCESS', paymentId }
-     *   VNPAY   → { paymentId, paymentUrl, paymentMethod: 'VNPAY' }
-     *   ZALOPAY → { paymentId, paymentUrl, paymentMethod: 'ZALOPAY' }
-     */
-    async payInvoice(
-        customerId: string,
-        invoiceId: string,
-        dto: PayInvoiceDto,
-        ipAddr: string,
-    ) {
-        return this.secureRpc.send(
-            this.billingClient,
-            { cmd: CustomerBillingPatterns.INVOICES_PAY },
-            { customerId, invoiceId, dto, ipAddr },
+        const servicePriceIds = [
+            ...new Set(
+                invoices.flatMap((invoice) =>
+                    invoice.items
+                        .map((item: any) => item.servicePriceId)
+                        .filter(
+                            (id: unknown): id is string =>
+                                typeof id === "string",
+                        ),
+                ),
+            ),
+        ];
+
+        const priceDetails = servicePriceIds.length
+            ? await this.secureRpc.send<any[]>(
+                  this.catalogClient,
+                  { cmd: CustomerPatterns.GET_SERVICE_PRICE_DETAILS },
+                  { servicePriceIds },
+              )
+            : [];
+
+        const serviceNames = new Map(
+            priceDetails.map((detail) => [
+                detail.servicePriceId,
+                detail.service?.name ?? "",
+            ]),
         );
+
+        return invoices.map((invoice) => ({
+            ...invoice,
+            items: invoice.items.map((item: any) => ({
+                ...item,
+                serviceName: item.servicePriceId
+                    ? (serviceNames.get(item.servicePriceId) ?? "")
+                    : "",
+            })),
+        }));
     }
 }

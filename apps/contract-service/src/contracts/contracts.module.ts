@@ -20,6 +20,7 @@ const microservices = [
   "CATALOG_SERVICE",
   "NOTIFICATION_SERVICE",
   "SIGNATURE_SERVICE",
+  "BILLING_SERVICE",
 ];
 
 const clientProviders: ClientsModuleAsyncOptions = microservices.map(

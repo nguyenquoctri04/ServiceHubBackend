@@ -55,6 +55,7 @@ export const CUSTOMER_CONTRACT_ENDPOINT = {
     CREATE_SERVICE_BOOKING: "booking",
     GET_USED_SERVICES: "used",
     VIEW_CONTRACT: ":contractId/file",
+    CONFIRM_TERMS: ":contractId/confirm-terms",
 };
 
 /*

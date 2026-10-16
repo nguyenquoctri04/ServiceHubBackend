@@ -29,6 +29,7 @@ model Contract {
 
   @@index([providerId])
   @@index([customerId])
+  @@index([status, signedAt])
   @@index([roomId])
   @@index([status])
   @@index([providerId, status, customerId])
@@ -227,6 +228,7 @@ model ViolationAppeal {
 enum ContractStatus {
   DRAFT
   PENDING_SIGNATURE
+  PENDING_PAYMENT
   ACTIVE
   EXPIRED
   TERMINATED

@@ -186,30 +186,32 @@ export class InvoicesService {
 
   // ─── Provider: biểu đồ tăng trưởng 6 tháng ───────────────────────────────
   async getRevenueGrowth(providerId: string) {
+    const now = new Date();
     const months = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - (5 - i));
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
       return { monthIndex: d.getMonth(), year: d.getFullYear(), label: `T${d.getMonth() + 1}` };
     });
 
-    const now = new Date();
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(now.getMonth() - 5);
-    sixMonthsAgo.setDate(1);
-    sixMonthsAgo.setHours(0, 0, 0, 0);
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
 
     const paidInvoices = await this.prisma.invoice.findMany({
       where: {
         providerId,
         status: 'PAID',
-        createdAt: { gte: sixMonthsAgo },
+        OR: [
+          { updatedAt: { gte: sixMonthsAgo } },
+          { createdAt: { gte: sixMonthsAgo } },
+        ],
       },
-      select: { total: true, createdAt: true },
+      select: { total: true, updatedAt: true, createdAt: true },
     });
 
     return months.map((m) => {
       const total = paidInvoices
-        .filter((inv) => inv.createdAt.getMonth() === m.monthIndex && inv.createdAt.getFullYear() === m.year)
+        .filter((inv) => {
+          const targetDate = inv.updatedAt || inv.createdAt;
+          return targetDate.getMonth() === m.monthIndex && targetDate.getFullYear() === m.year;
+        })
         .reduce((sum, inv) => sum + Number(inv.total), 0);
       return { month: m.label, total };
     });
@@ -220,29 +222,51 @@ export class InvoicesService {
     const stats = await this.prisma.invoice.groupBy({
       by: ['status'],
       where: { providerId },
-      _count: { id: true },
+      _sum: { total: true },
     });
 
-    let paid = 0, unpaid = 0, overdue = 0;
+    let paidAmount = 0;
+    let unpaidAmount = 0;
+    let overdueAmount = 0;
+
     stats.forEach((s) => {
-      if (s.status === 'PAID') paid = s._count.id;
-      if (s.status === 'UNPAID') unpaid = s._count.id;
-      if (s.status === 'OVERDUE') overdue = s._count.id;
+      const amount = Number(s._sum.total ?? 0);
+      if (s.status === 'PAID') paidAmount = amount;
+      if (s.status === 'UNPAID') unpaidAmount = amount;
+      if (s.status === 'OVERDUE') overdueAmount = amount;
     });
 
-    const total = paid + unpaid + overdue;
-    if (total === 0) return { paid: 0, unpaid: 0, overdue: 0 };
+    const totalAmount = paidAmount + unpaidAmount + overdueAmount;
+    if (totalAmount === 0) {
+      return {
+        paid: 0,
+        unpaid: 0,
+        overdue: 0,
+        paidAmount: 0,
+        unpaidAmount: 0,
+        overdueAmount: 0,
+        totalAmount: 0,
+      };
+    }
+
+    const paidPct = Math.round((paidAmount / totalAmount) * 100);
+    const unpaidPct = Math.round((unpaidAmount / totalAmount) * 100);
+    const overduePct = Math.max(0, 100 - paidPct - unpaidPct);
 
     return {
-      paid: Math.round((paid / total) * 100),
-      unpaid: Math.round((unpaid / total) * 100),
-      overdue: Math.round((overdue / total) * 100),
+      paid: paidPct,
+      unpaid: unpaidPct,
+      overdue: overduePct,
+      paidAmount,
+      unpaidAmount,
+      overdueAmount,
+      totalAmount,
     };
   }
 
-  // ─── Provider: lịch sử 5 thanh toán gần nhất ──────────────────────────────
+  // ─── Provider: lịch sử hoạt động thanh toán & công tơ gần nhất ─────────────
   async getRecentPayments(providerId: string) {
-    const payments = await this.prisma.payment.findMany({
+    const paymentPromise = this.prisma.payment.findMany({
       where: {
         invoice: { providerId },
       },
@@ -253,14 +277,79 @@ export class InvoicesService {
       },
     });
 
-    return payments.map((p) => ({
-      id: p.id,
-      type: 'PAYMENT',
-      title: 'Thanh toán thành công',
-      description: `HĐ số ${p.invoice?.invoiceNumber || ''}`,
-      timestamp: p.createdAt,
-      color: 'green',
+    const readingPromise = this.prisma.meterReading
+      ? this.prisma.meterReading.findMany({
+          where: {
+            meter: { providerId },
+            status: 'VALID',
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 2,
+          include: {
+            meter: { select: { name: true, unit: true } },
+          },
+        })
+      : Promise.resolve([]);
+
+    const overduePromise = this.prisma.invoice
+      ? this.prisma.invoice.findMany({
+          where: {
+            providerId,
+            status: 'OVERDUE',
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 2,
+        })
+      : Promise.resolve([]);
+
+    const [payments, readings, overdueInvoices] = await Promise.all([paymentPromise, readingPromise, overduePromise]);
+
+    const paymentActivities = payments.map((p) => {
+      let title = 'Thanh toán thành công';
+      let color = '#10B981';
+
+      if (p.status === 'FAILED') {
+        title = 'Thanh toán thất bại';
+        color = '#EF4444';
+      } else if (p.status === 'PENDING') {
+        title = 'Giao dịch đang xử lý';
+        color = '#F59E0B';
+      }
+
+      return {
+        id: p.id,
+        type: 'PAYMENT',
+        title,
+        description: `HĐ số ${p.invoice?.invoiceNumber || ''}`,
+        timestamp: p.paidAt || p.createdAt,
+        color,
+        actionUrl: '/provider/billing',
+      };
+    });
+
+    const readingActivities = (readings || []).map((r) => ({
+      id: r.id,
+      type: 'METER',
+      title: 'Đã ghi chỉ số công tơ',
+      description: `${r.meter?.name || 'Công tơ'}: ${Number(r.value)} ${r.meter?.unit || ''}`,
+      timestamp: r.createdAt,
+      color: '#06B6D4',
+      actionUrl: '/provider/meters',
     }));
+
+    const overdueActivities = (overdueInvoices || []).map((inv) => ({
+      id: inv.id,
+      type: 'INVOICE_OVERDUE',
+      title: 'Hóa đơn quá hạn thanh toán',
+      description: `HĐ số ${inv.invoiceNumber} • Nợ: ${Number(inv.total).toLocaleString('vi-VN')}đ`,
+      timestamp: inv.updatedAt || inv.createdAt,
+      color: '#EF4444',
+      actionUrl: '/provider/billing',
+    }));
+
+    return [...paymentActivities, ...readingActivities, ...overdueActivities]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
   }
 
   // ─── Customer: danh sách hóa đơn ─────────────────────────────────────────

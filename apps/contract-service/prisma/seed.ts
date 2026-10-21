@@ -225,23 +225,28 @@ async function main() {
                 status = "DRAFT";
                 contractCode = `YCDV-2026-${String(currentContractNum).padStart(4, "0")}`;
                 signedAt = null;
-                startDate = new Date("2026-03-01");
-                endDate = new Date("2027-02-28");
+                startDate = new Date(now.getTime() - 4 * 3600000); // 4 giờ trước
+                endDate = new Date(now.getFullYear() + 1, now.getMonth(), 1);
             } else if (cIdx === 2) {
                 status = "DRAFT";
                 signedAt = null;
-                startDate = new Date("2026-02-15");
-                endDate = new Date("2027-02-14");
+                startDate = new Date(now.getTime() - 24 * 3600000); // 1 ngày trước
+                endDate = new Date(now.getFullYear() + 1, now.getMonth(), 1);
             } else if (cIdx === 3) {
                 status = "PENDING_SIGNATURE";
                 signedAt = null;
-                startDate = new Date("2026-02-01");
-                endDate = new Date("2027-01-31");
+                startDate = new Date(now.getTime() - 6 * 3600000); // 6 giờ trước
+                endDate = new Date(now.getFullYear() + 1, now.getMonth(), 1);
             } else if (cIdx === 4) {
                 status = "PENDING_PAYMENT";
-                signedAt = new Date("2026-02-03T08:30:00Z");
-                startDate = new Date("2026-02-01");
-                endDate = new Date("2027-01-31");
+                signedAt = new Date(now.getTime() - 12 * 3600000);
+                startDate = new Date(now.getTime() - 12 * 3600000);
+                endDate = new Date(now.getFullYear() + 1, now.getMonth(), 1);
+            } else if (cIdx === 5) {
+                status = "ACTIVE";
+                signedAt = new Date(now.getTime() - 2 * 3600000); // Khách ký 2 giờ trước
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear() + 1, now.getMonth(), 1);
             } else if (cIdx === 10) {
                 status = "ACTIVE";
                 requireSignature = false;
@@ -348,12 +353,12 @@ async function main() {
         }
     }
 
-    // --- B. 40 HỢP ĐỒNG DỊCH VỤ NGOÀI (EXTERNAL SERVICES, roomId: null) ---
-    // Phân bổ cho các nhà cung cấp 11 -> 25
-    for (let extIdx = 1; extIdx <= 40; extIdx++) {
+    // --- B. HỢP ĐỒNG DỊCH VỤ NGOÀI (EXTERNAL SERVICES, roomId: null) ---
+    // Phân bổ cho các nhà cung cấp 11 -> 26 (bao gồm Provider 26 của support@vinhomes.vn)
+    for (let extIdx = 1; extIdx <= 48; extIdx++) {
         const currentContractNum = contractCounter;
         const cId = contract(currentContractNum);
-        const pNum = 11 + ((extIdx - 1) % 15); // Provider 11 -> 25
+        const pNum = 11 + ((extIdx - 1) % 16); // Provider 11 -> 26
         const custId = userId(101 + ((extIdx * 3) % 60));
 
         let status: "DRAFT" | "PENDING_SIGNATURE" | "PENDING_PAYMENT" | "ACTIVE" | "CANCELLED" = "ACTIVE";
@@ -362,7 +367,25 @@ async function main() {
         let endDate: Date | null = new Date("2026-07-10");
         let signedAt: Date | null = new Date("2026-01-11T09:30:00Z");
 
-        if (extIdx <= 5) {
+        if (pNum === 26) {
+            const vhStep = Math.floor(extIdx / 16); // 1, 2, 3
+            if (vhStep === 1) {
+                status = "ACTIVE";
+                startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 7, 0);
+                signedAt = new Date(now.getTime() - 2 * 3600000); // Khách ký 2 giờ trước
+            } else if (vhStep === 2) {
+                status = "PENDING_SIGNATURE";
+                startDate = new Date(now.getTime() - 5 * 3600000); // Gửi yêu cầu 5 giờ trước
+                signedAt = null;
+                contractCode = `YCDV-${String(currentContractNum).padStart(4, "0")}`;
+            } else {
+                status = "DRAFT";
+                startDate = new Date(now.getTime() - 24 * 3600000); // Tạo hôm qua
+                signedAt = null;
+                contractCode = `YCDV-${String(currentContractNum).padStart(4, "0")}`;
+            }
+        } else if (extIdx <= 5) {
             status = "DRAFT";
             contractCode = `YCDV-${String(currentContractNum).padStart(4, "0")}`;
             signedAt = null;
@@ -406,7 +429,7 @@ async function main() {
         }
 
         // Gắn ServicePrice từ catalog (External services có priceId từ 31 trở đi)
-        const extPriceId = priceId(30 + ((pNum - 11) * 2) + 1);
+        const extPriceId = pNum === 26 ? priceId(56) : priceId(30 + ((pNum - 11) * 2) + 1);
         contractServiceInserts.push({
             id: contractService(cServiceCounter++),
             contractId: cId,

@@ -87,7 +87,7 @@ describe('InvoicesService', () => {
     const service = new InvoicesService(prisma as any);
 
     const result = await service.getInvoiceAging('provider-1');
-    expect(result).toEqual({ paid: 50, unpaid: 30, overdue: 20 });
+    expect(result).toMatchObject({ paid: 50, unpaid: 30, overdue: 20, paidAmount: 500000, unpaidAmount: 300000, overdueAmount: 200000, totalAmount: 1000000 });
     expect(prisma.invoice.groupBy).toHaveBeenCalledWith(expect.objectContaining({
       where: { providerId: 'provider-1' }
     }));
@@ -99,7 +99,7 @@ describe('InvoicesService', () => {
     };
     const service = new InvoicesService(prisma as any);
 
-    await expect(service.getInvoiceAging('provider-1')).resolves.toEqual({ paid: 0, unpaid: 0, overdue: 0 });
+    await expect(service.getInvoiceAging('provider-1')).resolves.toMatchObject({ paid: 0, unpaid: 0, overdue: 0 });
   });
 
   it('fetches recent payments correctly', async () => {

@@ -100,6 +100,13 @@ async function main() {
         const pNum = Math.floor((cNum - 1) / 12) + 1; // Provider 1 -> 10
         const custId = userId(101 + ((cNum - 1) % 60));
         const rId = roomId(((pNum - 1) * 40) + ((cNum - 1) % 12) + 1);
+        const cIdx = ((cNum - 1) % 12) + 1; // 1 to 12
+
+        // Chỉ seed hóa đơn và chỉ số cho các hợp đồng đang ACTIVE (cIdx 5 đến 10)
+        // cIdx 1, 2 là DRAFT; cIdx 3, 4 là PENDING; cIdx 11, 12 là EXPIRED/TERMINATED
+        if (cIdx < 5 || cIdx > 10) {
+            continue;
+        }
 
         const housingPriceId = servicePriceId((pNum - 1) * 3 + 1);
         const elecPriceId = servicePriceId((pNum - 1) * 3 + 2);
@@ -107,9 +114,17 @@ async function main() {
 
         const baseRent = propertyBaseRents[pNum - 1];
 
-        // Tạo 3 kỳ hóa đơn liên tiếp: 2 tháng trước, tháng trước, và tháng hiện tại
-        for (let m = 0; m < 3; m++) {
-            const targetDate = new Date(now.getFullYear(), now.getMonth() - (2 - m), 5);
+        // Tạo 6 kỳ hóa đơn liên tiếp: 5 tháng trước đến tháng hiện tại để hiển thị đầy đủ biểu đồ 6 tháng
+        for (let m = 0; m < 6; m++) {
+            // Đối với tháng hiện tại (m = 5):
+            // cIdx = 5, 6, 7, 8: Đã ghi chỉ số và lập hóa đơn
+            // cIdx = 9, 10: CHƯA ghi chỉ số kỳ này (để Provider trải nghiệm ghi chỉ số thủ công / OCR / Excel)
+            const isPendingThisMonth = (m === 5 && (cIdx === 9 || cIdx === 10));
+            if (isPendingThisMonth) {
+                continue;
+            }
+
+            const targetDate = new Date(now.getFullYear(), now.getMonth() - (5 - m), 5);
             const invoiceYear = targetDate.getFullYear();
             const invoiceMonth = targetDate.getMonth() + 1;
             const invoiceDate = targetDate;
@@ -210,14 +225,14 @@ async function main() {
                 createdAt: invoiceDate,
             });
 
-            // Phân bổ trạng thái hóa đơn chuẩn 3 trường hợp:
-            // m = 0 (Kỳ 2 tháng trước): 100% PAID
-            // m = 1 (Kỳ tháng trước): 85% PAID, 15% OVERDUE
-            // m = 2 (Kỳ hiện tại): 40% PAID, 50% UNPAID, 10% OVERDUE
+            // Phân bổ trạng thái hóa đơn 6 kỳ:
+            // m < 4 (các tháng trước): 100% PAID
+            // m = 4 (tháng trước): 85% PAID, 15% OVERDUE
+            // m = 5 (tháng hiện tại): 40% PAID, 50% UNPAID, 10% OVERDUE
             let invStatus: InvoiceStatus = "PAID";
-            if (m === 1 && cNum % 7 === 0) {
+            if (m === 4 && cNum % 7 === 0) {
                 invStatus = "OVERDUE";
-            } else if (m === 2) {
+            } else if (m === 5) {
                 if (cNum % 10 === 0) invStatus = "OVERDUE";
                 else if (cNum % 2 === 0) invStatus = "UNPAID";
                 else invStatus = "PAID";
@@ -277,6 +292,9 @@ async function main() {
             if (invStatus === "PAID") {
                 const methods: PaymentMethod[] = ["VNPAY", "ZALOPAY", "CASH"];
                 const method = methods[(cNum + m) % 3];
+                const paymentDate = (m === 5)
+                    ? new Date(now.getTime() - ((cNum % 6) + 1) * 3600000)
+                    : new Date(invoiceDate.getTime() + 86400000 * 2);
 
                 paymentInserts.push({
                     id: paymentId(paymentCounter++),
@@ -284,8 +302,8 @@ async function main() {
                     paymentMethod: method,
                     paymentLinkId: method !== "CASH" ? `PAYLINK-${invId.substring(invId.length - 8)}` : null,
                     status: "SUCCESS" as PaymentStatus,
-                    paidAt: new Date(invoiceDate.getTime() + 86400000 * 2),
-                    createdAt: invoiceDate,
+                    paidAt: paymentDate,
+                    createdAt: paymentDate,
                 });
             } else if (invStatus === "OVERDUE" && cNum % 2 === 0) {
                 // Thử thanh toán nhưng thất bại (FAILED)
@@ -313,53 +331,71 @@ async function main() {
         }
     }
 
-    // --- B. HÓA ĐƠN DỊCH VỤ NGOÀI (EXTERNAL SERVICES) ---
-    for (let extC = 121; extC <= 160; extC++) {
+    // --- B. HÓA ĐƠN DỊCH VỤ NGOÀI (EXTERNAL SERVICES) CHO 6 THÁNG ---
+    for (let extC = 121; extC <= 168; extC++) {
         const cId = contractId(extC);
-        const pNum = 11 + ((extC - 121) % 15); // Provider 11 -> 25
+        const pNum = 11 + ((extC - 121) % 16); // Provider 11 -> 26
         const custId = userId(101 + ((extC * 3) % 60));
-        const extPriceId = servicePriceId(30 + ((pNum - 11) * 2) + 1);
+        const extPriceId = pNum === 26 ? servicePriceId(56) : servicePriceId(30 + ((pNum - 11) * 2) + 1);
 
-        const invDate = new Date(now.getFullYear(), now.getMonth(), 10 + (extC % 15));
-        const invId = invoiceId(invoiceCounter++);
-        const serviceAmount = 250000 + ((extC % 5) * 150000); // 250k -> 850k
+        for (let m = 0; m < 6; m++) {
+            const invDate = new Date(now.getFullYear(), now.getMonth() - (5 - m), 10 + (extC % 15));
+            const invId = invoiceId(invoiceCounter++);
+            const serviceAmount = 250000 + ((extC % 5) * 150000); // 250k -> 850k
 
-        const invStatus: InvoiceStatus = extC % 4 === 0 ? "UNPAID" : "PAID";
+            let invStatus: InvoiceStatus = "PAID";
+            if (m === 5) {
+                if (pNum === 26) {
+                    const step = Math.floor((extC - 121) / 16);
+                    if (step === 0) invStatus = "PAID";
+                    else if (step === 1) invStatus = "UNPAID";
+                    else invStatus = "OVERDUE";
+                } else if (extC % 4 === 0) invStatus = "UNPAID";
+                else if (extC % 6 === 0) invStatus = "OVERDUE";
+                else invStatus = "PAID";
+            } else if (m === 4 && extC % 7 === 0) {
+                invStatus = "OVERDUE";
+            }
 
-        invoiceInserts.push({
-            id: invId,
-            invoiceNumber: `HDDV-${now.getFullYear()}-${String(invoiceCounter).padStart(5, "0")}`,
-            customerId: custId,
-            contractId: cId,
-            billingPeriodId: null,
-            providerId: providerId(pNum),
-            total: serviceAmount,
-            status: invStatus,
-            createdAt: invDate,
-            updatedAt: invDate,
-        });
+            invoiceInserts.push({
+                id: invId,
+                invoiceNumber: `HDDV-${invDate.getFullYear()}${String(invDate.getMonth() + 1).padStart(2, "0")}-${String(invoiceCounter).padStart(5, "0")}`,
+                customerId: custId,
+                contractId: cId,
+                billingPeriodId: null,
+                providerId: providerId(pNum),
+                total: serviceAmount,
+                status: invStatus,
+                createdAt: invDate,
+                updatedAt: invStatus === "PAID" ? new Date(invDate.getTime() + 86400000) : invDate,
+            });
 
-        invoiceItemInserts.push({
-            id: invoiceItemId(invoiceItemCounter++),
-            invoiceId: invId,
-            servicePriceId: extPriceId,
-            quantity: 1,
-            unit: "gói",
-            unitPrice: serviceAmount,
-            amount: serviceAmount,
-            createdAt: invDate,
-        });
-
-        if (invStatus === "PAID") {
-            paymentInserts.push({
-                id: paymentId(paymentCounter++),
+            invoiceItemInserts.push({
+                id: invoiceItemId(invoiceItemCounter++),
                 invoiceId: invId,
-                paymentMethod: extC % 2 === 0 ? "VNPAY" : "ZALOPAY",
-                paymentLinkId: `PAYLINK-${invId.substring(invId.length - 8)}`,
-                status: "SUCCESS" as PaymentStatus,
-                paidAt: new Date(invDate.getTime() + 3600000),
+                servicePriceId: extPriceId,
+                quantity: 1,
+                unit: "gói",
+                unitPrice: serviceAmount,
+                amount: serviceAmount,
                 createdAt: invDate,
             });
+
+            if (invStatus === "PAID") {
+                const paymentDate = (m === 5)
+                    ? new Date(now.getTime() - ((extC % 6) + 1) * 3600000)
+                    : new Date(invDate.getTime() + 3600000);
+
+                paymentInserts.push({
+                    id: paymentId(paymentCounter++),
+                    invoiceId: invId,
+                    paymentMethod: extC % 2 === 0 ? "VNPAY" : "ZALOPAY",
+                    paymentLinkId: `PAYLINK-${invId.substring(invId.length - 8)}`,
+                    status: "SUCCESS" as PaymentStatus,
+                    paidAt: paymentDate,
+                    createdAt: paymentDate,
+                });
+            }
         }
     }
 

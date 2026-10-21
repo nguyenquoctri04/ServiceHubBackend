@@ -763,6 +763,7 @@ export class ProviderContractsService {
         providerId,
         ...(status ? { status: status as ContractStatus } : {})
       },
+      orderBy: { createdAt: 'desc' },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
       include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
@@ -1126,19 +1127,100 @@ export class ProviderContractsService {
   }
 
   async getRecentContracts(providerId: string) {
-    const contracts = await this.prisma.contract.findMany({
-      where: { providerId },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
+    const [contracts, violations, appeals] = await Promise.all([
+      this.prisma.contract.findMany({
+        where: { providerId },
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+      }),
+      this.prisma.violationCase.findMany({
+        where: { providerId },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        include: {
+          violationRule: { select: { name: true } },
+        },
+      }),
+      this.prisma.violationAppeal.findMany({
+        where: { violationCase: { providerId } },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+      }),
+    ]);
+
+    const contractActivities = contracts.map((c) => {
+      let title = 'Hợp đồng mới khởi tạo';
+      let color = '#3B82F6';
+      let timestamp = c.createdAt;
+
+      if (c.status === 'ACTIVE') {
+        title = c.signedAt ? 'Khách hàng đã ký số hợp đồng' : 'Hợp đồng có hiệu lực';
+        color = '#10B981';
+        timestamp = c.signedAt || c.updatedAt || c.createdAt;
+      } else if (c.status === 'PENDING_SIGNATURE') {
+        title = c.roomId ? 'Hợp đồng chờ ký số' : 'Yêu cầu dịch vụ chờ ký';
+        color = '#F59E0B';
+        timestamp = c.createdAt;
+      } else if (c.status === 'PENDING_PAYMENT') {
+        title = 'Hợp đồng chờ thanh toán cọc';
+        color = '#8B5CF6';
+        timestamp = c.createdAt;
+      } else if (c.status === 'CANCELLED' || c.status === 'TERMINATED') {
+        title = 'Hợp đồng đã chấm dứt';
+        color = '#6B7280';
+        timestamp = c.updatedAt || c.createdAt;
+      } else if (c.status === 'EXPIRED') {
+        title = 'Hợp đồng đã kết thúc thời hạn';
+        color = '#9CA3AF';
+        timestamp = c.endDate || c.updatedAt || c.createdAt;
+      }
+
+      return {
+        id: c.id,
+        type: 'CONTRACT',
+        title,
+        description: `HĐ ${c.contractNumber}${c.roomId ? ' • Phòng ' + c.roomId.slice(-3) : ' • Dịch vụ ngoài'}`,
+        timestamp,
+        color,
+        actionUrl: '/provider/contracts',
+        customerName: 'Khách hàng',
+        roomName: c.roomId ? 'Phòng ' + c.roomId.slice(-3) : 'Dịch vụ ngoài',
+        startDate: c.startDate ? c.startDate.toISOString().split('T')[0] : 'N/A',
+        status: c.status,
+      };
     });
 
-    return contracts.map((c) => ({
-      id: c.id,
+    const violationActivities = violations.map((v) => ({
+      id: v.id,
+      type: 'VIOLATION',
+      title: 'Sự cố / Vi phạm mới ghi nhận',
+      description: v.violationRule?.name || v.description,
+      timestamp: v.createdAt,
+      color: '#EF4444',
+      actionUrl: '/provider/violations',
       customerName: 'Khách hàng',
-      roomName: c.roomId ? 'Phòng ' + c.roomId.slice(-3) : 'Chưa xếp phòng',
-      startDate: c.startDate ? c.startDate.toISOString().split('T')[0] : 'N/A',
-      status: c.status,
+      roomName: 'Vi phạm',
+      startDate: v.createdAt.toISOString().split('T')[0],
+      status: v.status,
     }));
+
+    const appealActivities = appeals.map((a) => ({
+      id: a.id,
+      type: 'APPEAL',
+      title: 'Khách hàng gửi đơn khiếu nại',
+      description: a.reason ? `Khiếu nại: ${a.reason.slice(0, 45)}...` : 'Khiếu nại vụ vi phạm',
+      timestamp: a.createdAt,
+      color: '#D97706',
+      actionUrl: '/provider/violations',
+      customerName: 'Khách hàng',
+      roomName: 'Khiếu nại',
+      startDate: a.createdAt.toISOString().split('T')[0],
+      status: a.status,
+    }));
+
+    return [...contractActivities, ...violationActivities, ...appealActivities]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
   }
 
   async findCustomersByProvider(providerId: string, options?: { status?: string; page?: number; limit?: number; search?: string }) {

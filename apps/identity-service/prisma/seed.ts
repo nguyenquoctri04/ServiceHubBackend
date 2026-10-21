@@ -112,6 +112,8 @@ const realProviders = [
     { id: 23, name: "Nội thất Xinh Decor", company: "Công ty Cổ phần Kiến trúc & Nội thất Xinh", type: "EXTERNAL_SERVICE", mst: "0314012345", license: "0314012345-NX", rep: "Phạm Hải Đăng", pos: "Giám Đốc Thiết Kế", phone: "0918000023", email: "noithatxinh@gmail.com", address: "200 Ba Tháng Hai, Phường 12, Quận 10, TP.HCM", bank: "Sacombank", card: "060123456789" },
     { id: 24, name: "Suất ăn công nghiệp Tâm Phát", company: "Công ty Cổ phần Cung cấp Thực phẩm Tâm Phát", type: "EXTERNAL_SERVICE", mst: "0315123456", license: "0315123456-TP", rep: "Trần Văn Tâm", pos: "Giám Đốc Sản Xuất", phone: "0918000024", email: "suatantamphat@gmail.com", address: "Lô B2 KCN Tân Bình, Phường Tây Thạnh, Tân Phú, TP.HCM", bank: "Vietcombank", card: "0071004455667" },
     { id: 25, name: "Sửa máy tính & mạng ITCare", company: "Hộ kinh doanh Dịch vụ Tin học ITCare", type: "EXTERNAL_SERVICE", mst: "8567890123", license: "8567890123-IT", rep: "Vũ Đình Trọng", pos: "Kỹ Thuật Viên Trưởng", phone: "0918000025", email: "itcare.tphcm@gmail.com", address: "58 Hoàng Hoa Thám, Phường 7, Bình Thạnh, TP.HCM", bank: "TPBank", card: "01234567891" },
+    // Provider 26: External Service Provider thuộc tài khoản support@vinhomes.vn
+    { id: 26, name: "Dịch vụ Tiện ích Cư dân Vinhomes", company: "Công ty Cổ phần Dịch vụ Cư dân Vinhomes", type: "EXTERNAL_SERVICE", mst: "0105875412-EXT", license: "0105875412-002", rep: "Nguyễn Diệu Linh", pos: "Tổng Giám Đốc", phone: "0918000001", email: "support@vinhomes.vn", address: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM", bank: "MB Bank", card: "0888999222", linkedIdentityId: userId(201) },
 ];
 
 async function main() {
@@ -197,18 +199,20 @@ async function main() {
         updatedAt: now,
     }));
 
-    // Providers (25 nhà cung cấp)
-    const providerIdentities = realProviders.map((p, i) => ({
-        id: userId(201 + i),
-        email: p.email,
-        phone: p.phone,
-        passwordHash,
-        roleId: roleIds.PROVIDER,
-        status: (p.id === 24 ? "INACTIVE" : "ACTIVE") as "ACTIVE" | "INACTIVE", // Provider 24 inactive
-        isEkycVerified: p.id !== 25, // Provider 25 chưa eKYC
-        createdAt: now,
-        updatedAt: now,
-    }));
+    // Providers (25 identities cho 26 nhà cung cấp, do Provider 1 và 26 cùng thuộc userId(201))
+    const providerIdentities = realProviders
+        .filter((p) => !(p as any).linkedIdentityId)
+        .map((p, i) => ({
+            id: userId(201 + i),
+            email: p.email,
+            phone: p.phone,
+            passwordHash,
+            roleId: roleIds.PROVIDER,
+            status: (p.id === 24 ? "INACTIVE" : "ACTIVE") as "ACTIVE" | "INACTIVE", // Provider 24 inactive
+            isEkycVerified: p.id !== 25, // Provider 25 chưa eKYC
+            createdAt: now,
+            updatedAt: now,
+        }));
 
     await prisma.identity.createMany({
         data: [...adminIdentities, ...customerIdentities, ...providerIdentities],
@@ -218,9 +222,10 @@ async function main() {
     // 5. PROVIDERS (Thực thể kinh doanh)
     const providers = realProviders.map((p, i) => {
         const isCompany = p.company.includes("Công ty") || p.company.includes("Tập đoàn");
+        const identId = (p as any).linkedIdentityId || userId(201 + i);
         return {
             id: providerId(p.id),
-            identityId: userId(201 + i),
+            identityId: identId,
             providerName: p.name,
             companyName: p.company,
             description: `Dịch vụ chuyên nghiệp hàng đầu: ${p.name}`,
@@ -291,9 +296,10 @@ async function main() {
         });
     }
 
-    // Cho 25 Providers
+    // Cho Providers
     for (let i = 0; i < realProviders.length; i++) {
         const p = realProviders[i];
+        if ((p as any).linkedIdentityId) continue; // Identity đã được tạo và xác thực ở Provider gốc
         const vId = verificationId(201 + i);
         verifications.push({
             id: vId,

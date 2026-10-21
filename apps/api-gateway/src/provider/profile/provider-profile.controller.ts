@@ -106,7 +106,7 @@ export class ProviderProfileController {
       monthlyRevenue: invoices.monthlyRevenue,
       unpaidRevenue: invoices.unpaidRevenue,
       violationCount: violationCount.status === 'fulfilled' ? violationCount.value : 0,
-      totalMeters: contracts.activeContracts > 0 ? contracts.activeContracts * 2 : (meters?.totalMeters || 0),
+      totalMeters: meters?.totalMeters || 0,
       recordedMeters: meters?.recordedMeters || 0,
     };
   }
@@ -162,13 +162,14 @@ export class ProviderProfileController {
         type: 'warning',
         message: `Có ${expiringContracts.value.length} hợp đồng sắp hết hạn vào tháng tới.`,
         actionText: 'Xem',
+        actionUrl: '/provider/contracts',
       });
     }
     // Aggregate recent activities
     const activities = [
       ...(recentPayments.status === 'fulfilled' ? recentPayments.value : []),
       ...(recentContracts.status === 'fulfilled' ? recentContracts.value : [])
-    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
+    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 6);
 
     return {
       revenueGrowth: revenueGrowth.status === 'fulfilled' ? revenueGrowth.value : [],

@@ -130,7 +130,7 @@ export class ProviderBillingBffService {
       (contracts || [])
         .filter((contract: any) => Boolean(contract.roomId))
         .map((contract: any) => {
-          const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)));
+          const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)).filter(Boolean));
           return [contract.roomId, { id: contract.id, contractNumber: contract.contractNumber, customerId: contract.customerId, serviceIds }];
         }),
     );
@@ -146,8 +146,11 @@ export class ProviderBillingBffService {
       const activeContract = contractsByRoom.get(room.id);
       let roomMeters = metersByRoom?.[room.id] || [];
       
-      if (activeContract) {
-        roomMeters = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
+      if (activeContract && activeContract.serviceIds && activeContract.serviceIds.size > 0) {
+        const filtered = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
+        if (filtered.length > 0) {
+          roomMeters = filtered;
+        }
       }
 
       const identity = activeContract?.customerId ? identitiesById.get(activeContract.customerId) : null;

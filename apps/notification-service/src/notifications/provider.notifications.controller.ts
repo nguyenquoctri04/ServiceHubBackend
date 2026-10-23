@@ -56,4 +56,20 @@ export class ProviderNotificationsController {
     const userIds = [data.userId, data.providerId].filter(Boolean) as string[];
     return this.service.markReadInApp(data.notificationId, userIds.length > 0 ? userIds : [data.userId!]);
   }
+
+  /**
+   * Phát socket event contract.signature-status.changed.v1 tới các bên liên quan.
+   */
+  @MessagePattern({ cmd: NotificationPatterns.EMIT_CONTRACT_STATUS_CHANGED })
+  async emitContractStatusChanged(
+    @Payload() data: {
+      contractId: string;
+      status: string;
+      recipientUserIds: string[];
+      occurredAt?: string;
+      eventId?: string;
+    },
+  ) {
+    return this.service.emitContractStatusChanged(data);
+  }
 }

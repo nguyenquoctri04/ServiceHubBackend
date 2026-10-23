@@ -204,7 +204,7 @@ export class ContractPdfRendererService {
       useFont('regular').fontSize(9.5).fillColor('#1f2937');
 
       const c = input.customer;
-      doc.text(txt(`Tên hiển thị: ${c.name || 'Khách hàng'}`));
+      doc.text(txt(`Người đại diện: ${c.name || 'Khách hàng'}`));
       doc.text(txt(`Điện thoại: ${c.phone || 'Chưa cập nhật'}`));
       if (c.cccd) {
         doc.text(txt(`CCCD/CMND: ${c.cccd}`));

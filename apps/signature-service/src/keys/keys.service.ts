@@ -1,16 +1,25 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
 import { RpcException } from "@nestjs/microservices";
 import { PrismaService } from "../prisma/prisma.service";
 import { DigitalSignature } from "@app/common/dto/customer/identity";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
 import {
     createCipheriv,
     createDecipheriv,
     randomBytes,
     scrypt,
 } from "node:crypto";
+import {
+    clearGpgBinaryCache,
+    getGpgBinary,
+    getGpgAgentBinary,
+    getPinentryBinary,
+    getGpgBaseArgs,
+    getDefaultGnupgHome,
+    getGpgEnv,
+    prepareGnupgHome,
+} from "../gpg.util";
 
 const execFileAsync = promisify(execFile);
 const scryptAsync = promisify(scrypt);
@@ -22,11 +31,28 @@ const ENCRYPTION_IV_LENGTH = 12;
 const ENCRYPTION_AUTH_TAG_LENGTH = 16;
 
 @Injectable()
-export class KeysService {
-    private readonly gnupgHome =
-        process.env.GNUPGHOME ?? "/var/lib/signature-service/gnupg";
+export class KeysService implements OnModuleInit {
+    private readonly logger = new Logger(KeysService.name);
+    private readonly gnupgHome = getDefaultGnupgHome();
+    private get gpgBin(): string {
+        return getGpgBinary();
+    }
 
     constructor(private readonly prisma: PrismaService) {}
+
+    async onModuleInit() {
+        try {
+            clearGpgBinaryCache();
+            await prepareGnupgHome(this.gnupgHome);
+            const agent = getGpgAgentBinary();
+            const pinentry = getPinentryBinary();
+            this.logger.log(
+                `Initialized GPG home: ${this.gnupgHome} | gpg: ${this.gpgBin} | agent: ${agent ?? "default"} | pinentry: ${pinentry ?? "default"}`,
+            );
+        } catch (error) {
+            this.logger.warn(`Failed to initialize GPG home during module init: ${(error as Error).message}`);
+        }
+    }
 
     /**
      * =========================================================
@@ -140,10 +166,7 @@ export class KeysService {
          * 2. Prepare GPG home
          * -----------------------------------------------------
          */
-        await mkdir(this.gnupgHome, {
-            recursive: true,
-            mode: 0o700,
-        });
+        await prepareGnupgHome(this.gnupgHome);
 
         let fingerprint: string | null = null;
 
@@ -166,13 +189,10 @@ export class KeysService {
              * -------------------------------------------------
              */
             const { stdout: fingerprintOutput } = await execFileAsync(
-                "gpg",
-                ["--batch", "--with-colons", "--list-keys", email],
+                this.gpgBin,
+                [...getGpgBaseArgs(), "--with-colons", "--list-keys", email],
                 {
-                    env: {
-                        ...process.env,
-                        GNUPGHOME: this.gnupgHome,
-                    },
+                    env: getGpgEnv(this.gnupgHome),
                 },
             );
 
@@ -360,10 +380,11 @@ export class KeysService {
     }) {
         const { name, email, passphrase, expiresIn } = input;
 
+        this.logger.log(`Generating GPG key for ${name} <${email}> using binary: ${this.gpgBin}`);
         await execFileAsync(
-            "gpg",
+            this.gpgBin,
             [
-                "--batch",
+                ...getGpgBaseArgs(),
                 "--pinentry-mode",
                 "loopback",
                 "--passphrase",
@@ -380,10 +401,7 @@ export class KeysService {
                 expiresIn,
             ],
             {
-                env: {
-                    ...process.env,
-                    GNUPGHOME: this.gnupgHome,
-                },
+                env: getGpgEnv(this.gnupgHome),
             },
         );
     }
@@ -395,13 +413,10 @@ export class KeysService {
      */
     private async exportPublicKey(fingerprint: string): Promise<string> {
         const { stdout } = await execFileAsync(
-            "gpg",
-            ["--armor", "--export", fingerprint],
+            this.gpgBin,
+            [...getGpgBaseArgs(), "--armor", "--export", fingerprint],
             {
-                env: {
-                    ...process.env,
-                    GNUPGHOME: this.gnupgHome,
-                },
+                env: getGpgEnv(this.gnupgHome),
             },
         );
 
@@ -421,9 +436,9 @@ export class KeysService {
         passphrase: string,
     ): Promise<string> {
         const { stdout } = await execFileAsync(
-            "gpg",
+            this.gpgBin,
             [
-                "--batch",
+                ...getGpgBaseArgs(),
                 "--yes",
                 "--pinentry-mode",
                 "loopback",
@@ -439,10 +454,7 @@ export class KeysService {
                 fingerprint,
             ],
             {
-                env: {
-                    ...process.env,
-                    GNUPGHOME: this.gnupgHome,
-                },
+                env: getGpgEnv(this.gnupgHome),
             },
         );
 
@@ -558,13 +570,10 @@ export class KeysService {
      */
     private async deleteSecretKey(fingerprint: string): Promise<void> {
         await execFileAsync(
-            "gpg",
-            ["--batch", "--yes", "--delete-secret-key", fingerprint],
+            this.gpgBin,
+            [...getGpgBaseArgs(), "--yes", "--delete-secret-key", fingerprint],
             {
-                env: {
-                    ...process.env,
-                    GNUPGHOME: this.gnupgHome,
-                },
+                env: getGpgEnv(this.gnupgHome),
             },
         );
     }
@@ -581,13 +590,10 @@ export class KeysService {
              */
             try {
                 await execFileAsync(
-                    "gpg",
-                    ["--batch", "--yes", "--delete-secret-key", fingerprint],
+                    this.gpgBin,
+                    [...getGpgBaseArgs(), "--yes", "--delete-secret-key", fingerprint],
                     {
-                        env: {
-                            ...process.env,
-                            GNUPGHOME: this.gnupgHome,
-                        },
+                        env: getGpgEnv(this.gnupgHome),
                     },
                 );
             } catch {
@@ -602,13 +608,10 @@ export class KeysService {
              */
             try {
                 await execFileAsync(
-                    "gpg",
-                    ["--batch", "--yes", "--delete-key", fingerprint],
+                    this.gpgBin,
+                    [...getGpgBaseArgs(), "--yes", "--delete-key", fingerprint],
                     {
-                        env: {
-                            ...process.env,
-                            GNUPGHOME: this.gnupgHome,
-                        },
+                        env: getGpgEnv(this.gnupgHome),
                     },
                 );
             } catch {

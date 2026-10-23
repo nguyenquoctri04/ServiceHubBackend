@@ -53,6 +53,8 @@ export class NotificationPatterns {
     "notifications.markAllRead";
   public static readonly MARK_READ =
     "notifications.markRead";
+  public static readonly EMIT_CONTRACT_STATUS_CHANGED =
+    "notifications.emitContractStatusChanged";
 }
 
 export class IdentityNotificationPatterns {

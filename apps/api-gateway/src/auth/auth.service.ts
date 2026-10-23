@@ -124,6 +124,14 @@ export class AuthService {
     }
 
     const updatedUser = { ...currentUser, providerId };
+    this.auditEmitter.emit({
+      userId: currentUser.id,
+      serviceName: 'identity-service',
+      action: 'SWITCH_PROVIDER_PROFILE',
+      entityType: 'ProviderProfile',
+      entityId: providerId,
+      description: `Chuyển không gian làm việc sang nhà cung cấp ${providerId}`,
+    });
     return await this.generateTokens(updatedUser);
   }
 

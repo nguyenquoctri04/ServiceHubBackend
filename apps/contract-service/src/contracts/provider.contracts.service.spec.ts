@@ -2,6 +2,19 @@ import { NotificationPatterns } from '@app/common';
 import { ProviderContractsService } from './provider.contracts.service';
 
 describe('ProviderContractsService.findContracts', () => {
+  const createService = (prisma: any, secureRpc: any = { send: jest.fn() }) =>
+    new ProviderContractsService(
+      prisma as any,
+      {} as any, // identityClient
+      {} as any, // catalogClient
+      {} as any, // notificationClient
+      {} as any, // signatureClient
+      secureRpc as any, // secureRpc
+      {} as any, // configService
+      { renderContractPdf: jest.fn() } as any, // pdfRenderer
+      { emitStatusChanged: jest.fn() } as any, // contractRealtime
+    );
+
   it('returns a page of contracts without cross-service enrichment (now handled by BFF)', async () => {
     const prisma = {
       contract: {
@@ -15,7 +28,7 @@ describe('ProviderContractsService.findContracts', () => {
     const secureRpc = {
       send: jest.fn().mockResolvedValue(null),
     };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any, { renderContractPdf: jest.fn() } as any);
+    const service = createService(prisma, secureRpc);
 
     await expect(service.findContracts({ providerId: 'provider-1', page: 1, limit: 10 })).resolves.toEqual([
       expect.objectContaining({
@@ -31,7 +44,7 @@ describe('ProviderContractsService.findContracts', () => {
 
   it('reports room references only inside the active provider workspace', async () => {
     const prisma = { contract: { count: jest.fn().mockResolvedValue(1) } };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, {} as any, {} as any, { renderContractPdf: jest.fn() } as any);
+    const service = createService(prisma);
 
     await expect(service.hasRoomReferences('provider-1', 'room-1')).resolves.toEqual({ hasReferences: true });
     expect(prisma.contract.count).toHaveBeenCalledWith({
@@ -47,7 +60,7 @@ describe('ProviderContractsService.findContracts', () => {
       },
     };
     const secureRpc = { send: jest.fn().mockResolvedValue(undefined) };
-    const service = new ProviderContractsService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any, {} as any, { renderContractPdf: jest.fn() } as any);
+    const service = createService(prisma, secureRpc);
 
     await expect(service.cancelContract('provider-1', 'contract-1', '')).rejects.toMatchObject({ message: expect.stringContaining('lý do') });
 

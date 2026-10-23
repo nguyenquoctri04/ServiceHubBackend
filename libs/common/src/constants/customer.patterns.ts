@@ -105,6 +105,10 @@ export class CustomerPatterns {
 
     public static readonly ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN =
         this.CONTRACTS + "activate-contract-after-customer-sign";
+    public static readonly NOTIFY_CONTRACT_PROVIDER_SIGNED =
+        this.CONTRACTS + "notify-contract-provider-signed";
+    public static readonly ACTIVATE_CONTRACT_AFTER_PREPAYMENT =
+        this.CONTRACTS + "activate-contract-after-prepayment";
 
     public static readonly CONFIRM_CONTRACT_TERMS =
         this.CONTRACTS + "confirm-contract-terms";

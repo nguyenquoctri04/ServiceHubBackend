@@ -3,6 +3,7 @@ import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { SignContractFileDto } from "@app/common/dto/customer/signature";
 import { Inject, Injectable } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
+import { AuditEmitterService } from "../../../shared/audit-emitter.service";
 
 @Injectable()
 export class CustomerSignaturesService {
@@ -11,10 +12,11 @@ export class CustomerSignaturesService {
         private readonly signatureClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
+        private readonly auditEmitter: AuditEmitterService,
     ) {}
 
     async signContract(identityId: string, dto: SignContractFileDto) {
-        return this.secureRpc.send(
+        const result = await this.secureRpc.send(
             this.signatureClient,
             { cmd: CustomerPatterns.SIGN_CONTRACT_FILE },
             {
@@ -23,5 +25,14 @@ export class CustomerSignaturesService {
                 passphrase: dto.passphrase,
             },
         );
+        this.auditEmitter.emit({
+            userId: identityId,
+            serviceName: 'signature-service',
+            action: 'SIGN_CONTRACT',
+            entityType: 'ContractFile',
+            entityId: dto.contractFileId,
+            description: 'Ký số điện tử vào văn bản hợp đồng',
+        });
+        return result;
     }
 }

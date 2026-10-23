@@ -1,15 +1,19 @@
-import { Injectable, Optional, ConflictException, NotFoundException } from '@nestjs/common';
-import { RpcException } from '@nestjs/microservices';
+import { Inject, Injectable, Optional, ConflictException, NotFoundException } from '@nestjs/common';
+import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto, PaymentMethodDto } from '@app/common/dto/billing/pay-invoice.dto';
 import { Prisma } from '@prisma/client-billing';
 import { PaymentsService } from '../payments/payments.service';
+import { SecureRpcService } from '@app/common';
+import { CustomerPatterns } from '@app/common/constants/customer.patterns';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
     @Optional() private readonly paymentsService?: PaymentsService,
   ) {}
 
@@ -148,7 +152,7 @@ export class InvoicesService {
     }
 
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const currentInvoice = await tx.invoice.findFirst({
           where: { id: invoiceId, providerId },
           include: { payments: { where: { status: 'PENDING' }, select: { id: true } } },
@@ -164,7 +168,7 @@ export class InvoicesService {
         });
         if (updated.count !== 1) throw new RpcException(new ConflictException('Hóa đơn không còn ở trạng thái có thể thanh toán'));
 
-        return tx.payment.create({
+        const payment = await tx.payment.create({
           data: {
             invoiceId,
             paymentMethod: dto.paymentMethod,
@@ -174,7 +178,22 @@ export class InvoicesService {
             createdAt: now,
           },
         });
+
+        return { payment, contractId: currentInvoice.contractId };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+      // Nếu hóa đơn gắn với hợp đồng (trả trước hoặc định kỳ), kích hoạt hợp đồng sang ACTIVE
+      if (result.contractId) {
+        void this.secureRpc.send(
+          this.contractClient,
+          { cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_PREPAYMENT },
+          { contractId: result.contractId },
+        ).catch((err) => {
+          console.warn(`[InvoicesService.payInvoice] Failed to activate contract ${result.contractId}:`, err?.message || err);
+        });
+      }
+
+      return result.payment;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         const duplicate = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
@@ -272,7 +291,11 @@ export class InvoicesService {
       },
       orderBy: { createdAt: 'desc' },
       take: 5,
-      include: {
+      select: {
+        id: true,
+        status: true,
+        paidAt: true,
+        createdAt: true,
         invoice: { select: { invoiceNumber: true } },
       },
     });
@@ -285,7 +308,10 @@ export class InvoicesService {
           },
           orderBy: { createdAt: 'desc' },
           take: 2,
-          include: {
+          select: {
+            id: true,
+            value: true,
+            createdAt: true,
             meter: { select: { name: true, unit: true } },
           },
         })
@@ -299,6 +325,13 @@ export class InvoicesService {
           },
           orderBy: { updatedAt: 'desc' },
           take: 2,
+          select: {
+            id: true,
+            invoiceNumber: true,
+            total: true,
+            updatedAt: true,
+            createdAt: true,
+          },
         })
       : Promise.resolve([]);
 

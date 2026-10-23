@@ -28,6 +28,7 @@ import {
 import { ProviderCacheService } from '../provider-cache.service';
 import { ProviderContractBffService } from './provider-contract-bff.service';
 import { CurrentUserPayload } from '../provider.controller';
+import { AuditEmitterService } from '../../shared/audit-emitter.service';
 
 @Controller('api/provider')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,6 +40,7 @@ export class ProviderContractController {
     private readonly proxy: GatewayProxyService,
     private readonly providerCache: ProviderCacheService,
     private readonly contractBffService: ProviderContractBffService,
+    private readonly auditEmitter: AuditEmitterService,
   ) {}
 
   @Get('contract-templates')
@@ -80,19 +82,46 @@ export class ProviderContractController {
   @Post('contracts')
   async createContract(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateContractDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CREATE }, { providerId, dto });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CREATE }, { providerId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'CREATE_CONTRACT',
+      entityType: 'Contract',
+      entityId: (result as any)?.id,
+      description: 'Tạo hợp đồng mới',
+    });
+    return result;
   }
 
   @Put('contracts/:id')
   async updateContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: UpdateContractDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.UPDATE }, { providerId, contractId, dto });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.UPDATE }, { providerId, contractId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'UPDATE_CONTRACT',
+      entityType: 'Contract',
+      entityId: contractId,
+      description: 'Hoàn thiện / cập nhật hợp đồng',
+    });
+    return result;
   }
 
   @Post('contracts/:id/send')
   async sendContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SEND }, { providerId, contractId });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.SEND }, { providerId, contractId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'UPDATE_CONTRACT',
+      entityType: 'Contract',
+      entityId: contractId,
+      description: 'Gửi hợp đồng chờ ký',
+    });
+    return result;
   }
 
   @Get('contracts/:id/signing-file')
@@ -109,13 +138,31 @@ export class ProviderContractController {
   @Post('contracts/:id/revoke')
   async revokeContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.REVOKE }, { providerId, contractId, dto });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.REVOKE }, { providerId, contractId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'UPDATE_CONTRACT',
+      entityType: 'Contract',
+      entityId: contractId,
+      description: `Thu hồi hợp đồng về nháp${dto?.reason ? ': ' + dto.reason : ''}`,
+    });
+    return result;
   }
 
   @Post('contracts/:id/cancel')
   async cancelContract(@CurrentUser() user: CurrentUserPayload, @Param('id') contractId: string, @Body() dto: ContractActionDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId, contractId, dto });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.CANCEL }, { providerId, contractId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'TERMINATE_CONTRACT',
+      entityType: 'Contract',
+      entityId: contractId,
+      description: `Hủy / từ chối hợp đồng${dto?.reason ? ': ' + dto.reason : ''}`,
+    });
+    return result;
   }
 
   @Get('violations/rules')
@@ -132,7 +179,16 @@ export class ProviderContractController {
   @Post('violations')
   async createViolation(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateViolationDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_CREATE }, { providerId, reportedBy: user.id, ...dto });
+    const result = await this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.VIOLATIONS_CREATE }, { providerId, reportedBy: user.id, ...dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'CREATE_VIOLATION',
+      entityType: 'ViolationCase',
+      entityId: (result as any)?.id,
+      description: `Lập biên bản vi phạm: ${dto.description}`,
+    });
+    return result;
   }
 
   @Post('violations/:id/appeals')
@@ -142,11 +198,20 @@ export class ProviderContractController {
     @Body() dto: CreateViolationAppealDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.contractClient,
       { cmd: ProviderContractPatterns.VIOLATIONS_APPEALS_CREATE },
       { providerId, violationCaseId, reason: dto.reason, appellantId: user.id }
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'CREATE_APPEAL',
+      entityType: 'ViolationAppeal',
+      entityId: (result as any)?.id || (result as any)?.appeal?.id,
+      description: `Gửi khiếu nại vi phạm: ${dto.reason}`,
+    });
+    return result;
   }
 
   @Post('violations/:id/actions')
@@ -156,7 +221,7 @@ export class ProviderContractController {
     @Body() dto: ViolationActionDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.contractClient,
       { cmd: ProviderContractPatterns.VIOLATIONS_HANDLE_ACTION },
       {
@@ -169,6 +234,15 @@ export class ProviderContractController {
         createRestriction: dto.createRestriction,
       },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'RESOLVE_VIOLATION',
+      entityType: 'ViolationCase',
+      entityId: violationCaseId,
+      description: `Xử lý vi phạm (${dto.actionType}): ${dto.description}`,
+    });
+    return result;
   }
 
   @Get('customers')
@@ -184,11 +258,20 @@ export class ProviderContractController {
     @Body() dto: { reason: string; contractId?: string },
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.contractClient, 
       { cmd: ProviderContractPatterns.CUSTOMERS_BLOCK }, 
       { providerId, customerId, reason: dto.reason, blockBy: user.id, contractId: dto.contractId }
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'RESTRICT_CUSTOMER',
+      entityType: 'Customer',
+      entityId: customerId,
+      description: `Hạn chế khách hàng: ${dto.reason}`,
+    });
+    return result;
   }
 
   @Get('restrictions')
@@ -204,10 +287,19 @@ export class ProviderContractController {
   @Put('restrictions/:id/lift')
   async liftRestriction(@CurrentUser() user: CurrentUserPayload, @Param('id') restrictionId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.contractClient,
       { cmd: ProviderContractPatterns.RESTRICTIONS_LIFT },
       { providerId, restrictionId },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'contract-service',
+      action: 'UPDATE',
+      entityType: 'Restriction',
+      entityId: restrictionId,
+      description: 'Gỡ bỏ hạn chế khách hàng',
+    });
+    return result;
   }
 }

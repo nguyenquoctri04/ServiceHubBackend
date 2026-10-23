@@ -163,4 +163,22 @@ export class CustomerContractsController {
             input.contractFileId,
         );
     }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_PREPAYMENT,
+    })
+    async activateContractAfterPrepayment(input: { contractId: string }) {
+        return this.service.activateContractAfterPrepayment(input.contractId);
+    }
+
+    @MessagePattern({
+        cmd: CustomerPatterns.NOTIFY_CONTRACT_PROVIDER_SIGNED,
+    })
+    async notifyContractProviderSigned(input: {
+        contractId: string;
+        providerId: string;
+        customerId: string;
+    }) {
+        return this.service.notifyContractProviderSigned(input);
+    }
 }

@@ -6,10 +6,17 @@ import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
+import { rm, writeFile, readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { KeysService } from "../keys/keys.service";
+import {
+    getGpgBinary,
+    getGpgBaseArgs,
+    getTempGnupgDir,
+    getGpgEnv,
+    prepareGnupgHome,
+} from "../gpg.util";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +31,10 @@ interface ContractFileForSigning {
 
 @Injectable()
 export class SignaturesService {
+    private get gpgBin(): string {
+        return getGpgBinary();
+    }
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly keysService: KeysService,
@@ -70,28 +81,28 @@ export class SignaturesService {
 
         const existing = await this.prisma.contractSignature.findFirst({
             where: { contractFileId, gnupgKeyId },
-            select: { id: true },
+            select: { id: true, signatureHash: true },
         });
 
-        if (existing) {
+        if (existing && existing.signatureHash === hashContract) {
             throw new RpcException({
                 statusCode: 400,
                 message: "Bạn đã ký file hợp đồng này rồi.",
             });
         }
 
-        const tempHome = path.join("/tmp/signature-service/sign", randomUUID());
+        const tempHome = getTempGnupgDir("sign", randomUUID());
 
         try {
-            await mkdir(tempHome, { recursive: true, mode: 0o700 });
+            await prepareGnupgHome(tempHome);
 
             const keyFile = path.join(tempHome, "key.asc");
             await writeFile(keyFile, privateKey, "utf8");
 
             await execFileAsync(
-                "gpg",
+                this.gpgBin,
                 [
-                    "--batch",
+                    ...getGpgBaseArgs(),
                     "--yes",
                     "--pinentry-mode",
                     "loopback",
@@ -100,7 +111,7 @@ export class SignaturesService {
                     "--import",
                     keyFile,
                 ],
-                { env: { ...process.env, GNUPGHOME: tempHome } },
+                { env: getGpgEnv(tempHome) },
             );
 
             const dataFile = path.join(tempHome, "data.txt");
@@ -109,9 +120,9 @@ export class SignaturesService {
             await writeFile(dataFile, hashContract, "utf8");
 
             await execFileAsync(
-                "gpg",
+                this.gpgBin,
                 [
-                    "--batch",
+                    ...getGpgBaseArgs(),
                     "--yes",
                     "--pinentry-mode",
                     "loopback",
@@ -125,20 +136,29 @@ export class SignaturesService {
                     sigFile,
                     dataFile,
                 ],
-                { env: { ...process.env, GNUPGHOME: tempHome } },
+                { env: getGpgEnv(tempHome) },
             );
 
             const signatureFile = await readFile(sigFile, "utf8");
 
-            const signature = await this.prisma.contractSignature.create({
-                data: {
-                    contractFileId,
-                    gnupgKeyId,
-                    signatureFile,
-                    signatureHash: hashContract,
-                    signedAt: new Date(),
-                },
-            });
+            const signature = existing
+                ? await this.prisma.contractSignature.update({
+                      where: { id: existing.id },
+                      data: {
+                          signatureFile,
+                          signatureHash: hashContract,
+                          signedAt: new Date(),
+                      },
+                  })
+                : await this.prisma.contractSignature.create({
+                      data: {
+                          contractFileId,
+                          gnupgKeyId,
+                          signatureFile,
+                          signatureHash: hashContract,
+                          signedAt: new Date(),
+                      },
+                  });
 
             // Customer ký thành công -> activate contract
             if (!isProviderSigning) {
@@ -151,6 +171,26 @@ export class SignaturesService {
                         contractFileId,
                     },
                 );
+            } else {
+                // Provider ký thành công -> thông báo cho contract-service để phát socket realtime
+                void this.secureRpc
+                    .send(
+                        this.contractClient,
+                        {
+                            cmd: CustomerPatterns.NOTIFY_CONTRACT_PROVIDER_SIGNED,
+                        },
+                        {
+                            contractId: fileInfo.contractId,
+                            providerId: fileInfo.providerId,
+                            customerId: fileInfo.customerId,
+                        },
+                    )
+                    .catch((err) => {
+                        console.warn(
+                            `[SignaturesService] Không thể thông báo provider đã ký cho hợp đồng ${fileInfo.contractId}:`,
+                            err?.message || err,
+                        );
+                    });
             }
 
             return {
@@ -251,16 +291,10 @@ export class SignaturesService {
             };
         }
 
-        const tempHome = path.join(
-            "/tmp/signature-service/verify",
-            randomUUID(),
-        );
+        const tempHome = getTempGnupgDir("verify", randomUUID());
 
         try {
-            await mkdir(tempHome, {
-                recursive: true,
-                mode: 0o700,
-            });
+            await prepareGnupgHome(tempHome);
 
             const dataFile = path.join(tempHome, "data.txt");
             const sigFile = path.join(tempHome, "signature.asc");
@@ -272,18 +306,15 @@ export class SignaturesService {
 
             await writeFile(pubKeyFile, signature.gnupgKey.publicKey, "utf8");
 
-            const env = {
-                ...process.env,
-                GNUPGHOME: tempHome,
-            };
+            const env = getGpgEnv(tempHome);
 
-            await execFileAsync("gpg", ["--batch", "--import", pubKeyFile], {
+            await execFileAsync(this.gpgBin, [...getGpgBaseArgs(), "--import", pubKeyFile], {
                 env,
             });
 
             const { stdout, stderr } = await execFileAsync(
-                "gpg",
-                ["--status-fd", "1", "--verify", sigFile, dataFile],
+                this.gpgBin,
+                [...getGpgBaseArgs(), "--status-fd", "1", "--verify", sigFile, dataFile],
                 { env },
             ).catch((err) => ({
                 stdout: err.stdout ?? "",
@@ -383,8 +414,13 @@ export class SignaturesService {
             (signature) => signature.valid && signature.hashValid,
         );
 
-        const providerSigned = !!providerSignature;
-        const customerSigned = customerSignatures.length > 0;
+        const providerSigned =
+            !!providerSignature &&
+            providerSignature.valid &&
+            providerSignature.hashValid;
+        const customerSigned =
+            customerSignatures.length > 0 &&
+            customerSignatures.every((s) => s.valid && s.hashValid);
 
         return {
             contractFileId,

@@ -5,7 +5,7 @@ describe('InvoicesService', () => {
   const invoice = { id: 'invoice-1', providerId: 'provider-1', status: 'UNPAID', payments: [] };
   const payment = { id: 'payment-1', invoiceId: 'invoice-1', paymentLinkId: 'key-1', status: 'SUCCESS' };
 
-  const makeService = () => {
+  const makeService = (customPrisma?: any) => {
     const tx = {
       invoice: {
         findFirst: jest.fn().mockResolvedValue(invoice),
@@ -13,12 +13,20 @@ describe('InvoicesService', () => {
       },
       payment: { create: jest.fn().mockResolvedValue(payment) },
     };
-    const prisma = {
+    const prisma = customPrisma ?? {
       invoice: { findFirst: jest.fn().mockResolvedValue({ id: invoice.id }) },
       payment: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };
-    return { service: new InvoicesService(prisma as any), prisma, tx };
+    return {
+      service: new InvoicesService(
+        prisma as any,
+        {} as any,
+        { send: jest.fn().mockResolvedValue(undefined) } as any,
+      ),
+      prisma,
+      tx,
+    };
   };
 
   it('rejects an invoice outside the active provider workspace', async () => {
@@ -53,7 +61,7 @@ describe('InvoicesService', () => {
     const prisma = {
       invoice: { count: jest.fn().mockResolvedValue(0), findMany: jest.fn().mockResolvedValue([]) },
     };
-    const service = new InvoicesService(prisma as any);
+    const { service } = makeService(prisma);
 
     await service.findInvoices('provider-1', { contractIds: ['contract-1', 'contract-2'] } as any);
 
@@ -66,7 +74,7 @@ describe('InvoicesService', () => {
     const prisma = {
       invoice: { groupBy: jest.fn().mockResolvedValue([{ contractId: 'contract-1', _sum: { total: 350000 } }]) },
     };
-    const service = new InvoicesService(prisma as any);
+    const { service } = makeService(prisma);
 
     await expect(service.findOutstandingTotals('provider-1', ['contract-1'])).resolves.toEqual({ 'contract-1': 350000 });
     expect(prisma.invoice.groupBy).toHaveBeenCalledWith(expect.objectContaining({
@@ -80,24 +88,24 @@ describe('InvoicesService', () => {
         groupBy: jest.fn().mockResolvedValue([
           { status: 'PAID', _sum: { total: 500000 } },
           { status: 'UNPAID', _sum: { total: 300000 } },
-          { status: 'OVERDUE', _sum: { total: 200000 } }
-        ])
-      }
+          { status: 'OVERDUE', _sum: { total: 200000 } },
+        ]),
+      },
     };
-    const service = new InvoicesService(prisma as any);
+    const { service } = makeService(prisma);
 
     const result = await service.getInvoiceAging('provider-1');
     expect(result).toMatchObject({ paid: 50, unpaid: 30, overdue: 20, paidAmount: 500000, unpaidAmount: 300000, overdueAmount: 200000, totalAmount: 1000000 });
     expect(prisma.invoice.groupBy).toHaveBeenCalledWith(expect.objectContaining({
-      where: { providerId: 'provider-1' }
+      where: { providerId: 'provider-1' },
     }));
   });
 
   it('handles empty invoice aging correctly', async () => {
     const prisma = {
-      invoice: { groupBy: jest.fn().mockResolvedValue([]) }
+      invoice: { groupBy: jest.fn().mockResolvedValue([]) },
     };
-    const service = new InvoicesService(prisma as any);
+    const { service } = makeService(prisma);
 
     await expect(service.getInvoiceAging('provider-1')).resolves.toMatchObject({ paid: 0, unpaid: 0, overdue: 0 });
   });
@@ -106,11 +114,11 @@ describe('InvoicesService', () => {
     const prisma = {
       payment: {
         findMany: jest.fn().mockResolvedValue([
-          { id: '1', invoice: { invoiceNumber: 'INV-1' }, createdAt: new Date('2026-10-01') }
-        ])
-      }
+          { id: '1', invoice: { invoiceNumber: 'INV-1' }, createdAt: new Date('2026-10-01') },
+        ]),
+      },
     };
-    const service = new InvoicesService(prisma as any);
+    const { service } = makeService(prisma);
 
     const result = await service.getRecentPayments('provider-1');
     expect(result).toHaveLength(1);

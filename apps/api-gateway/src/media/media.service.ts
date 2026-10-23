@@ -18,11 +18,19 @@ export class MediaService {
   }
 
   async uploadFile(file: any): Promise<string> {
+    return this.uploadToFolder(file, 'servicehub');
+  }
+
+  async uploadViolationEvidence(file: any, serviceId: string): Promise<string> {
+    return this.uploadToFolder(file, `ServiceHub/Violation/${serviceId}`);
+  }
+
+  private async uploadToFolder(file: any, folder: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: 'servicehub', // Thư mục lưu trữ trên Cloudinary
-          resource_type: 'auto', // Tự động nhận dạng loại file (image, raw cho pdf, v.v.)
+          folder,
+          resource_type: 'auto',
         },
         (error, result) => {
           if (error) {

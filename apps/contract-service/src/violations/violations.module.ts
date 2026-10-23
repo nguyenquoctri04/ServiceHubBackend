@@ -19,6 +19,15 @@ import { CustomerViolationsService } from './customer.violations.service';
         }),
         inject: [ConfigService],
       },
+      {
+        name: 'CATALOG_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.REDIS,
+          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
+        }),
+        inject: [ConfigService],
+      },
     ]),
   ],
   controllers: [ViolationsController, CustomerViolationsController],

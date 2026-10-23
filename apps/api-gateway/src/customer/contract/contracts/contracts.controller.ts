@@ -61,6 +61,15 @@ export class CustomerContractsController {
     }
 
     @UseGuards(JwtAuthGuard)
+    @Post(CUSTOMER_CONTRACT_ENDPOINT.CANCEL_SERVICE)
+    async cancelService(
+        @CurrentUser("id") customerId: string,
+        @Param("contractId") contractId: string,
+    ) {
+        return this.service.cancelService(customerId, contractId);
+    }
+
+    @UseGuards(JwtAuthGuard)
     @Get(CUSTOMER_CONTRACT_ENDPOINT.VIEW_CONTRACT)
     async viewContract(
         @Param("contractId") contractId: string,

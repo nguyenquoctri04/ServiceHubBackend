@@ -46,6 +46,7 @@ export class CustomerCategoriesService {
                         services: {
                             where: {
                                 status: "ACTIVE",
+                                serviceType: "NORMAL",
                             },
                         },
                     },
@@ -77,6 +78,7 @@ export class CustomerCategoriesService {
             where: {
                 service: {
                     status: "ACTIVE",
+                    serviceType: "NORMAL",
                 },
             },
             select: {
@@ -236,6 +238,7 @@ export class CustomerCategoriesService {
                     in: serviceIds,
                 },
                 status: "ACTIVE",
+                serviceType: "NORMAL",
             },
 
             include: {

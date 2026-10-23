@@ -12,4 +12,20 @@ export class CustomerViolationsController {
     async getViolationRules() {
         return this.service.getViolationRules();
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.CREATE_VIOLATION_REPORT })
+    async createViolationReport(
+        @Payload()
+        payload: {
+            customerId: string;
+            contractId: string;
+            serviceId: string;
+            violationRuleId: string;
+            description: string;
+            occurredAt: string;
+            evidenceUrls?: string[];
+        },
+    ) {
+        return this.service.createViolationReport(payload);
+    }
 }

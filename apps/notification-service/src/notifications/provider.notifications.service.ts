@@ -53,12 +53,17 @@ export class ProviderNotificationsService {
     content: string;
     createdBy?: string | null;
   }) {
+    if (!data?.userId) {
+      this.logger.warn('Skipping createInAppNotification: userId is missing or empty');
+      return null;
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         userId: data.userId,
         createdBy: data.createdBy ?? null,
-        title: data.title,
-        content: data.content,
+        title: data.title || 'Thông báo mới',
+        content: data.content || '',
         channel: NotificationChannel.IN_APP,
         status: NotificationStatus.SENT,
         sendAt: new Date(),

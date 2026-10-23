@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
@@ -6,6 +6,8 @@ import { NotificationPatterns, SecureRpcService, ViolationType } from '@app/comm
 
 @Injectable()
 export class ViolationsService {
+  private readonly logger = new Logger(ViolationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
@@ -14,9 +16,7 @@ export class ViolationsService {
 
   async findByProvider(providerId: string, actorId?: string, status?: string, contractIds?: string[]) {
     const where: any = {
-      contract: {
-        providerId
-      }
+      providerId,
     };
     
     if (status && status !== 'ALL') {
@@ -30,9 +30,16 @@ export class ViolationsService {
       where,
       include: {
         violationRule: true,
-        contract: true,
+        contract: {
+          select: {
+            contractNumber: true,
+            roomId: true,
+            customerId: true,
+          },
+        },
         actions: true,
         appeals: true,
+        evidence: true,
       },
       orderBy: { occurredAt: 'desc' }
     });
@@ -72,6 +79,10 @@ export class ViolationsService {
         reportView,
         canProviderProcess,
         canProviderAppeal,
+        evidence: (c as any).evidence?.map((e: any) => ({
+          id: e.id,
+          fileUrl: e.fileUrl,
+        })) || [],
         actions: c.actions.map(a => ({
           id: a.id,
           actionType: a.actionType,
@@ -91,9 +102,7 @@ export class ViolationsService {
 
   async countByProvider(providerId: string, status?: string): Promise<number> {
     const where: any = {
-      contract: {
-        providerId
-      }
+      providerId,
     };
     if (status) {
       where.status = status;
@@ -133,15 +142,93 @@ export class ViolationsService {
     return { success: true, appeal };
   }
 
-  async createReport(data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
-    const contract = await this.prisma.contract.findFirst({ where: { id: data.contractId, providerId: data.providerId }, select: { id: true, customerId: true } });
+  async createReport(data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string; evidenceUrls?: string[] }) {
+    const contract = await this.prisma.contract.findFirst({
+      where: { id: data.contractId, providerId: data.providerId },
+      select: { id: true, customerId: true, status: true, endDate: true, updatedAt: true },
+    });
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy hợp đồng thuộc workspace.' });
+
+    const now = new Date();
+    const isAllowedActive = contract.status === 'ACTIVE';
+
+    // Cho phép hợp đồng EXPIRED trong vòng 30 ngày để xử lý hậu kiểm bàn giao, hư hại tài sản và cọc
+    let isAllowedExpired = false;
+    if (contract.status === 'EXPIRED') {
+      const expirationRefDate = contract.endDate ? new Date(contract.endDate) : new Date(contract.updatedAt);
+      const diffMs = now.getTime() - expirationRefDate.getTime();
+      const maxPostContractMs = 30 * 24 * 60 * 60 * 1000;
+      if (diffMs <= maxPostContractMs) {
+        isAllowedExpired = true;
+      }
+    }
+
+    if (!isAllowedActive && !isAllowedExpired) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Chỉ có thể tạo báo cáo vi phạm đối với hợp đồng đang có hiệu lực (ACTIVE) hoặc hợp đồng vừa hết hạn (EXPIRED) trong vòng 30 ngày để xử lý bàn giao phòng và tiền cọc.',
+      });
+    }
+    
+    const evidenceUrls = [...new Set(data.evidenceUrls ?? [])];
+    if (evidenceUrls.length > 5) {
+      throw new RpcException({ statusCode: 400, message: 'Bạn chỉ được gửi tối đa 5 file bằng chứng.' });
+    }
+    if (
+      evidenceUrls.some((fileUrl) => {
+        try {
+          const parsed = new URL(fileUrl);
+          return parsed.hostname !== 'res.cloudinary.com' || parsed.protocol !== 'https:';
+        } catch {
+          return true;
+        }
+      })
+    ) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'File bằng chứng phải là đường dẫn bảo mật hợp lệ tải lên từ hệ thống.',
+      });
+    }
+
     const ruleName = data.violationType || ViolationType.OTHER;
     let rule = await this.prisma.violationRule.findFirst({ where: { name: ruleName, targetType: 'CUSTOMER', isActive: true } });
     if (!rule) rule = await this.prisma.violationRule.create({ data: { name: ruleName, targetType: 'CUSTOMER', isActive: true, createdAt: new Date(), updatedAt: new Date() } });
-    const now = new Date();
-    const violation = await this.prisma.violationCase.create({ data: { violationRuleId: rule.id, contractId: contract.id, providerId: data.providerId, reportedBy: data.reportedBy, status: 'REPORTED', description: data.description, occurredAt: now, createdAt: now, updatedAt: now } });
-    await this.secureRpc.send(this.notificationClient, { cmd: NotificationPatterns.CREATE_IN_APP }, { userId: contract.customerId, providerId: data.providerId, title: 'Có báo cáo vi phạm mới', content: 'Một báo cáo vi phạm liên quan đến hợp đồng của bạn đã được tạo. Vui lòng mở hợp đồng để theo dõi.' });
+    const violation = await this.prisma.violationCase.create({
+      data: {
+        violationRuleId: rule.id,
+        contractId: contract.id,
+        providerId: data.providerId,
+        reportedBy: data.reportedBy,
+        status: 'REPORTED',
+        description: data.description,
+        occurredAt: now,
+        createdAt: now,
+        updatedAt: now,
+        ...(evidenceUrls.length > 0 ? {
+          evidence: {
+            create: evidenceUrls.map((fileUrl) => ({ fileUrl })),
+          },
+        } : {}),
+      },
+      include: {
+        violationRule: true,
+        evidence: true,
+      },
+    });
+    try {
+      await this.secureRpc.send(
+        this.notificationClient,
+        { cmd: NotificationPatterns.CREATE_IN_APP },
+        {
+          userId: contract.customerId,
+          providerId: data.providerId,
+          title: 'Có báo cáo vi phạm mới',
+          content: 'Một báo cáo vi phạm liên quan đến hợp đồng của bạn đã được tạo. Vui lòng mở hợp đồng để theo dõi.',
+        },
+      );
+    } catch (notifErr: any) {
+      this.logger.warn(`Failed to dispatch in-app notification for violation ${violation.id}: ${notifErr?.message || notifErr}`);
+    }
     return violation;
   }
 

@@ -123,7 +123,7 @@ export class ProviderContractBffService {
     const identitiesById = new Map((identities || []).map(identity => [identity.id, identity]));
     const roomsById = new Map((rooms || []).map(room => [room.id, room]));
 
-    return violations.map(v => {
+    const mapped = violations.map(v => {
       const identity = v.customerId ? identitiesById.get(v.customerId) : null;
       const room = v.roomId ? roomsById.get(v.roomId) : null;
       return {
@@ -133,6 +133,11 @@ export class ProviderContractBffService {
         propertyName: room?.floor?.block?.property?.propertyName || room?.property?.propertyName || '',
       };
     });
+
+    if (query?.type) {
+      return mapped.filter(v => v.reportView === query.type);
+    }
+    return mapped;
   }
 
   async getCustomers(providerId: string) {

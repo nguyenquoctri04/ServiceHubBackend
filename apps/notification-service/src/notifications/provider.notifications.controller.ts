@@ -1,7 +1,14 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { NotificationPatterns } from '@app/common';
 import { ProviderNotificationsService } from './provider.notifications.service';
+
+function extractPayload<T>(raw: any): T {
+  if (raw && typeof raw === 'object' && 'data' in raw && 'meta' in raw) {
+    return raw.data as T;
+  }
+  return raw as T;
+}
 
 @Controller()
 export class ProviderNotificationsController {
@@ -13,22 +20,27 @@ export class ProviderNotificationsController {
    */
   @MessagePattern({ cmd: NotificationPatterns.GET_USER_NOTIFICATIONS })
   async getUserNotifications(
-    @Payload() data: { userId?: string; providerId?: string },
+    @Payload() data: any,
   ) {
-    const userIds = [data.userId, data.providerId].filter(Boolean) as string[];
-    return this.service.getUserNotifications(userIds.length > 0 ? userIds : [data.userId!]);
+    const payload = extractPayload<{ userId?: string; providerId?: string }>(data);
+    const userIds = [payload?.userId, payload?.providerId].filter(Boolean) as string[];
+    return this.service.getUserNotifications(userIds.length > 0 ? userIds : [payload?.userId!]);
   }
 
   @MessagePattern({ cmd: NotificationPatterns.CREATE_IN_APP })
   async createInAppNotification(
-    @Payload() data: { userId?: string; providerId?: string; title: string; content: string; createdBy?: string },
+    @Payload() data: any,
   ) {
-    const targetUserId = data.userId || data.providerId;
-    const createdBy = data.createdBy || (data.userId && data.providerId ? data.providerId : null);
+    const payload = extractPayload<{ userId?: string; providerId?: string; title?: string; content?: string; createdBy?: string }>(data);
+    const targetUserId = payload?.userId || payload?.providerId;
+    const createdBy = payload?.createdBy || (payload?.userId && payload?.providerId ? payload?.providerId : null);
+    if (!targetUserId) {
+      throw new RpcException({ message: 'Target userId or providerId is required', statusCode: 400 });
+    }
     return this.service.createInAppNotification({
-      userId: targetUserId!,
-      title: data.title,
-      content: data.content,
+      userId: targetUserId,
+      title: payload?.title || 'Thông báo mới',
+      content: payload?.content || '',
       createdBy,
     });
   }
@@ -39,10 +51,11 @@ export class ProviderNotificationsController {
    */
   @MessagePattern({ cmd: NotificationPatterns.MARK_ALL_READ })
   async markAllReadProvider(
-    @Payload() data: { userId?: string; providerId?: string },
+    @Payload() data: any,
   ) {
-    const userIds = [data.userId, data.providerId].filter(Boolean) as string[];
-    return this.service.markAllRead(userIds.length > 0 ? userIds : [data.userId!]);
+    const payload = extractPayload<{ userId?: string; providerId?: string }>(data);
+    const userIds = [payload?.userId, payload?.providerId].filter(Boolean) as string[];
+    return this.service.markAllRead(userIds.length > 0 ? userIds : [payload?.userId!]);
   }
 
   /**
@@ -51,10 +64,11 @@ export class ProviderNotificationsController {
    */
   @MessagePattern({ cmd: NotificationPatterns.MARK_READ })
   async markReadProvider(
-    @Payload() data: { notificationId: string; userId?: string; providerId?: string },
+    @Payload() data: any,
   ) {
-    const userIds = [data.userId, data.providerId].filter(Boolean) as string[];
-    return this.service.markReadInApp(data.notificationId, userIds.length > 0 ? userIds : [data.userId!]);
+    const payload = extractPayload<{ notificationId: string; userId?: string; providerId?: string }>(data);
+    const userIds = [payload?.userId, payload?.providerId].filter(Boolean) as string[];
+    return this.service.markReadInApp(payload?.notificationId, userIds.length > 0 ? userIds : [payload?.userId!]);
   }
 
   /**
@@ -62,14 +76,15 @@ export class ProviderNotificationsController {
    */
   @MessagePattern({ cmd: NotificationPatterns.EMIT_CONTRACT_STATUS_CHANGED })
   async emitContractStatusChanged(
-    @Payload() data: {
+    @Payload() data: any,
+  ) {
+    const payload = extractPayload<{
       contractId: string;
       status: string;
       recipientUserIds: string[];
       occurredAt?: string;
       eventId?: string;
-    },
-  ) {
-    return this.service.emitContractStatusChanged(data);
+    }>(data);
+    return this.service.emitContractStatusChanged(payload);
   }
 }

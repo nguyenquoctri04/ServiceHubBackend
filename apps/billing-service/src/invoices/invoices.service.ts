@@ -28,10 +28,23 @@ export class InvoicesService {
     }
 
     if (query.search) {
-      where.invoiceNumber = { contains: query.search, mode: 'insensitive' };
-    }
-    if (query.contractIds?.length) {
-      where.contractId = { in: query.contractIds };
+      const orConditions: Prisma.InvoiceWhereInput[] = [
+        { invoiceNumber: { contains: query.search, mode: 'insensitive' } },
+      ];
+      if (query.contractIds?.length) {
+        orConditions.push({ contractId: { in: query.contractIds } });
+      }
+      if (query.customerIds?.length) {
+        orConditions.push({ customerId: { in: query.customerIds } });
+      }
+      where.OR = orConditions;
+    } else {
+      if (query.contractIds?.length) {
+        where.contractId = { in: query.contractIds };
+      }
+      if (query.customerIds?.length) {
+        where.customerId = { in: query.customerIds };
+      }
     }
 
     const page = query.page ? Number(query.page) : 1;
@@ -481,5 +494,34 @@ export class InvoicesService {
     }
 
     throw new RpcException('Unsupported payment method');
+  }
+
+  // ─── Provider: nhắc nợ hóa đơn ───────────────────────────────────────────
+  async remindInvoice(providerId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, providerId },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        total: true,
+        status: true,
+        customerId: true,
+        contractId: true,
+      },
+    });
+    if (!invoice) {
+      throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
+    }
+    if (invoice.status === 'PAID') {
+      throw new RpcException(new ConflictException('Hóa đơn đã được thanh toán, không cần nhắc nợ'));
+    }
+    return {
+      id: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      total: Number(invoice.total),
+      customerId: invoice.customerId,
+      contractId: invoice.contractId,
+      status: invoice.status,
+    };
   }
 }

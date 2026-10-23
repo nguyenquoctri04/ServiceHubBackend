@@ -97,4 +97,9 @@ export class InvoicesController {
   async getRecentPayments(@Payload() payload: { providerId: string }) {
     return this.service.getRecentPayments(payload.providerId);
   }
+
+  @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_REMIND })
+  async remindInvoice(@Payload() payload: { providerId: string; invoiceId: string }) {
+    return this.service.remindInvoice(payload.providerId, payload.invoiceId);
+  }
 }

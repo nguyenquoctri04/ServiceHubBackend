@@ -8,6 +8,8 @@ import {
   Query,
   UseGuards,
   Headers,
+  ParseUUIDPipe,
+  HttpStatus,
 } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { CurrentUser, JwtAuthGuard, Roles, RolesGuard } from '@app/common';
@@ -65,6 +67,24 @@ export class ProviderBillingController {
       entityType: 'Invoice',
       entityId: invoiceId,
       description: `Xác nhận thu tiền hóa đơn (${dto.paymentMethod})`,
+    });
+    return result;
+  }
+
+  @Post('invoices/:id/remind')
+  async remindInvoice(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) invoiceId: string,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    const result = await this.billingBffService.remindInvoice(providerId, invoiceId, user.id);
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'billing-service',
+      action: 'REMIND_INVOICE',
+      entityType: 'Invoice',
+      entityId: invoiceId,
+      description: `Gửi thông báo nhắc nợ hóa đơn ${result.invoiceNumber} (${Number(result.total).toLocaleString('vi-VN')}đ)`,
     });
     return result;
   }

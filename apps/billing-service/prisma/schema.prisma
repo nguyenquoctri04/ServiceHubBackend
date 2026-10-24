@@ -109,6 +109,8 @@ model Payment {
   status        PaymentStatus
   paidAt        DateTime?     @map("paid_at")
   createdAt     DateTime      @map("created_at")
+  qrCode        String?       @map("qr_code")
+  checkOutUrl   String?       @map("check_out_url")
   invoice       Invoice       @relation(fields: [invoiceId], references: [id])
 
   @@index([invoiceId])
@@ -139,8 +141,7 @@ enum InvoiceStatus {
 
 enum PaymentMethod {
   CASH
-  VNPAY
-  ZALOPAY
+  TRANSFER
 }
 
 enum PaymentStatus {

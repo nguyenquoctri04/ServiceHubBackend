@@ -53,6 +53,8 @@ export class NotificationPatterns {
     "notifications.markAllRead";
   public static readonly MARK_READ =
     "notifications.markRead";
+  public static readonly PAYMENT_COMPLETED =
+    "notifications.payment.completed";
 }
 
 export class IdentityNotificationPatterns {

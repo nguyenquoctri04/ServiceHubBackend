@@ -68,4 +68,23 @@ export class CustomerInvoicesService {
             })),
         }));
     }
+
+    async createQrCode(invoiceId: string, user: CurrentUserPayload) {
+        return this.secureRpc.send(
+            this.billingClient,
+            { cmd: CustomerPatterns.CREATE_QR_CODE },
+            {
+                invoiceId,
+                customerId: user.id,
+            },
+        );
+    }
+
+    async checkPaymentStatus(invoiceId: string, user: CurrentUserPayload) {
+        return this.secureRpc.send(
+            this.billingClient,
+            { cmd: CustomerPatterns.CHECK_PAYMENT_STATUS },
+            { invoiceId, customerId: user.id },
+        );
+    }
 }

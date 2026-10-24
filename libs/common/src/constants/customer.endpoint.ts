@@ -15,6 +15,9 @@ export const CUSTOMER_AUDIT_ENDPOINT = {};
 export const CUSTOMER_BILLING_SERVICE_PREFIX = "api/customer/billing";
 
 export const CUSTOMER_INVOICES = CUSTOMER_BILLING_SERVICE_PREFIX + "/invoices";
+export const CUSTOMER_INVOICE_QR_CODE = CUSTOMER_INVOICES + "/:invoiceId/qr-code";
+export const CUSTOMER_INVOICE_PAYMENT_STATUS =
+  CUSTOMER_INVOICES + "/:invoiceId/payment-status";
 export const CUSTOMER_PAYMENTS = CUSTOMER_BILLING_SERVICE_PREFIX + "/payments";
 
 export const CUSTOMER_BILLING_ENDPOINT = {};

@@ -110,6 +110,12 @@ export class CustomerPatterns {
     public static readonly EKYC = "customer.ekyc.";
     public static readonly IDENTITIES = "customer.identities.";
 
+    public static readonly SUBMIT_EKYC = CustomerPatterns.EKYC + "submit";
+
+    public static readonly OCR = CustomerPatterns.EKYC + "ocr";
+
+    public static readonly VERIFY_FACE = CustomerPatterns.EKYC + "verify-face";
+
     public static readonly GET_PROVIDER_IN_POPULAR =
         this.IDENTITIES + "get-provider-in-popular";
 

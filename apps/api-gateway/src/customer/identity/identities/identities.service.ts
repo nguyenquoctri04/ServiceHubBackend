@@ -84,11 +84,15 @@ export class CustomerIdentitiesService {
                 { customerId },
             ),
 
-            this.secureRpc.send(
-                this.signatureClient,
-                { cmd: CustomerPatterns.GET_DIGITAL_SIGNATURE_IN_SETTING },
-                { identityId: customerId },
-            ),
+            // Signature Service có thể không chạy trong môi trường dev —
+            // dùng allSettled để tránh block toàn bộ request khi service offline
+            this.secureRpc
+                .send(
+                    this.signatureClient,
+                    { cmd: CustomerPatterns.GET_DIGITAL_SIGNATURE_IN_SETTING },
+                    { identityId: customerId },
+                )
+                .catch(() => null),
         ]);
 
         return {

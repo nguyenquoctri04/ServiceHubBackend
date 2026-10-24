@@ -71,6 +71,9 @@ export const CUSTOMER_IDENTITIES =
 export const CUSTOMER_IDENTITY_ENDPOINT = {
     FETCH_PROVIDER_DETAIL: "providers/:id/detail",
     FETCH_CUSTOMER_INFORMATION: "detail",
+    SUBMIT_EKYC: "submit",
+    OCR: "ocr",
+    VERIFY_FACE: "verify-face",
 };
 
 /*

@@ -163,6 +163,7 @@ export class CustomerIdentitiesService {
                                 dateOfBirth: true,
                                 gender: true,
                                 nationality: true,
+                                placeOfResidence: true,
                                 frontImageUrl: true,
                                 backImageUrl: true,
                             },
@@ -192,10 +193,10 @@ export class CustomerIdentitiesService {
                 dateOfBirth: document?.dateOfBirth?.toISOString(),
                 gender: document?.gender ?? undefined,
                 nationality: document?.nationality ?? undefined,
+                permanentAddress: document?.placeOfResidence ?? undefined,
 
                 // Chưa có trong database hiện tại
                 placeOfBirth: undefined,
-                permanentAddress: undefined,
                 avatarUrl: undefined,
             },
 

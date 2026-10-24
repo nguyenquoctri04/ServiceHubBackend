@@ -1,173 +1,195 @@
-import { IdentityStatus } from '@prisma/client-identity';
-import { Injectable, Logger } from '@nestjs/common';
-import { RpcException } from '@nestjs/microservices';
-import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import * as bcrypt from 'bcrypt';
+import { IdentityStatus } from "@prisma/client-identity";
+import { Injectable, Logger } from "@nestjs/common";
+import { RpcException } from "@nestjs/microservices";
+import { PrismaService } from "../prisma/prisma.service";
+import { RegisterDto } from "./dto/register.dto";
+import { LoginDto } from "./dto/login.dto";
+import * as bcrypt from "bcrypt";
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
+    private readonly logger = new Logger(AuthService.name);
 
-  constructor(
-    private readonly prisma: PrismaService
-  ) { }
+    constructor(private readonly prisma: PrismaService) {}
 
-  async register(dto: RegisterDto & { ipAddress?: string }) {
-    const email = dto.email ? dto.email.trim().toLowerCase() : '';
-    this.logger.log(`Registering new identity for email: ${email}, role: ${dto.role}`);
+    async register(dto: RegisterDto & { ipAddress?: string }) {
+        const email = dto.email ? dto.email.trim().toLowerCase() : "";
+        this.logger.log(
+            `Registering new identity for email: ${email}, role: ${dto.role}`,
+        );
 
-    // 1. Check if email exists
-    const existingUser = await this.prisma.identity.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
-        },
-      },
-    });
-    if (existingUser) {
-      throw new RpcException({ message: 'Email is already registered', statusCode: 400 });
+        // 1. Check if email exists
+        const existingUser = await this.prisma.identity.findFirst({
+            where: {
+                email: {
+                    equals: email,
+                    mode: "insensitive",
+                },
+            },
+        });
+        if (existingUser) {
+            throw new RpcException({
+                message: "Email is already registered",
+                statusCode: 400,
+            });
+        }
+
+        // 2. Find or Create Role (ensure CUSTOMER / PROVIDER roles exist)
+        const targetRoleName = dto.role || "CUSTOMER";
+        let role = await this.prisma.role.findUnique({
+            where: { name: targetRoleName },
+        });
+
+        if (!role) {
+            this.logger.log(
+                `Role ${targetRoleName} not found in DB. Auto-seeding role...`,
+            );
+            role = await this.prisma.role.create({
+                data: {
+                    name: targetRoleName,
+                    description: `Default ${targetRoleName} role`,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                },
+            });
+        }
+
+        // 3. Hash Password
+        const passwordHash = await bcrypt.hash(dto.password, 10);
+
+        // 4. Create Identity matching exact Prisma schema
+        const newIdentity = await this.prisma.identity.create({
+            data: {
+                email: dto.email,
+                phone: dto.phoneNumber || "",
+                passwordHash,
+                roleId: role.id,
+                status: "ACTIVE",
+                isEkycVerified: false,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+        });
+
+        return {
+            id: newIdentity.id,
+            email: newIdentity.email,
+            role: role.name,
+            status: newIdentity.status,
+            isEkycVerified: newIdentity.isEkycVerified,
+        };
     }
 
-    // 2. Find or Create Role (ensure CUSTOMER / PROVIDER roles exist)
-    const targetRoleName = dto.role || 'CUSTOMER';
-    let role = await this.prisma.role.findUnique({
-      where: { name: targetRoleName },
-    });
+    async login(dto: LoginDto & { ipAddress?: string }) {
+        const email = dto.email ? dto.email.trim().toLowerCase() : "";
+        this.logger.log(`Attempting login for email: ${email}`);
 
-    if (!role) {
-      this.logger.log(`Role ${targetRoleName} not found in DB. Auto-seeding role...`);
-      role = await this.prisma.role.create({
-        data: {
-          name: targetRoleName,
-          description: `Default ${targetRoleName} role`,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
+        // 1. Find User (case insensitive)
+        const identity = await this.prisma.identity.findFirst({
+            where: {
+                AND: [
+                    {
+                        email: {
+                            equals: email,
+                            mode: "insensitive",
+                        },
+                        status: "ACTIVE"
+                    },
+                ],
+            },
+            include: {
+                role: true,
+                providers: {
+                    select: { id: true },
+                    orderBy: { createdAt: "asc" },
+                    take: 1,
+                },
+            },
+        });
+
+        if (!identity) {
+            throw new RpcException({
+                message: "Invalid credentials",
+                statusCode: 401,
+            });
+        }
+
+        // 2. Verify Password
+        const isPasswordValid = await bcrypt.compare(
+            dto.password,
+            identity.passwordHash,
+        );
+        if (!isPasswordValid) {
+            throw new RpcException({
+                message: "Invalid credentials",
+                statusCode: 401,
+            });
+        }
+
+        return {
+            user: {
+                id: identity.id,
+                email: identity.email,
+                role: identity.role.name,
+                isEkycVerified: identity.isEkycVerified,
+                providerId: identity.providers[0]?.id ?? null,
+            },
+        };
     }
 
-    // 3. Hash Password
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    async getUserProfile(userId: string) {
+        const identity = await this.prisma.identity.findUnique({
+            where: { id: userId },
+            include: {
+                role: true,
+                providers: {
+                    select: { id: true },
+                    orderBy: { createdAt: "asc" },
+                    take: 1,
+                },
+            },
+        });
 
-    // 4. Create Identity matching exact Prisma schema
-    const newIdentity = await this.prisma.identity.create({
-      data: {
-        email: dto.email,
-        phone: dto.phoneNumber || '',
-        passwordHash,
-        roleId: role.id,
-        status: 'ACTIVE',
-        isEkycVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    });
+        if (!identity) {
+            throw new RpcException({
+                message: "Account does not exist",
+                statusCode: 401,
+            });
+        }
 
-    return {
-      id: newIdentity.id,
-      email: newIdentity.email,
-      role: role.name,
-      status: newIdentity.status,
-      isEkycVerified: newIdentity.isEkycVerified,
-    };
-  }
-
-  async login(dto: LoginDto & { ipAddress?: string }) {
-    const email = dto.email ? dto.email.trim().toLowerCase() : '';
-    this.logger.log(`Attempting login for email: ${email}`);
-
-    // 1. Find User (case insensitive)
-    const identity = await this.prisma.identity.findFirst({
-      where: {
-        email: {
-          equals: email,
-          mode: 'insensitive',
-        },
-      },
-      include: {
-        role: true,
-        providers: {
-          select: { id: true },
-          orderBy: { createdAt: 'asc' },
-          take: 1,
-        },
-      },
-    });
-
-    if (!identity) {
-      throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
+        return {
+            id: identity.id,
+            email: identity.email,
+            role: identity.role.name,
+            isEkycVerified: identity.isEkycVerified,
+            providerId: identity.providers[0]?.id ?? null,
+        };
     }
 
-    // 2. Verify Password
-    const isPasswordValid = await bcrypt.compare(dto.password, identity.passwordHash);
-    if (!isPasswordValid) {
-      throw new RpcException({ message: 'Invalid credentials', statusCode: 401 });
+    async checkUserActive(userId: string) {
+        const user = await this.prisma.identity.findUnique({
+            where: { id: userId },
+            select: {
+                status: true,
+            },
+        });
+
+        if (user && user.status == IdentityStatus.ACTIVE) {
+            return true;
+        }
+
+        return false;
     }
 
-    return {
-      user: {
-        id: identity.id,
-        email: identity.email,
-        role: identity.role.name,
-        isEkycVerified: identity.isEkycVerified,
-        providerId: identity.providers[0]?.id ?? null,
-      },
-    };
-  }
+    async switchProfile(userId: string, providerId: string) {
+        const provider = await this.prisma.provider.findFirst({
+            where: { id: providerId, identityId: userId },
+        });
 
-  async getUserProfile(userId: string) {
-    const identity = await this.prisma.identity.findUnique({
-      where: { id: userId },
-      include: {
-        role: true,
-        providers: {
-          select: { id: true },
-          orderBy: { createdAt: 'asc' },
-          take: 1,
-        },
-      },
-    });
+        if (!provider) {
+            return { success: false };
+        }
 
-    if (!identity) {
-      throw new RpcException({ message: 'Account does not exist', statusCode: 401 });
+        return { success: true };
     }
-
-    return {
-      id: identity.id,
-      email: identity.email,
-      role: identity.role.name,
-      isEkycVerified: identity.isEkycVerified,
-      providerId: identity.providers[0]?.id ?? null,
-    };
-  }
-
-  async checkUserActive(userId: string) {
-    const user = await this.prisma.identity.findUnique({
-      where: {id: userId},
-      select: {
-        status: true
-      }
-    });
-
-    if (user && user.status == IdentityStatus.ACTIVE) {
-      return true;
-    }
-
-    return false;
-  }
-
-  async switchProfile(userId: string, providerId: string) {
-    const provider = await this.prisma.provider.findFirst({
-      where: { id: providerId, identityId: userId }
-    });
-    
-    if (!provider) {
-      return { success: false };
-    }
-    
-    return { success: true };
-  }
 }

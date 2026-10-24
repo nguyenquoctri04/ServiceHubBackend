@@ -80,6 +80,15 @@ export class NotificationsGateway
       .emit("notification:read", { notificationId });
   }
 
+  emitPaymentCompleted(
+    userId: string,
+    payload: { invoiceId: string; paymentLinkId: string },
+  ) {
+    this.server
+      .to(this.getUserRoom(userId))
+      .emit("payment:completed", payload);
+  }
+
   private extractToken(client: Socket): string {
     let token =
       client.handshake.auth?.token ||

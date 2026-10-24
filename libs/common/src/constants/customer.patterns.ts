@@ -15,6 +15,9 @@ export class CustomerPatterns {
     public static readonly PAYMENTS = "customer.payments.";
 
     public static readonly FETCH_INVOICES = this.INVOICES + "fetch";
+    public static readonly CREATE_QR_CODE = this.INVOICES + "create-qr-code";
+    public static readonly CHECK_PAYMENT_STATUS =
+        this.INVOICES + "check-payment-status";
 
     /*
         ===============================

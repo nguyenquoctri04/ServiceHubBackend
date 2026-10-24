@@ -6,12 +6,27 @@ import { CreateAdminNotificationDto } from "./dto/create-admin-notification.dto"
 import { CreateEventNotificationDto } from "./dto/create-event-notification.dto";
 import { ListNotificationsDto } from "./dto/list-notifications.dto";
 import { MarkNotificationReadDto } from "./dto/mark-read.dto";
+import { NotificationsGateway } from "./notifications.gateway";
 
 @Controller()
 export class NotificationsController {
   private readonly logger = new Logger(NotificationsController.name);
 
-  constructor(private readonly service: NotificationsService) {}
+  constructor(
+    private readonly service: NotificationsService,
+    private readonly gateway: NotificationsGateway,
+  ) {}
+
+  @MessagePattern({ cmd: NotificationPatterns.PAYMENT_COMPLETED })
+  emitPaymentCompleted(
+    @Payload() payload: { userId: string; invoiceId: string; paymentLinkId: string },
+  ) {
+    this.gateway.emitPaymentCompleted(payload.userId, {
+      invoiceId: payload.invoiceId,
+      paymentLinkId: payload.paymentLinkId,
+    });
+    return { success: true };
+  }
 
   // // ── Provider / In-app patterns (HEAD) ───────────────────────────────────
 

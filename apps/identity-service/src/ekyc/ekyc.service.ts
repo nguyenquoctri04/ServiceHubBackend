@@ -1,235 +1,343 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+    BadRequestException,
+    Injectable,
+    Logger,
+    NotFoundException,
+    ServiceUnavailableException,
+} from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
+import { firstValueFrom } from 'rxjs';
+import * as FormData from 'form-data';
 import { PrismaService } from '../prisma/prisma.service';
-import { VnptEkycService } from './vnpt-ekyc.service';
-import { ExtractOcrDto } from './dto/extract-ocr.dto';
-import { VerifyFaceDto } from './dto/verify-face.dto';
-import { VerificationStatus } from '@prisma/client-identity';
+import { SubmitEkycDto, OcrDto, VerifyFaceDto } from './dto/submit-ekyc.dto';
+
+/** Response trả về từ Python FastAPI /ekyc/ocr */
+interface AiOcrResponse {
+    success: boolean;
+    ocr_info?: {
+        card_id: string;
+        full_name: string;
+        date_of_birth: string;
+        gender: string;
+        nationality: string;
+        place_of_origin: string;
+        place_of_residence: string;
+    };
+    error_code?: string;
+    error_message?: string;
+}
+
+/** Response trả về từ Python FastAPI /ekyc/verify-face */
+interface AiVerifyResponse {
+    success: boolean;
+    face_matched: boolean;
+    face_similarity: number;
+    ocr_info?: {
+        card_id: string;
+        full_name: string;
+        date_of_birth: string;
+        gender: string;
+        nationality: string;
+        place_of_origin: string;
+        place_of_residence: string;
+    };
+    error_code?: string;
+    error_message?: string;
+}
 
 @Injectable()
 export class EkycService {
-  private readonly logger = new Logger(EkycService.name);
+    private readonly logger = new Logger(EkycService.name);
+    private readonly aiServiceUrl: string;
 
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly vnptEkycService: VnptEkycService,
-    private readonly configService: ConfigService,
-  ) {}
-
-  private parseDate(dateStr?: string): Date | null {
-    if (!dateStr || dateStr === '-') return null;
-    try {
-      // Expected format dd/mm/yyyy
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        const day = parseInt(parts[0], 10);
-        const month = parseInt(parts[1], 10) - 1;
-        const year = parseInt(parts[2], 10);
-        const date = new Date(Date.UTC(year, month, day));
-        if (!isNaN(date.getTime())) return date;
-      }
-      const date = new Date(dateStr);
-      return isNaN(date.getTime()) ? null : date;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Step 1: Upload front & back card images, call VNPT OCR API, store record in DB.
-   */
-  async extractOcr(dto: ExtractOcrDto) {
-    this.logger.log(`Extracting OCR for identity: ${dto.identityId}`);
-
-    const identity = await this.prisma.identity.findUnique({
-      where: { id: dto.identityId },
-    });
-
-    if (!identity) {
-      throw new NotFoundException('Không tìm thấy tài khoản người dùng');
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly httpService: HttpService,
+        private readonly config: ConfigService,
+    ) {
+        this.aiServiceUrl =
+            this.config.get<string>('EKYC_AI_SERVICE_URL') ??
+            'http://localhost:8000';
     }
 
-    const clientSession = `SESSION_${dto.identityId}_${Date.now()}`;
+    async submitVerification(dto: SubmitEkycDto) {
+        this.logger.log(`eKYC submit for identity: ${dto.identityId}`);
 
-    // 1. Upload front image to VNPT to get frontHash
-    const frontHash = await this.vnptEkycService.uploadFile(
-      dto.frontImage,
-      'cccd_front',
-      `Front CCCD for ${dto.identityId}`
-    );
+        // 1. Kiểm tra identity tồn tại
+        const identity = await this.prisma.identity.findUnique({
+            where: { id: dto.identityId },
+        });
+        if (!identity) {
+            throw new NotFoundException('Tài khoản không tồn tại');
+        }
+        if (identity.isEkycVerified) {
+            throw new BadRequestException('Tài khoản đã được xác thực eKYC trước đó');
+        }
 
-    // 2. Upload back image to VNPT to get backHash
-    const backHash = await this.vnptEkycService.uploadFile(
-      dto.backImage,
-      'cccd_back',
-      `Back CCCD for ${dto.identityId}`
-    );
+        // 2. Gọi Python AI service với ảnh dạng buffer
+        const aiResult = await this.callAiService(dto.frontImageBuffer, dto.selfieImageBuffer);
 
-    // 3. Call VNPT OCR API with synchronized clientSession
-    const ocrData = await this.vnptEkycService.extractOcr(frontHash, backHash, clientSession);
+        // 3. Tạo bản ghi xác thực trong DB
+        const verification = await this.prisma.identityVerification.create({
+            data: {
+                identity:          { connect: { id: dto.identityId } },
+                provider:          'INTERNAL_AI',
+                verificationLevel: 'LEVEL_1',
+                faceSimilarity:    aiResult.face_similarity,
+                livenessScore:     null,
+                providerResponse:  aiResult as any,
+                status:            aiResult.success && aiResult.face_matched ? 'VERIFIED' : 'REJECTED',
+                failureReason:     this.buildFailureReason(aiResult),
+                verifiedAt:        aiResult.success && aiResult.face_matched ? new Date() : null,
+                // Hết hạn sau 1 năm nếu verify thành công
+                expiredAt:         aiResult.success && aiResult.face_matched
+                    ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+                    : null,
+                createdAt:         new Date(),
+                documents: {
+                    create: {
+                        documentType:       'CCCD',
+                        documentNumber:     aiResult.ocr_info?.card_id      ?? null,
+                        fullName:           aiResult.ocr_info?.full_name     ?? null,
+                        dateOfBirth:        this.parseDate(aiResult.ocr_info?.date_of_birth),
+                        gender:             aiResult.ocr_info?.gender        ?? null,
+                        nationality:        aiResult.ocr_info?.nationality   ?? null,
+                        place_of_origin:    aiResult.ocr_info?.place_of_origin    ?? null,
+                        place_of_residence: aiResult.ocr_info?.place_of_residence ?? null,
+                        frontImageUrl:      dto.frontImageUrl  ?? null,
+                        selfieImageUrl:     dto.selfieImageUrl ?? null,
+                        ocrRawData:         aiResult.ocr_info as any ?? null,
+                        createdAt:          new Date(),
+                    },
+                },
+            },
+        });
 
-    // 4. Parse dates
-    const dob = this.parseDate(ocrData.birth_day);
-    const issueDate = this.parseDate(ocrData.issue_date);
-    const expiryDate = this.parseDate(ocrData.valid_date);
+        // 4. Nếu pass → cập nhật isEkycVerified = true
+        if (aiResult.success && aiResult.face_matched) {
+            await this.prisma.identity.update({
+                where: { id: dto.identityId },
+                data:  { isEkycVerified: true },
+            });
 
-    // 5. Save to database
-    const verification = await this.prisma.identityVerification.create({
-      data: {
-        identity: { connect: { id: dto.identityId } },
-        provider: 'VNPT_EKYC',
-        verificationLevel: 'LEVEL_1',
-        status: VerificationStatus.PENDING,
-        providerResponse: ocrData as any,
-        createdAt: new Date(),
-        documents: {
-          create: {
-            documentType: ocrData.card_type || 'CCCD',
-            documentNumber: ocrData.id || null,
-            fullName: ocrData.name || null,
-            dateOfBirth: dob,
-            gender: ocrData.gender || null,
-            nationality: ocrData.nationality || null,
-            placeOfOrigin: ocrData.origin_location || null,
-            placeOfResidence: ocrData.recent_location || null,
-            issueDate: issueDate,
-            expiryDate: expiryDate,
-            issuingAuthority: ocrData.issue_place || null,
-            frontImageUrl: dto.frontImage,
-            backImageUrl: dto.backImage,
-            frontImageHash: frontHash,
-            backImageHash: backHash,
-            ocrRawData: ocrData as any,
-            createdAt: new Date(),
-          },
-        },
-      },
-      include: {
-        documents: true,
-      },
-    });
+            this.logger.log(`eKYC PASSED for identity: ${dto.identityId}, similarity: ${aiResult.face_similarity}`);
 
-    return {
-      success: true,
-      verificationId: verification.id,
-      document: verification.documents[0],
-      ocrData: {
-        documentNumber: ocrData.id,
-        fullName: ocrData.name,
-        dateOfBirth: ocrData.birth_day,
-        gender: ocrData.gender,
-        nationality: ocrData.nationality,
-        placeOfOrigin: ocrData.origin_location,
-        placeOfResidence: ocrData.recent_location,
-        issueDate: ocrData.issue_date,
-        issuingAuthority: ocrData.issue_place,
-        cardType: ocrData.card_type,
-      },
-    };
-  }
+            return {
+                success:        true,
+                verificationId: verification.id,
+                faceSimilarity: aiResult.face_similarity,
+                message:        'Xác thực eKYC thành công',
+            };
+        }
 
-  /**
-   * Step 2: Compare selfie face image with stored CCCD front card image.
-   */
-  async verifyFace(dto: VerifyFaceDto) {
-    this.logger.log(`Verifying face for verificationId: ${dto.verificationId}, identityId: ${dto.identityId}`);
+        // 5. Nếu fail → trả thông báo rõ lý do
+        this.logger.warn(`eKYC FAILED for identity: ${dto.identityId}, reason: ${aiResult.error_code ?? 'FACE_NOT_MATCHED'}`);
 
-    const identity = await this.prisma.identity.findUnique({
-      where: { id: dto.identityId },
-    });
-
-    if (!identity) {
-      throw new NotFoundException('Không tìm thấy tài khoản người dùng');
+        return {
+            success:        false,
+            verificationId: verification.id,
+            faceSimilarity: aiResult.face_similarity,
+            errorCode:      aiResult.error_code ?? 'FACE_NOT_MATCHED',
+            message:        aiResult.error_message ?? 'Khuôn mặt không khớp với ảnh trên CCCD',
+        };
     }
 
-    const verification = await this.prisma.identityVerification.findUnique({
-      where: { id: dto.verificationId },
-      include: { documents: true },
-    });
+    // --------------------------------------------------------------------------
+    // Private helpers
+    // --------------------------------------------------------------------------
 
-    if (!verification || verification.identityId !== dto.identityId) {
-      throw new NotFoundException('Không tìm thấy hồ sơ xác thực eKYC');
+    /** Gọi Python FastAPI với hai file ảnh dạng Buffer */
+    private async callAiService(
+        frontBuffer: Buffer,
+        selfieBuffer: Buffer,
+        endpoint: string = '/ekyc/verify',
+    ): Promise<AiVerifyResponse> {
+        const form = new FormData();
+        form.append('front_image',  frontBuffer,  { filename: 'front.jpg',  contentType: 'image/jpeg' });
+        form.append('selfie_image', selfieBuffer, { filename: 'selfie.jpg', contentType: 'image/jpeg' });
+
+        try {
+            const response = await firstValueFrom(
+                this.httpService.post<AiVerifyResponse>(
+                    `${this.aiServiceUrl}${endpoint}`,
+                    form,
+                    {
+                        headers: form.getHeaders(),
+                        timeout: 60_000,
+                    },
+                ),
+            );
+            return response.data;
+        } catch (err: any) {
+            const status = err?.response?.status;
+            const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
+            this.logger.error(`AI service error [${status}]: ${detail}`);
+
+            if (!status || status >= 500) {
+                throw new ServiceUnavailableException('AI service không phản hồi, vui lòng thử lại sau');
+            }
+
+            throw new BadRequestException(detail);
+        }
     }
 
-    const document = verification.documents[0];
-    if (!document) {
-      throw new BadRequestException('Hồ sơ xác thực chưa có thông tin giấy tờ');
+    /** Gọi Python FastAPI /ekyc/ocr với chỉ ảnh CCCD */
+    private async callAiOcr(frontBuffer: Buffer): Promise<AiOcrResponse> {
+        const form = new FormData();
+        form.append('front_image', frontBuffer, { filename: 'front.jpg', contentType: 'image/jpeg' });
+
+        try {
+            const response = await firstValueFrom(
+                this.httpService.post<AiOcrResponse>(
+                    `${this.aiServiceUrl}/ekyc/ocr`,
+                    form,
+                    {
+                        headers: form.getHeaders(),
+                        timeout: 60_000,
+                    },
+                ),
+            );
+            return response.data;
+        } catch (err: any) {
+            const status = err?.response?.status;
+            const detail = err?.response?.data?.detail ?? err?.message ?? 'Unknown error';
+            this.logger.error(`AI OCR service error [${status}]: ${detail}`);
+
+            if (!status || status >= 500) {
+                throw new ServiceUnavailableException('AI service không phản hồi, vui lòng thử lại sau');
+            }
+
+            throw new BadRequestException(detail);
+        }
     }
 
-    // Determine front card image hash
-    let frontHash = document.frontImageHash;
-    if (!frontHash) {
-      if (!document.frontImageUrl) {
-        throw new BadRequestException('Thiếu ảnh CCCD mặt trước để xác thực khuôn mặt');
-      }
-      frontHash = await this.vnptEkycService.uploadFile(
-        document.frontImageUrl,
-        'cccd_front',
-        `Front CCCD for ${dto.identityId}`
-      );
+    /** Bước 1: OCR CCCD — chỉ trích xuất thông tin, KHÔNG lưu DB */
+    async ocrCccd(dto: OcrDto) {
+        this.logger.log(`eKYC OCR for identity: ${dto.identityId}`);
+
+        // Kiểm tra identity tồn tại
+        const identity = await this.prisma.identity.findUnique({
+            where: { id: dto.identityId },
+        });
+        if (!identity) {
+            throw new NotFoundException('Tài khoản không tồn tại');
+        }
+
+        const aiResult = await this.callAiOcr(dto.frontImageBuffer);
+
+        if (!aiResult.success) {
+            this.logger.warn(`eKYC OCR FAILED for identity: ${dto.identityId}, reason: ${aiResult.error_code}`);
+            return {
+                success: false,
+                error_code: aiResult.error_code,
+                error_message: aiResult.error_message ?? 'Không thể đọc thông tin CCCD',
+            };
+        }
+
+        this.logger.log(`eKYC OCR OK for identity: ${dto.identityId}, card_id: ${aiResult.ocr_info?.card_id}`);
+
+        return {
+            success: true,
+            ocr_info: aiResult.ocr_info,
+        };
     }
 
-    // Upload selfie image to VNPT
-    const selfieHash = await this.vnptEkycService.uploadFile(
-      dto.selfieImage,
-      'selfie_face',
-      `Selfie for ${dto.identityId}`
-    );
+    /** Bước 2: So khớp khuôn mặt — lưu DB nếu match, KHÔNG lưu nếu fail */
+    async verifyFace(dto: VerifyFaceDto) {
+        this.logger.log(`eKYC verify-face for identity: ${dto.identityId}`);
 
-    // Call VNPT Face Compare API
-    const matchResult = await this.vnptEkycService.compareFace(frontHash, selfieHash);
+        // 1. Kiểm tra identity tồn tại
+        const identity = await this.prisma.identity.findUnique({
+            where: { id: dto.identityId },
+        });
+        if (!identity) {
+            throw new NotFoundException('Tài khoản không tồn tại');
+        }
+        if (identity.isEkycVerified) {
+            throw new BadRequestException('Tài khoản đã được xác thực eKYC trước đó');
+        }
 
-    const thresholdStr = this.configService.get<string>('VNPT_EKYC_FACE_MATCH_THRESHOLD', '80.0');
-    const threshold = parseFloat(thresholdStr);
-    const prob = matchResult.prob ?? 0;
-    const isMatch = matchResult.msg === 'MATCH' || prob >= threshold;
+        // 2. Gọi Python AI service /ekyc/verify-face
+        const aiResult = await this.callAiService(
+            dto.frontImageBuffer,
+            dto.selfieImageBuffer,
+            '/ekyc/verify-face',
+        );
 
-    if (isMatch) {
-      // Update verification status -> VERIFIED
-      await this.prisma.identityVerification.update({
-        where: { id: dto.verificationId },
-        data: {
-          status: VerificationStatus.VERIFIED,
-          faceSimilarity: prob,
-          verifiedAt: new Date(),
-        },
-      });
+        // 3. Nếu face match → lưu DB + set isEkycVerified = true
+        if (aiResult.success && aiResult.face_matched) {
+            const verification = await this.prisma.identityVerification.create({
+                data: {
+                    identity:          { connect: { id: dto.identityId } },
+                    provider:          'INTERNAL_AI',
+                    verificationLevel: 'LEVEL_1',
+                    faceSimilarity:    aiResult.face_similarity,
+                    livenessScore:     null,
+                    providerResponse:  aiResult as any,
+                    status:            'VERIFIED',
+                    failureReason:     null,
+                    verifiedAt:        new Date(),
+                    expiredAt:         new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+                    createdAt:         new Date(),
+                    documents: {
+                        create: {
+                            documentType:       'CCCD',
+                            documentNumber:     aiResult.ocr_info?.card_id      ?? null,
+                            fullName:           aiResult.ocr_info?.full_name     ?? null,
+                            dateOfBirth:        this.parseDate(aiResult.ocr_info?.date_of_birth),
+                            gender:             aiResult.ocr_info?.gender        ?? null,
+                            nationality:        aiResult.ocr_info?.nationality   ?? null,
+                            place_of_origin:    aiResult.ocr_info?.place_of_origin    ?? null,
+                            place_of_residence: aiResult.ocr_info?.place_of_residence ?? null,
+                            ocrRawData:         aiResult.ocr_info as any ?? null,
+                            createdAt:          new Date(),
+                        },
+                    },
+                },
+            });
 
-      // Update Identity -> isEkycVerified = true
-      await this.prisma.identity.update({
-        where: { id: dto.identityId },
-        data: { isEkycVerified: true },
-      });
+            await this.prisma.identity.update({
+                where: { id: dto.identityId },
+                data:  { isEkycVerified: true },
+            });
 
-      // Save selfie image URL if provided
-      await this.prisma.identityDocument.update({
-        where: { id: document.id },
-        data: { selfieImageUrl: dto.selfieImage },
-      });
+            this.logger.log(`eKYC PASSED for identity: ${dto.identityId}, similarity: ${aiResult.face_similarity}`);
 
-      return {
-        success: true,
-        verified: true,
-        similarityScore: prob,
-        message: 'Xác thực eKYC thành công!',
-      };
-    } else {
-      // Update verification status -> REJECTED
-      await this.prisma.identityVerification.update({
-        where: { id: dto.verificationId },
-        data: {
-          status: VerificationStatus.REJECTED,
-          faceSimilarity: prob,
-          failureReason: matchResult.result || 'Khuôn mặt không trùng khớp với ảnh trên CCCD',
-        },
-      });
+            return {
+                success:        true,
+                verificationId: verification.id,
+                faceSimilarity: aiResult.face_similarity,
+                message:        'Xác thực eKYC thành công',
+            };
+        }
 
-      return {
-        success: false,
-        verified: false,
-        similarityScore: prob,
-        message: matchResult.result || 'Khuôn mặt không trùng khớp với ảnh trên CCCD',
-      };
+        // 4. Nếu face không match → KHÔNG lưu DB, trả về failure
+        this.logger.warn(`eKYC FACE NOT MATCHED for identity: ${dto.identityId}, similarity: ${aiResult.face_similarity}`);
+
+        return {
+            success:        false,
+            faceSimilarity: aiResult.face_similarity,
+            errorCode:      aiResult.error_code ?? 'FACE_NOT_MATCHED',
+            message:        aiResult.error_message ?? 'Khuôn mặt không khớp với ảnh trên CCCD',
+        };
     }
-  }
+
+    /** Parse "DD/MM/YYYY" → Date | null */
+    private parseDate(dateStr?: string): Date | null {
+        if (!dateStr) return null;
+        const parts = dateStr.split('/');
+        if (parts.length !== 3) return null;
+        const [day, month, year] = parts.map(Number);
+        if (!day || !month || !year) return null;
+        return new Date(year, month - 1, day);
+    }
+
+    /** Tổng hợp lý do thất bại thành 1 chuỗi */
+    private buildFailureReason(result: AiVerifyResponse): string | null {
+        if (result.success && result.face_matched) return null;
+        if (result.error_message) return result.error_message;
+        if (!result.face_matched) return 'Khuôn mặt không khớp với ảnh CCCD';
+        return 'Xác thực thất bại';
+    }
 }

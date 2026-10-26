@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
+import { HttpModule } from '@nestjs/axios';
 import { EkycController } from './ekyc.controller';
 import { EkycService } from './ekyc.service';
-import { VnptEkycService } from './vnpt-ekyc.service';
 
 @Module({
-  controllers: [EkycController],
-  providers: [EkycService, VnptEkycService],
-  exports: [EkycService, VnptEkycService],
+    imports: [
+        HttpModule.register({
+            timeout: 65_000,  // phải >= timeout trong service (60s)
+        }),
+    ],
+    controllers: [EkycController],
+    providers:   [EkycService],
 })
 export class EkycModule {}

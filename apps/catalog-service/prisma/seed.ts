@@ -2,679 +2,970 @@ import { PrismaClient } from "@prisma/client-catalog";
 
 const prisma = new PrismaClient();
 
-const IDS = {
-    categories: {
-        HOUSING: "60000000-0000-0000-0000-000000000001",
-        CLEANING: "60000000-0000-0000-0000-000000000002",
-        FOOD: "60000000-0000-0000-0000-000000000003",
-        REPAIR: "60000000-0000-0000-0000-000000000004",
-        OTHER: "60000000-0000-0000-0000-000000000005",
-    },
-    providers: {
-        PROVIDER_1: "40000000-0000-0000-0000-000000000001",
-        PROVIDER_2: "40000000-0000-0000-0000-000000000002",
-        PROVIDER_3: "40000000-0000-0000-0000-000000000003",
-        PROVIDER_TRI: "40000000-0000-0000-0000-000000000004",
-        PROVIDER_PENDING: "40000000-0000-0000-0000-000000000005",
-        PROVIDER_REJECTED: "40000000-0000-0000-0000-000000000006",
-        PROVIDER_SUSPENDED: "40000000-0000-0000-0000-000000000007",
-        PROVIDER_EXPIRED: "40000000-0000-0000-0000-000000000008",
-        PROVIDER_NO_IMAGES: "40000000-0000-0000-0000-000000000009",
-    },
-} as const;
+// Cross-service UUID generators (Đồng bộ chuẩn 100% với identity, contract, billing, notification, audit)
+const providerId = (n: number) => `40000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const userId = (n: number) => `30000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const categoryId = (n: number) => `60000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const serviceId = (n: number) => `61000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const priceId = (n: number) => `62000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const imageId = (n: number) => `63000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const scheduleId = (n: number) => `64000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const ruleId = (n: number) => `65000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const tierId = (n: number) => `66000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const propertyId = (n: number) => `67000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const blockId = (n: number) => `68000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const floorId = (n: number) => `69000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomTypeId = (n: number) => `6a000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const roomId = (n: number) => `6b000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const requirementId = (n: number) => `6c000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const contractTemplateId = (n: number) => `7c000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const now = new Date();
+
+// Danh mục dịch vụ chuẩn
 const categories = [
-    ["HOUSING", "Nhà ở", "Nhà trọ, căn hộ và các dịch vụ liên quan đến chỗ ở."],
-    ["CLEANING", "Vệ sinh", "Dịch vụ vệ sinh nhà ở và không gian sinh hoạt."],
-    ["FOOD", "Ăn uống", "Suất ăn, cơm gia đình và dịch vụ thực phẩm."],
-    ["REPAIR", "Sửa chữa", "Sửa chữa, bảo trì điện nước và thiết bị."],
-    ["OTHER", "Khác", "Các dịch vụ tiện ích khác."],
-] as const;
+    { id: 1, name: "Cho thuê Bất động sản", desc: "Căn hộ chung cư, phòng trọ sinh viên, căn hộ dịch vụ cao cấp." },
+    { id: 2, name: "Vệ sinh & Dọn dẹp", desc: "Dọn dẹp nhà cửa, giặt ủi công nghiệp, vệ sinh sofa, nệm, rèm." },
+    { id: 3, name: "Bảo trì & Sửa chữa", desc: "Sửa chữa điện nước dân dụng, cơ điện lạnh, mở khóa khẩn cấp 24/7." },
+    { id: 4, name: "Ăn uống & Thực phẩm", desc: "Cơm trưa văn phòng, suất ăn gia đình sạch và giao tận nơi." },
+    { id: 5, name: "Viễn thông & An ninh", desc: "Cáp quang Internet tốc độ cao, camera an ninh, dịch vụ bảo vệ." },
+    { id: 6, name: "Tiện ích Đời sống", desc: "Nước uống đóng bình, chuyển nhà trọn gói, nội thất và cứu hộ IT." },
+];
 
-const providerKeys = [
-    "PROVIDER_1",
-    "PROVIDER_2",
-    "PROVIDER_3",
-    "PROVIDER_TRI",
-    "PROVIDER_PENDING",
-    "PROVIDER_REJECTED",
-    "PROVIDER_SUSPENDED",
-    "PROVIDER_EXPIRED",
-    "PROVIDER_NO_IMAGES",
-] as const;
+// Danh sách 10 Bất động sản có thật tại TP.HCM (Khớp với 10 Property Managers từ identity seed)
+const propertiesData = [
+    {
+        id: 1,
+        providerNum: 1,
+        name: "Vinhomes Central Park",
+        desc: "Khu đô thị sinh thái hiện đại ven sông Sài Gòn với công viên 14ha, đầy đủ tiện ích chuẩn 5 sao.",
+        address: "720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM",
+        lat: 10.795000,
+        lng: 106.721800,
+        blocks: ["Landmark 1", "Landmark Plus"],
+        roomTypes: [
+            { name: "Căn Hộ 1PN Landmark Luxury", area: 54.5, occupancy: 2, price: 16000000, desc: "Căn hộ 1 phòng ngủ full nội thất ngoại nhập, view công viên Landmark." },
+            { name: "Căn Hộ 2PN Panoramic River", area: 79.2, occupancy: 4, price: 23000000, desc: "Căn hộ 2 phòng ngủ 2WC ban công trực diện sông Sài Gòn, bếp đảo sang trọng." },
+        ],
+    },
+    {
+        id: 2,
+        providerNum: 2,
+        name: "Ký túc xá Cỏ May",
+        desc: "Mô hình ký túc xá thiện nguyện và giáo dục hiện đại dành cho sinh viên vượt khó học giỏi.",
+        address: "Khu đô thị Đại học Quốc gia, Phường Linh Trung, TP. Thủ Đức, TP.HCM",
+        lat: 10.870100,
+        lng: 106.802300,
+        blocks: ["Khu Nam Sinh Viên", "Khu Nữ Sinh Viên"],
+        roomTypes: [
+            { name: "Phòng KTX Tiêu Chuẩn 4 Người", area: 32.0, occupancy: 4, price: 1200000, desc: "Phòng 4 giường tầng cao cấp, bàn học riêng, tủ cá nhân và WC khép kín." },
+            { name: "Phòng KTX Nâng Cao 2 Người", area: 24.0, occupancy: 2, price: 2000000, desc: "Phòng 2 giường đơn yên tĩnh có máy lạnh Inverter, ban công đón gió trời." },
+        ],
+    },
+    {
+        id: 3,
+        providerNum: 3,
+        name: "Căn hộ dịch vụ CityHouse Pham Ngoc Thach",
+        desc: "Chuỗi căn hộ dịch vụ phong cách Boutique tọa lạc tại trung tâm ngoại giao Quận 3.",
+        address: "17 Phạm Ngọc Thạch, Phường Võ Thị Sáu, Quận 3, TP.HCM",
+        lat: 10.783400,
+        lng: 106.696100,
+        blocks: ["Tháp Boutique A", "Tháp Boutique B"],
+        roomTypes: [
+            { name: "Studio Tiêu Chuẩn Trung Tâm", area: 35.0, occupancy: 2, price: 12500000, desc: "Phòng Studio thông minh có bếp nhỏ, máy giặt riêng và dịch vụ dọn phòng 2 lần/tuần." },
+            { name: "Suite 1 Phòng Ngủ Ban Công", area: 48.0, occupancy: 2, price: 17000000, desc: "Phòng Suite tiện nghi với bồn tắm nằm, smart TV 55 inch và nội thất gỗ sồi." },
+        ],
+    },
+    {
+        id: 4,
+        providerNum: 4,
+        name: "Masteri Thảo Điền",
+        desc: "Khu phức hợp căn hộ cao cấp kết nối trực tiếp ga Metro số 7 An Phú, Thảo Điền.",
+        address: "159 Xa Lộ Hà Nội, Phường Thảo Điền, TP. Thủ Đức, TP.HCM",
+        lat: 10.803200,
+        lng: 106.741200,
+        blocks: ["Tháp T1", "Tháp T2"],
+        roomTypes: [
+            { name: "Căn Hộ 2PN Masteri View Metro", area: 68.0, occupancy: 4, price: 18500000, desc: "Căn hộ 2 phòng ngủ thiết kế mở, sàn gỗ nhập khẩu, bếp từ và lò nướng âm tủ." },
+            { name: "Căn Hộ 3PN Góc View Sông", area: 89.5, occupancy: 5, price: 26000000, desc: "Căn góc 3 phòng ngủ thoáng mát, đón gió tự nhiên 3 mặt, tiện ích hồ bơi resort." },
+        ],
+    },
+    {
+        id: 5,
+        providerNum: 5,
+        name: "Chung cư Eco Green Sài Gòn",
+        desc: "Tổ hợp thương mại dịch vụ và căn hộ xanh hiện đại nhất Nam Sài Gòn trên mặt tiền Nguyễn Văn Linh.",
+        address: "39/8B Nguyễn Văn Linh, Phường Tân Thuận Tây, Quận 7, TP.HCM",
+        lat: 10.748500,
+        lng: 106.711500,
+        blocks: ["Tòa HR1", "Tòa HR2"],
+        roomTypes: [
+            { name: "Căn Hộ 2PN Eco Comfort", area: 65.0, occupancy: 4, price: 14000000, desc: "Căn hộ 2 phòng ngủ view công viên nội khu Hương Tràm 22ha xanh mát." },
+            { name: "Căn Hộ 3PN Eco Grand", area: 86.0, occupancy: 6, price: 19500000, desc: "Căn hộ 3 phòng ngủ trang bị kính Low-E cản nhiệt, máy lạnh trung tâm Daikin." },
+        ],
+    },
+    {
+        id: 6,
+        providerNum: 6,
+        name: "Khu căn hộ EHome 3 Tây Sài Gòn",
+        desc: "Căn hộ cộng đồng chất lượng cao của tập đoàn Nam Long, không gian sống xanh văn minh.",
+        address: "Hồ Học Lãm, Phường An Lạc, Quận Bình Tân, TP.HCM",
+        lat: 10.723100,
+        lng: 106.612400,
+        blocks: ["Block A1", "Block A2"],
+        roomTypes: [
+            { name: "Căn Hộ Ấm Cúng 1PN+1", area: 50.0, occupancy: 3, price: 6500000, desc: "Thiết kế tối ưu 1 phòng ngủ lớn và 1 không gian mở đa năng cho gia đình trẻ." },
+            { name: "Căn Hộ Gia Đình 2PN", area: 64.0, occupancy: 4, price: 8500000, desc: "Căn hộ 2 phòng ngủ 2 vệ sinh riêng biệt, sân phơi rộng rãi nhiều ánh sáng." },
+        ],
+    },
+    {
+        id: 7,
+        providerNum: 7,
+        name: "Sunrise City Quận 7",
+        desc: "Biểu tượng sống đẳng cấp tại cửa ngõ Nam Sài Gòn, đối diện Lotte Mart Quận 7.",
+        address: "23 Nguyễn Hữu Thọ, Phường Tân Hưng, Quận 7, TP.HCM",
+        lat: 10.756200,
+        lng: 106.698500,
+        blocks: ["Khu South Tower", "Khu Central Tower"],
+        roomTypes: [
+            { name: "Căn Hộ 1PN Sunrise Executive", area: 56.0, occupancy: 2, price: 13500000, desc: "Căn hộ cao cấp 1 phòng ngủ sàn gỗ tự nhiên, thiết bị vệ sinh Kohler." },
+            { name: "Căn Hộ 2PN Sunrise Prime", area: 76.0, occupancy: 4, price: 18000000, desc: "Căn hộ 2 phòng ngủ hiện đại với ban công rộng, tích hợp hồ bơi tràn chân mây." },
+        ],
+    },
+    {
+        id: 8,
+        providerNum: 8,
+        name: "Ký túc xá Sinh viên ĐHQG TP.HCM - Khu B",
+        desc: "Khu ký túc xá sinh viên lớn nhất Đông Nam Á, đầy đủ tiện ích thể thao, xe buýt, căn tin.",
+        address: "Khu phố 6, Phường Linh Trung, TP. Thủ Đức, TP.HCM",
+        lat: 10.878500,
+        lng: 106.799500,
+        blocks: ["Tòa Nhà B1", "Tòa Nhà B2"],
+        roomTypes: [
+            { name: "Phòng KTX Sinh Viên 6 Người", area: 38.0, occupancy: 6, price: 600000, desc: "Mỗi sinh viên 1 giường tầng, tủ khóa sắt an toàn, kết nối wifi ĐHQG miễn phí." },
+            { name: "Phòng KTX Chất Lượng Cao 4 Người", area: 38.0, occupancy: 4, price: 1400000, desc: "Phòng gắn máy lạnh, bình nước nóng năng lượng mặt trời, tủ lạnh cá nhân." },
+        ],
+    },
+    {
+        id: 9,
+        providerNum: 9,
+        name: "Dãy Nhà Trọ Sinh Viên Hoàng Phát",
+        desc: "Hệ thống nhà trọ mới xây an ninh, cổng vân tay, camera 24/24 gần trường Đại học Sư phạm Kỹ thuật.",
+        address: "45 Đường số 8, Phường Linh Trung, TP. Thủ Đức, TP.HCM",
+        lat: 10.865000,
+        lng: 106.772000,
+        blocks: ["Dãy Trọ Trệt", "Dãy Trọ Lầu"],
+        roomTypes: [
+            { name: "Phòng Trọ Gác Lửng Cao 20m²", area: 20.0, occupancy: 2, price: 3200000, desc: "Gác lửng đúc bê tông đứng không chạm đầu, kệ bếp ốp đá hoa cương, giờ giấc tự do." },
+            { name: "Phòng Trọ Ban Công Thoáng 25m²", area: 25.0, occupancy: 3, price: 4200000, desc: "Có ban công riêng phơi đồ, cửa sổ trời mát mẻ, cho nuôi thú cưng nhỏ." },
+        ],
+    },
+    {
+        id: 10,
+        providerNum: 10,
+        name: "Căn hộ mini Hàng Xanh Residence",
+        desc: "Căn hộ mini studio cách ngã tư Hàng Xanh 300m, thuận tiện di chuyển sang Quận 1 chỉ 5 phút.",
+        address: "185 Xô Viết Nghệ Tĩnh, Phường 17, Bình Thạnh, TP.HCM",
+        lat: 10.798000,
+        lng: 106.710000,
+        blocks: ["Khu Căn Hộ A", "Khu Căn Hộ B"],
+        roomTypes: [
+            { name: "Studio Full Nội Thất 26m²", area: 26.0, occupancy: 2, price: 6200000, desc: "Full nội thất: Giường nệm, tủ quần áo, máy lạnh, máy giặt riêng, khóa từ vân tay." },
+            { name: "Phòng 1PN Riêng Biệt 36m²", area: 36.0, occupancy: 2, price: 8200000, desc: "Phòng khách và phòng ngủ riêng biệt, bếp tách mùi, ánh sáng ngập tràn." },
+        ],
+    },
+];
 
-const serviceNames = [
-    [
-        "Phòng trọ tiêu chuẩn",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Phòng trọ sạch sẽ, đầy đủ tiện nghi cơ bản.",
-    ],
-    [
-        "Phòng trọ có nội thất",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Phòng trọ có giường, tủ, bàn và máy lạnh.",
-    ],
-    [
-        "Căn hộ studio",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Căn hộ studio phù hợp người độc thân và sinh viên.",
-    ],
-    [
-        "Căn hộ một phòng ngủ",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Căn hộ một phòng ngủ tiện nghi, an ninh.",
-    ],
-    [
-        "Căn hộ hai phòng ngủ",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Căn hộ hai phòng ngủ cho gia đình nhỏ.",
-    ],
-    [
-        "Phòng ở ghép",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Không gian ở ghép tiết kiệm chi phí.",
-    ],
-    [
-        "Dọn phòng định kỳ",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Vệ sinh phòng theo lịch định kỳ.",
-    ],
-    [
-        "Tổng vệ sinh căn hộ",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Vệ sinh toàn bộ căn hộ sau thời gian dài sử dụng.",
-    ],
-    [
-        "Vệ sinh nhà bếp",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Làm sạch bếp, bồn rửa và khu vực nấu ăn.",
-    ],
-    [
-        "Vệ sinh nhà tắm",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Làm sạch sàn, tường, lavabo và thiết bị vệ sinh.",
-    ],
-    [
-        "Giặt chăn ga",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Giặt chăn, ga, gối và vỏ nệm.",
-    ],
-    [
-        "Giặt rèm cửa",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Giặt và vệ sinh rèm cửa tại nhà.",
-    ],
-    [
-        "Cơm trưa gia đình",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Suất cơm trưa theo khẩu vị gia đình Việt.",
-    ],
-    [
-        "Cơm văn phòng",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Suất cơm văn phòng giao tận nơi.",
-    ],
-    [
-        "Bữa sáng dinh dưỡng",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Bữa sáng đầy đủ dinh dưỡng.",
-    ],
-    [
-        "Mâm cơm gia đình",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Mâm cơm nhiều món dành cho gia đình.",
-    ],
-    [
-        "Đồ ăn nhẹ buổi chiều",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Các món ăn nhẹ dùng trong ngày.",
-    ],
-    [
-        "Nước uống đóng chai",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Nước uống đóng chai giao theo số lượng.",
-    ],
-    [
-        "Sửa điện dân dụng",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và sửa chữa hệ thống điện dân dụng.",
-    ],
-    [
-        "Sửa đường nước",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Xử lý rò rỉ và hư hỏng đường nước.",
-    ],
-    [
-        "Sửa máy lạnh",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và sửa chữa máy lạnh.",
-    ],
-    [
-        "Bảo trì máy lạnh",
-        "FIXED",
-        "ADDITION",
-        "REPAIR",
-        "Bảo trì máy lạnh định kỳ.",
-    ],
-    [
-        "Sửa máy giặt",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và sửa chữa máy giặt.",
-    ],
-    [
-        "Sửa tủ lạnh",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và sửa chữa tủ lạnh.",
-    ],
-    [
-        "Lắp đặt đèn",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Lắp đặt và thay thế đèn chiếu sáng.",
-    ],
-    [
-        "Lắp đặt ổ cắm",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Lắp đặt ổ cắm và công tắc điện.",
-    ],
-    [
-        "Lắp vòi nước",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Lắp đặt và thay mới vòi nước.",
-    ],
-    [
-        "Vệ sinh bồn nước",
-        "FIXED",
-        "ADDITION",
-        "OTHER",
-        "Vệ sinh bồn chứa nước sinh hoạt.",
-    ],
-    [
-        "Chuyển đồ trong khu vực",
-        "QUANTITY",
-        "ADDITION",
-        "OTHER",
-        "Hỗ trợ vận chuyển đồ đạc trong khu vực.",
-    ],
-    [
-        "Lắp đặt camera",
-        "QUANTITY",
-        "ADDITION",
-        "OTHER",
-        "Lắp đặt camera giám sát.",
-    ],
-    [
-        "Bảo trì khóa cửa",
-        "FIXED",
-        "ADDITION",
-        "OTHER",
-        "Kiểm tra và bảo trì khóa cửa.",
-    ],
-    ["Làm chìa khóa", "QUANTITY", "ADDITION", "OTHER", "Đánh chìa khóa mới."],
-    [
-        "Diệt côn trùng",
-        "FIXED",
-        "ADDITION",
-        "OTHER",
-        "Xử lý côn trùng trong nhà.",
-    ],
-    [
-        "Chăm sóc cây cảnh",
-        "QUANTITY",
-        "ADDITION",
-        "OTHER",
-        "Tưới nước, cắt tỉa và chăm sóc cây.",
-    ],
-    [
-        "Phòng trọ gần trường học",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Phòng trọ thuận tiện cho sinh viên.",
-    ],
-    [
-        "Phòng trọ có ban công",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Phòng trọ thoáng, có ban công riêng.",
-    ],
-    [
-        "Phòng trọ có máy lạnh",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Phòng trọ có máy lạnh và nội thất cơ bản.",
-    ],
-    [
-        "Căn hộ gần trung tâm",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Căn hộ thuận tiện đi lại đến khu trung tâm.",
-    ],
-    [
-        "Căn hộ có chỗ để xe",
-        "FIXED",
-        "NORMAL",
-        "HOUSING",
-        "Căn hộ có khu vực để xe an toàn.",
-    ],
-    [
-        "Dọn nhà sau chuyển phòng",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Dọn vệ sinh toàn bộ sau khi chuyển phòng.",
-    ],
-    [
-        "Vệ sinh nệm",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Vệ sinh và khử mùi nệm.",
-    ],
-    [
-        "Vệ sinh sofa",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Làm sạch sofa tại nhà.",
-    ],
-    ["Giặt thảm", "QUANTITY", "ADDITION", "CLEANING", "Giặt và làm sạch thảm."],
-    [
-        "Suất ăn ít dầu mỡ",
-        "QUANTITY",
-        "ADDITION",
-        "FOOD",
-        "Suất ăn cân bằng, ít dầu mỡ.",
-    ],
-    ["Suất ăn chay", "QUANTITY", "ADDITION", "FOOD", "Suất ăn chay theo ngày."],
-    [
-        "Sửa quạt điện",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Sửa chữa quạt điện dân dụng.",
-    ],
-    [
-        "Sửa bình nóng lạnh",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Sửa chữa và kiểm tra bình nóng lạnh.",
-    ],
-    [
-        "Sửa bếp điện",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Sửa chữa bếp điện và bếp từ.",
-    ],
-    [
-        "Lắp kệ treo tường",
-        "QUANTITY",
-        "ADDITION",
-        "OTHER",
-        "Lắp đặt kệ và phụ kiện treo tường.",
-    ],
-    [
-        "Vệ sinh máy lạnh",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Vệ sinh máy lạnh tại nhà.",
-    ],
-    [
-        "Vệ sinh quạt",
-        "QUANTITY",
-        "ADDITION",
-        "CLEANING",
-        "Tháo và vệ sinh quạt.",
-    ],
-    [
-        "Vệ sinh bếp từ",
-        "FIXED",
-        "ADDITION",
-        "CLEANING",
-        "Vệ sinh bếp từ và khu vực xung quanh.",
-    ],
-    [
-        "Sửa cửa gỗ",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Sửa bản lề và cánh cửa gỗ.",
-    ],
-    [
-        "Sửa cửa nhôm kính",
-        "QUANTITY",
-        "ADDITION",
-        "REPAIR",
-        "Sửa cửa nhôm kính và phụ kiện.",
-    ],
-    [
-        "Lắp rèm cửa",
-        "QUANTITY",
-        "ADDITION",
-        "OTHER",
-        "Đo, lắp và điều chỉnh rèm cửa.",
-    ],
-    [
-        "Lắp giàn phơi",
-        "FIXED",
-        "ADDITION",
-        "OTHER",
-        "Lắp giàn phơi thông minh hoặc truyền thống.",
-    ],
-    [
-        "Bảo trì hệ thống nước",
-        "FIXED",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và bảo trì đường nước.",
-    ],
-    [
-        "Bảo trì hệ thống điện",
-        "FIXED",
-        "ADDITION",
-        "REPAIR",
-        "Kiểm tra và bảo trì hệ thống điện.",
-    ],
-] as const;
-
-function uuid(n: number) {
-    return `61000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function priceId(n: number) {
-    return `62000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function imageId(n: number) {
-    return `63000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function scheduleId(n: number) {
-    return `64000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function ruleId(n: number) {
-    return `65000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function tierId(n: number) {
-    return `66000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function propertyId(n: number) {
-    return `67000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function blockId(n: number) {
-    return `68000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function floorId(n: number) {
-    return `69000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function roomTypeId(n: number) {
-    return `6a000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function roomId(n: number) {
-    return `6b000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
-function requirementId(n: number) {
-    return `6c000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-}
+// 25 Dịch vụ ngoài (External Services) từ 15 nhà cung cấp chuyên nghiệp (Provider 11 -> 25)
+const externalServicesData = [
+    // Provider 11: Sakura Giặt ủi
+    {
+        providerNum: 11,
+        catId: 2,
+        name: "Giặt sấy lấy liền trong ngày",
+        desc: "Giặt sấy thơm tho, gấp gọn ngăn nắp bằng nước giặt hữu cơ, giao nhận tận phòng trong 4 giờ.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "RECURRING" as const,
+        price: 25000,
+        unit: "kg",
+        img: "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800",
+    },
+    {
+        providerNum: 11,
+        catId: 2,
+        name: "Giặt hấp cao cấp áo vest & đầm dạ hội",
+        desc: "Quy trình giặt khô công nghệ Nhật Bản, giữ phom dáng nguyên bản, bảo vệ sợi vải tinh tế.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 90000,
+        unit: "bộ",
+        img: "https://images.unsplash.com/photo-1517677208171-0bc6725a3e60?w=800",
+    },
+    // Provider 12: Vệ sinh Hoàn Mỹ
+    {
+        providerNum: 12,
+        catId: 2,
+        name: "Tổng vệ sinh căn hộ sau xây dựng / chuyển nhà",
+        desc: "Vệ sinh chuyên sâu bằng máy hút bụi công nghiệp Karcher, lau kính, khử mùi ozone toàn diện.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 1600000,
+        unit: "căn",
+        img: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800",
+    },
+    {
+        providerNum: 12,
+        catId: 2,
+        name: "Giặt sofa, nệm và rèm cửa tại nhà",
+        desc: "Phun hút hơi nước nóng 140 độ C diệt khuẩn 99.9%, hút sạch mạt bụi gây dị ứng da.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 350000,
+        unit: "bộ",
+        img: "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?w=800",
+    },
+    // Provider 13: Điện nước Minh Trí
+    {
+        providerNum: 13,
+        catId: 3,
+        name: "Sửa chữa hệ thống điện chập cháy dân dụng",
+        desc: "Thợ kỹ thuật có chứng chỉ kiểm tra rò điện, thay CB tự ngắt, đi lại dây điện âm tường an toàn.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 250000,
+        unit: "lần",
+        img: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800",
+    },
+    {
+        providerNum: 13,
+        catId: 3,
+        name: "Thông tắc đường ống lavabo & bồn cầu",
+        desc: "Sử dụng máy lò xo chuyên dụng không đục phá sàn, xử lý triệt để mùi hôi cống thoát nước.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 300000,
+        unit: "lần",
+        img: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=800",
+    },
+    // Provider 14: Điện lạnh Á Châu
+    {
+        providerNum: 14,
+        catId: 3,
+        name: "Vệ sinh máy lạnh treo tường & xịt khử khuẩn",
+        desc: "Tháo mặt nạ, vệ sinh dàn lạnh và dàn nóng bằng bơm áp lực, tặng kèm gói kiểm tra gas miễn phí.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 180000,
+        unit: "máy",
+        img: "https://images.unsplash.com/photo-1621905252507-b35492cc74b4?w=800",
+    },
+    {
+        providerNum: 14,
+        catId: 3,
+        name: "Nạp gas máy lạnh R32 / R410A chính hãng",
+        desc: "Kiểm tra rò rỉ tán loe, hút chân không và nạp đủ áp suất gas chuẩn kỹ thuật nhà sản xuất.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 350000,
+        unit: "lần",
+        img: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=800",
+    },
+    // Provider 15: JupViec Dọn dẹp
+    {
+        providerNum: 15,
+        catId: 2,
+        name: "Giúp việc nhà theo giờ định kỳ",
+        desc: "Nhân viên đào tạo bài bản, lý lịch rõ ràng: Lau nhà, dọn bếp, ủi đồ, chuẩn bị bữa ăn gia đình.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "RECURRING" as const,
+        price: 85000,
+        unit: "giờ",
+        img: "https://images.unsplash.com/photo-1584820927498-cfe5211fd8bf?w=800",
+    },
+    {
+        providerNum: 15,
+        catId: 2,
+        name: "Gói giúp việc cố định theo tháng (3 buổi/tuần)",
+        desc: "Tiết kiệm 20% chi phí, bảo đảm cùng một nhân viên quen việc đến làm việc đúng khung giờ.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "RECURRING" as const,
+        price: 2400000,
+        unit: "tháng",
+        img: "https://images.unsplash.com/photo-1528740561666-dc2479dc08ab?w=800",
+    },
+    // Provider 16: Rentokil Diệt côn trùng
+    {
+        providerNum: 16,
+        catId: 3,
+        name: "Phun xịt muỗi và diệt gián Đức sinh học",
+        desc: "Thuốc sinh học Bayer không mùi, an toàn tuyệt đối cho trẻ nhỏ và thú cưng, bảo hành 3 tháng.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 550000,
+        unit: "lần",
+        img: "https://images.unsplash.com/photo-1616401784845-180882ba9ba8?w=800",
+    },
+    {
+        providerNum: 16,
+        catId: 3,
+        name: "Xử lý và phòng chống mối mọt công trình",
+        desc: "Đặt hộp nhử mối công nghệ lây nhiễm lan truyền, triệt tiêu tận gốc tổ mối chúa dưới lòng đất.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 1800000,
+        unit: "gói",
+        img: "https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?w=800",
+    },
+    // Provider 17: AquaWater Nước suối
+    {
+        providerNum: 17,
+        catId: 6,
+        name: "Bình nước khoáng thiên nhiên Lavie 19L (Có vòi)",
+        desc: "Khai thác từ nguồn khoáng tự nhiên sâu trong lòng đất, giàu khoáng chất Canxi, Magie, Kali.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "RECURRING" as const,
+        price: 68000,
+        unit: "bình",
+        img: "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=800",
+    },
+    {
+        providerNum: 17,
+        catId: 6,
+        name: "Bình nước tinh khiết Aquafina 20L",
+        desc: "Nước tinh khiết qua quy trình thanh lọc Hydro-7 tiêu chuẩn Hoa Kỳ, vị ngọt mát sảng khoái.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "RECURRING" as const,
+        price: 55000,
+        unit: "bình",
+        img: "https://images.unsplash.com/photo-1559839914-17aae19cec71?w=800",
+    },
+    // Provider 18: Sửa khóa nhanh 24/7
+    {
+        providerNum: 18,
+        catId: 3,
+        name: "Mở khóa cửa nhà, cửa phòng khẩn cấp",
+        desc: "Có mặt trong 15 phút, kỹ thuật mở bi không phá khóa, giữ nguyên ổ khóa ban đầu của chủ nhà.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 150000,
+        unit: "lần",
+        img: "https://images.unsplash.com/photo-1558002038-1055907df827?w=800",
+    },
+    {
+        providerNum: 18,
+        catId: 3,
+        name: "Thay lắp khóa vân tay thông minh cửa chính",
+        desc: "Cung cấp và lắp đặt khóa vân tay Philips / Kaadas mã số, thẻ từ, kết nối app điện thoại.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 3800000,
+        unit: "bộ",
+        img: "https://images.unsplash.com/photo-1558002038-1055907df827?w=800",
+    },
+    // Provider 19: Camera Đạt Phát
+    {
+        providerNum: 19,
+        catId: 5,
+        name: "Lắp đặt trọn gói Camera an ninh Wifi EZVIZ",
+        desc: "Camera xoay 360 độ độ phân giải 2K, đàm thoại 2 chiều, phát hiện người bằng trí tuệ nhân tạo AI.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 750000,
+        unit: "máy",
+        img: "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800",
+    },
+    // Provider 20: Viettel Cáp Quang
+    {
+        providerNum: 20,
+        catId: 5,
+        name: "Gói Internet Cáp Quang Sinh Viên FAST2 (150Mbps)",
+        desc: "Băng thông 150Mbps không giới hạn dung lượng, trang bị miễn phí Modem WiFi 6 2 băng tần.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "RECURRING" as const,
+        price: 180000,
+        unit: "tháng",
+        img: "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=800",
+    },
+    {
+        providerNum: 20,
+        catId: 5,
+        name: "Gói Combo Internet 250Mbps + Truyền hình TV360",
+        desc: "Xem trọn vẹn 160 kênh truyền hình HD, giải Ngoại hạng Anh, kho phim bom tấn chiếu rạp 4K.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "RECURRING" as const,
+        price: 240000,
+        unit: "tháng",
+        img: "https://images.unsplash.com/photo-1461151304267-38535e780c79?w=800",
+    },
+    // Provider 21: Hoàng Long Security
+    {
+        providerNum: 21,
+        catId: 5,
+        name: "Thuê bảo vệ trực an ninh sự kiện theo giờ",
+        desc: "Vệ sĩ chuyên nghiệp chiều cao từ 1m75, có võ thuật, đồng phục chỉnh tề, kiểm soát an ninh nghiêm ngặt.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 120000,
+        unit: "giờ",
+        img: "https://images.unsplash.com/photo-1508873696983-2df5293cb32f?w=800",
+    },
+    // Provider 22: Thành Hưng Chuyển Nhà
+    {
+        providerNum: 22,
+        catId: 6,
+        name: "Chuyển phòng trọ trọn gói bằng xe tải 750kg",
+        desc: "Bao gồm xe tải, tài xế và 2 nhân viên bốc xếp, đóng gói thùng carton miễn phí, bọc màng PE chống xước.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 850000,
+        unit: "chuyến",
+        img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800",
+    },
+    // Provider 23: Nội Thất Xinh
+    {
+        providerNum: 23,
+        catId: 6,
+        name: "Thiết kế & lắp đặt bàn học sinh viên thông minh",
+        desc: "Bàn học kết hợp giá sách gỗ MDF lõi xanh chống ẩm An Cường, bảo hành ray trượt và bản lề 2 năm.",
+        type: "FIXED" as const,
+        servType: "NORMAL" as const,
+        calc: "FIXED" as const,
+        freq: "ONE_TIME" as const,
+        price: 2200000,
+        unit: "bộ",
+        img: "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=800",
+    },
+    // Provider 24: Tâm Phát Thực Phẩm
+    {
+        providerNum: 24,
+        catId: 4,
+        name: "Suất cơm trưa dinh dưỡng giao tận nơi",
+        desc: "Thực đơn thay đổi theo ngày, gồm món mặn, món xào, canh thanh nhiệt, tráng miệng hoa quả sạch VietGAP.",
+        type: "QUANTITY" as const,
+        servType: "ADDITION" as const,
+        calc: "QUANTITY" as const,
+        freq: "RECURRING" as const,
+        price: 45000,
+        unit: "suất",
+        img: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800",
+    },
+    // Provider 25: ITCare
+    {
+        providerNum: 25,
+        catId: 6,
+        name: "Vệ sinh laptop & tra keo tản nhiệt MX-4 tại nhà",
+        desc: "Tháo máy hút bụi quạt gió, tra keo tản nhiệt Arctic MX-4 cao cấp, giảm ngay 15-20 độ C nhiệt độ CPU.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 150000,
+        unit: "máy",
+        img: "https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=800",
+    },
+];
 
 async function main() {
+    console.log("--> Đang seed Catalog Service...");
+
+    // 1. CLEAR DỮ LIỆU CŨ THEO ĐÚNG THỨ TỰ PHỤ THUỘC
+    await prisma.serviceImage.deleteMany();
+    await prisma.serviceRequirement.deleteMany();
+    await prisma.servicePriceTier.deleteMany();
+    await prisma.servicePrice.deleteMany();
+    await prisma.billingSchedule.deleteMany();
+    await prisma.service.deleteMany();
+    await prisma.serviceBillingRule.deleteMany();
+    await prisma.room.deleteMany();
+    await prisma.floor.deleteMany();
+    await prisma.block.deleteMany();
+    await prisma.roomType.deleteMany();
+    await prisma.property.deleteMany();
+    await prisma.category.deleteMany();
+
+    // 2. CATEGORIES (6 Danh mục)
     await prisma.category.createMany({
-        data: categories.map(([key, name, description]) => ({
-            id: IDS.categories[key as keyof typeof IDS.categories],
-            name,
-            description,
+        data: categories.map(c => ({
+            id: categoryId(c.id),
+            name: c.name,
+            description: c.desc,
         })),
         skipDuplicates: true,
     });
 
-    const rules = serviceNames.map(([, calculation], i) => ({
-        id: ruleId(i + 1),
-        calculationMethod: calculation as "FIXED" | "QUANTITY" | "METERED",
-        billingFrequency: "RECURRING" as const,
-        billingIntervalValue: 1,
-        billingIntervalUnit: "MONTH" as const,
-        prorationMethod: i % 3 === 0 ? ("DAILY" as const) : ("NONE" as const),
-        usageSource: calculation === "METERED",
+    // 3. PROPERTIES (10 Bất động sản có thật)
+    const propertyInserts = propertiesData.map(p => ({
+        id: propertyId(p.id),
+        providerId: providerId(p.providerNum),
+        propertyName: p.name,
+        description: p.desc,
+        address: p.address,
+        latitude: p.lat,
+        longitude: p.lng,
+        status: "ACTIVE" as const,
         createdAt: now,
         updatedAt: now,
     }));
-    await prisma.serviceBillingRule.createMany({
-        data: rules,
-        skipDuplicates: true,
-    });
+    await prisma.property.createMany({ data: propertyInserts, skipDuplicates: true });
 
-    const services = serviceNames.map(
-        ([name, calculation, type, category, description], i) => {
-            const provider = providerKeys[i % providerKeys.length];
-            return {
-                id: uuid(i + 1),
-                name,
-                description,
-                status:
-                    provider === "PROVIDER_SUSPENDED"
-                        ? ("INACTIVE" as const)
-                        : ("ACTIVE" as const),
-                address: `Đường số ${(i % 20) + 1}, Thành phố Hồ Chí Minh`,
-                latitude: 10.76 + (i % 15) * 0.002,
-                longitude: 106.68 + (i % 18) * 0.002,
-                requiresPrepayment: i % 7 === 0,
-                requiresContract: type === "NORMAL",
-                providerId: IDS.providers[provider],
-                categoryId:
-                    IDS.categories[category as keyof typeof IDS.categories],
-                billingRuleId: ruleId(i + 1),
-                serviceType: type as "NORMAL" | "ADDITION",
-                roomTypeId: null,
+    // 4. ROOM TYPES, BLOCKS, FLOORS & ROOMS (400 phòng với mã số P.101, P.202,...)
+    const roomTypeInserts = [];
+    const blockInserts = [];
+    const floorInserts = [];
+    const roomInserts = [];
+
+    let totalRoomCount = 0;
+    let roomTypeCounter = 1;
+    let blockCounter = 1;
+    let floorCounter = 1;
+
+    for (let pIdx = 0; pIdx < propertiesData.length; pIdx++) {
+        const prop = propertiesData[pIdx];
+        const propDbId = propertyId(prop.id);
+
+        // 2 Room Types per property (Tổng 20 loại phòng)
+        const localRoomTypeIds: string[] = [];
+        for (let rtIdx = 0; rtIdx < prop.roomTypes.length; rtIdx++) {
+            const rt = prop.roomTypes[rtIdx];
+            const rtDbId = roomTypeId(roomTypeCounter++);
+            localRoomTypeIds.push(rtDbId);
+
+            roomTypeInserts.push({
+                id: rtDbId,
+                propertyId: propDbId,
+                typeName: rt.name,
+                area: rt.area,
+                maxOccupancy: rt.occupancy,
+                description: rt.desc,
+                status: "ACTIVE" as const,
                 createdAt: now,
                 updatedAt: now,
-            };
-        },
-    );
-    await prisma.service.createMany({ data: services, skipDuplicates: true });
+            });
+        }
 
-    const schedules = services.map((s, i) => ({
-        id: scheduleId(i + 1),
-        serviceId: s.id,
-        billingDay: (i % 25) + 1,
-        dueDays: 5 + (i % 5),
-        createdAt: now,
-        updatedAt: now,
-    }));
-    await prisma.billingSchedule.createMany({
-        data: schedules,
-        skipDuplicates: true,
-    });
+        // 2 Blocks per property (Tổng 20 Tòa)
+        for (let bIdx = 0; bIdx < prop.blocks.length; bIdx++) {
+            const blockName = prop.blocks[bIdx];
+            const blockDbId = blockId(blockCounter++);
 
-    const prices = services.flatMap((s, i) => [
-        {
-            id: priceId(i * 2 + 1),
-            createdBy: "30000000-0000-0000-0000-000000000001",
-            serviceId: s.id,
-            price: String(80000 + (i % 12) * 25000),
-            unit:
-                s.serviceType === "NORMAL"
-                    ? "tháng"
-                    : i % 3 === 0
-                      ? "lần"
-                      : "suất",
-            effectiveFrom: new Date("2026-01-01"),
-            effectiveTo: null,
-            createdAt: now,
-        },
-        {
-            id: priceId(i * 2 + 2),
-            createdBy: "30000000-0000-0000-0000-000000000001",
-            serviceId: s.id,
-            price: String(90000 + (i % 12) * 25000),
-            unit: s.serviceType === "NORMAL" ? "tháng" : "lần",
-            effectiveFrom: new Date("2026-07-01"),
-            effectiveTo: null,
-            createdAt: now,
-        },
-    ]);
-    await prisma.servicePrice.createMany({
-        data: prices,
-        skipDuplicates: true,
-    });
-
-    await prisma.servicePriceTier.createMany({
-        data: prices.map((p, i) => ({
-            id: tierId(i + 1),
-            servicePriceId: p.id,
-            fromValue: "1",
-            toValue: i % 2 === 0 ? "5" : null,
-            price: p.price,
-        })),
-        skipDuplicates: true,
-    });
-
-    await prisma.serviceImage.createMany({
-        data: services.flatMap((s, i) => {
-            const count = i % 10 === 0 ? 1 : 3;
-            return Array.from({ length: count }, (_, j) => ({
-                id: imageId(i * 3 + j + 1),
-                serviceId: s.id,
-                imageUrl: `https://example.com/dich-vu/${s.id}-${j + 1}.jpg`,
-                displayOrder: j + 1,
+            blockInserts.push({
+                id: blockDbId,
+                propertyId: propDbId,
+                blockName: blockName,
+                status: "ACTIVE" as const,
                 createdAt: now,
-            }));
-        }),
-        skipDuplicates: true,
-    });
+                updatedAt: now,
+            });
 
-    const properties = Array.from({ length: 15 }, (_, i) => ({
-        id: propertyId(i + 1),
-        providerId: IDS.providers[providerKeys[i % 4]],
-        propertyName: `Khu nhà ở ${["An Bình", "Phúc Gia", "Hưng Thịnh", "Minh Khai"][i % 4]} ${i + 1}`,
-        description: "Khu nhà ở sạch sẽ, an ninh và thuận tiện sinh hoạt.",
-        address: `Số ${10 + i} đường Nguyễn Văn Linh, Thành phố Hồ Chí Minh`,
-        latitude: 10.74 + i * 0.003,
-        longitude: 106.65 + i * 0.003,
-        status: "ACTIVE" as const,
-        createdAt: now,
-        updatedAt: now,
-    }));
-    await prisma.property.createMany({
-        data: properties,
-        skipDuplicates: true,
-    });
+            // 5 Floors per block (Tổng 100 Tầng)
+            for (let fIdx = 1; fIdx <= 5; fIdx++) {
+                const floorDbId = floorId(floorCounter++);
 
-    const roomTypes = Array.from({ length: 45 }, (_, i) => ({
-        id: roomTypeId(i + 1),
-        propertyId: properties[i % properties.length].id,
-        typeName: `Loại phòng ${i + 1}`,
-        area: String(18 + (i % 8) * 3),
-        maxOccupancy: 1 + (i % 4),
-        description: "Phòng có thiết kế phù hợp nhu cầu sinh hoạt.",
-        status: "ACTIVE" as const,
-        createdAt: now,
-        updatedAt: now,
-    }));
-    await prisma.roomType.createMany({ data: roomTypes, skipDuplicates: true });
+                floorInserts.push({
+                    id: floorDbId,
+                    blockId: blockDbId,
+                    floorName: `Tầng ${fIdx}`,
+                    status: "ACTIVE" as const,
+                    createdAt: now,
+                    updatedAt: now,
+                });
 
-    const blocks = Array.from({ length: 30 }, (_, i) => ({
-        id: blockId(i + 1),
-        propertyId: properties[i % properties.length].id,
-        blockName: `Tòa ${String.fromCharCode(65 + (i % 5))}`,
-        status: "ACTIVE" as const,
-        createdAt: now,
-        updatedAt: now,
-    }));
-    await prisma.block.createMany({ data: blocks, skipDuplicates: true });
+                // 4 Rooms per floor (Tổng 400 Phòng)
+                for (let rIdx = 1; rIdx <= 4; rIdx++) {
+                    totalRoomCount++;
+                    const roomDbId = roomId(totalRoomCount);
+                    const roomNumber = `P.${fIdx}${String(rIdx).padStart(2, "0")}`; // e.g., P.101, P.102
 
-    const floors = Array.from({ length: 60 }, (_, i) => ({
-        id: floorId(i + 1),
-        blockId: blocks[i % blocks.length].id,
-        floorName: `Tầng ${(i % 5) + 1}`,
-        status: "ACTIVE" as const,
-        createdAt: now,
-        updatedAt: now,
-    }));
-    await prisma.floor.createMany({ data: floors, skipDuplicates: true });
+                    // Phân bổ trạng thái phòng thực tế: 85% ACTIVE, 10% MAINTENANCE, 5% INACTIVE
+                    let status: "ACTIVE" | "MAINTENANCE" | "INACTIVE" = "ACTIVE";
+                    if (totalRoomCount % 10 === 0) {
+                        status = "MAINTENANCE";
+                    } else if (totalRoomCount % 20 === 0) {
+                        status = "INACTIVE";
+                    }
 
-    await prisma.room.createMany({
-        data: Array.from({ length: 300 }, (_, i) => ({
-            id: roomId(i + 1),
-            roomTypeId: roomTypes[i % roomTypes.length].id,
-            floorId: floors[i % floors.length].id,
-            roomNumber: `${(i % 10) + 1}${String((i % 20) + 1).padStart(2, "0")}`,
-            status: i % 11 === 0 ? ("INACTIVE" as const) : ("ACTIVE" as const),
+                    // Ghép loại phòng tương ứng
+                    const assignedRoomTypeId = localRoomTypeIds[rIdx % 2];
+
+                    roomInserts.push({
+                        id: roomDbId,
+                        roomTypeId: assignedRoomTypeId,
+                        floorId: floorDbId,
+                        roomNumber: roomNumber,
+                        status: status,
+                        createdAt: now,
+                        updatedAt: now,
+                    });
+                }
+            }
+        }
+    }
+
+    await prisma.roomType.createMany({ data: roomTypeInserts, skipDuplicates: true });
+    await prisma.block.createMany({ data: blockInserts, skipDuplicates: true });
+    await prisma.floor.createMany({ data: floorInserts, skipDuplicates: true });
+
+    // Insert rooms theo chunks
+    for (let i = 0; i < roomInserts.length; i += 200) {
+        await prisma.room.createMany({ data: roomInserts.slice(i, i + 200), skipDuplicates: true });
+    }
+
+    // 5. SERVICES, BILLING RULES, SCHEDULES, PRICES & IMAGES
+    const ruleInserts = [];
+    const serviceInserts = [];
+    const scheduleInserts = [];
+    const priceInserts = [];
+    const imageInserts = [];
+    const requirementInserts = [];
+
+    let serviceCounter = 1;
+    let ruleCounter = 1;
+    let priceCounter = 1;
+    let imageCounter = 1;
+    let reqCounter = 1;
+
+    // A. 10 Dịch vụ thuê phòng (Housing) cho 10 Bất động sản
+    for (let i = 0; i < propertiesData.length; i++) {
+        const prop = propertiesData[i];
+        const sId = serviceId(serviceCounter);
+        const rId = ruleId(ruleCounter);
+        const pId = priceId(priceCounter);
+        const sSchedId = scheduleId(serviceCounter);
+
+        // Quy tắc tính tiền phòng: FIXED hàng tháng, Proration theo ngày
+        ruleInserts.push({
+            id: rId,
+            calculationMethod: "FIXED" as const,
+            billingFrequency: "RECURRING" as const,
+            billingIntervalValue: 1,
+            billingIntervalUnit: "MONTH" as const,
+            prorationMethod: "DAILY" as const,
+            usageSource: false,
             createdAt: now,
             updatedAt: now,
-        })),
-        skipDuplicates: true,
-    });
+        });
 
-    await prisma.serviceRequirement.createMany({
-        data: Array.from({ length: 30 }, (_, i) => ({
-            id: requirementId(i + 1),
-            serviceId: services[i].id,
-            additionalServiceId: services[6 + (i % 24)].id,
+        // Dịch vụ thuê phòng chính (NORMAL)
+        serviceInserts.push({
+            id: sId,
+            name: `Thuê phòng / Căn hộ tại ${prop.name}`,
+            description: `Hợp đồng thuê phòng lưu trú dài hạn với đầy đủ tiện ích và quản lý chuyên nghiệp tại ${prop.name}.`,
             status: "ACTIVE" as const,
-        })),
-        skipDuplicates: true,
-    });
+            address: prop.address,
+            latitude: prop.lat,
+            longitude: prop.lng,
+            requiresPrepayment: true,
+            requiresContract: true,
+            contractTemplateId: contractTemplateId(1), // Gắn Template Hợp đồng thuê nhà ở chuẩn (Template 1)
+            providerId: providerId(prop.providerNum),
+            categoryId: categoryId(1), // Danh mục Cho thuê BĐS
+            billingRuleId: rId,
+            serviceType: "NORMAL" as const,
+            roomTypeId: roomTypeId(i * 2 + 1),
+            createdAt: now,
+            updatedAt: now,
+        });
 
-    console.log(
-        `Đã seed catalog: ${categories.length} danh mục, ${services.length} dịch vụ, ${prices.length} bảng giá, 300 phòng.`,
-    );
+        scheduleInserts.push({
+            id: sSchedId,
+            serviceId: sId,
+            billingDay: 1,
+            dueDays: 5,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        // Bảng giá thuê phòng
+        priceInserts.push({
+            id: pId,
+            createdBy: userId(1),
+            serviceId: sId,
+            price: String(prop.roomTypes[0].price),
+            unit: "tháng",
+            effectiveFrom: new Date("2025-01-01"),
+            effectiveTo: null,
+            createdAt: now,
+        });
+
+        imageInserts.push({
+            id: imageId(imageCounter++),
+            serviceId: sId,
+            imageUrl: "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800",
+            displayOrder: 1,
+            createdAt: now,
+        });
+
+        // Tiện ích 1 kèm theo: Điện sinh hoạt
+        serviceCounter++;
+        ruleCounter++;
+        priceCounter++;
+        const elecServiceId = serviceId(serviceCounter);
+        const elecRuleId = ruleId(ruleCounter);
+        const elecPriceId = priceId(priceCounter);
+
+        ruleInserts.push({
+            id: elecRuleId,
+            calculationMethod: "QUANTITY" as const,
+            billingFrequency: "RECURRING" as const,
+            billingIntervalValue: 1,
+            billingIntervalUnit: "MONTH" as const,
+            prorationMethod: "NONE" as const,
+            usageSource: true,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        serviceInserts.push({
+            id: elecServiceId,
+            name: `Điện sinh hoạt - ${prop.name}`,
+            description: `Tính theo chỉ số công tơ điện thực tế tiêu thụ tại ${prop.name}.`,
+            status: "ACTIVE" as const,
+            address: prop.address,
+            latitude: prop.lat,
+            longitude: prop.lng,
+            requiresPrepayment: false,
+            requiresContract: true,
+            contractTemplateId: contractTemplateId(2), // Gắn Template Hợp đồng tiện ích (Template 2)
+            providerId: providerId(prop.providerNum),
+            categoryId: categoryId(3), // Bảo trì & Tiện ích
+            billingRuleId: elecRuleId,
+            serviceType: "ADDITION" as const,
+            roomTypeId: null,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        scheduleInserts.push({
+            id: scheduleId(serviceCounter),
+            serviceId: elecServiceId,
+            billingDay: 1,
+            dueDays: 5,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        priceInserts.push({
+            id: elecPriceId,
+            createdBy: userId(1),
+            serviceId: elecServiceId,
+            price: "3800",
+            unit: "kWh",
+            effectiveFrom: new Date("2025-01-01"),
+            effectiveTo: null,
+            createdAt: now,
+        });
+
+        // Tiện ích 2 kèm theo: Nước sinh hoạt
+        serviceCounter++;
+        ruleCounter++;
+        priceCounter++;
+        const waterServiceId = serviceId(serviceCounter);
+        const waterRuleId = ruleId(ruleCounter);
+        const waterPriceId = priceId(priceCounter);
+
+        ruleInserts.push({
+            id: waterRuleId,
+            calculationMethod: "QUANTITY" as const,
+            billingFrequency: "RECURRING" as const,
+            billingIntervalValue: 1,
+            billingIntervalUnit: "MONTH" as const,
+            prorationMethod: "NONE" as const,
+            usageSource: true,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        serviceInserts.push({
+            id: waterServiceId,
+            name: `Nước sinh hoạt - ${prop.name}`,
+            description: `Tính theo chỉ số đồng hồ nước thực tế tiêu thụ tại ${prop.name}.`,
+            status: "ACTIVE" as const,
+            address: prop.address,
+            latitude: prop.lat,
+            longitude: prop.lng,
+            requiresPrepayment: false,
+            requiresContract: true,
+            contractTemplateId: contractTemplateId(2), // Gắn Template Hợp đồng tiện ích (Template 2)
+            providerId: providerId(prop.providerNum),
+            categoryId: categoryId(3),
+            billingRuleId: waterRuleId,
+            serviceType: "ADDITION" as const,
+            roomTypeId: null,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        scheduleInserts.push({
+            id: scheduleId(serviceCounter),
+            serviceId: waterServiceId,
+            billingDay: 1,
+            dueDays: 5,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        priceInserts.push({
+            id: waterPriceId,
+            createdBy: userId(1),
+            serviceId: waterServiceId,
+            price: "22000",
+            unit: "m³",
+            effectiveFrom: new Date("2025-01-01"),
+            effectiveTo: null,
+            createdAt: now,
+        });
+
+        // Ràng buộc dịch vụ: Khi thuê phòng tại prop, gắn kèm Điện và Nước
+        requirementInserts.push({
+            id: requirementId(reqCounter++),
+            serviceId: sId,
+            additionalServiceId: elecServiceId,
+            status: "ACTIVE" as const,
+        });
+        requirementInserts.push({
+            id: requirementId(reqCounter++),
+            serviceId: sId,
+            additionalServiceId: waterServiceId,
+            status: "ACTIVE" as const,
+        });
+
+        serviceCounter++;
+        ruleCounter++;
+        priceCounter++;
+    }
+
+    // B. 25 Dịch vụ ngoài (External Services)
+    for (let s of externalServicesData) {
+        const sId = serviceId(serviceCounter);
+        const rId = ruleId(ruleCounter);
+        const pId = priceId(priceCounter);
+        const sSchedId = scheduleId(serviceCounter);
+
+        ruleInserts.push({
+            id: rId,
+            calculationMethod: s.calc,
+            billingFrequency: s.freq,
+            billingIntervalValue: 1,
+            billingIntervalUnit: s.freq === "RECURRING" ? ("MONTH" as const) : ("DAY" as const),
+            prorationMethod: "NONE" as const,
+            usageSource: false,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        serviceInserts.push({
+            id: sId,
+            name: s.name,
+            description: s.desc,
+            status: "ACTIVE" as const,
+            address: "TP. Hồ Chí Minh",
+            latitude: 10.7769,
+            longitude: 106.7009,
+            requiresPrepayment: s.freq === "ONE_TIME",
+            requiresContract: true,
+            contractTemplateId: contractTemplateId(3), // Gắn Template Hợp đồng dịch vụ ngoài (Template 3)
+            providerId: providerId(s.providerNum),
+            categoryId: categoryId(s.catId),
+            billingRuleId: rId,
+            serviceType: s.servType,
+            roomTypeId: null,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        scheduleInserts.push({
+            id: sSchedId,
+            serviceId: sId,
+            billingDay: 1,
+            dueDays: 5,
+            createdAt: now,
+            updatedAt: now,
+        });
+
+        priceInserts.push({
+            id: pId,
+            createdBy: userId(1),
+            serviceId: sId,
+            price: String(s.price),
+            unit: s.unit,
+            effectiveFrom: new Date("2025-01-01"),
+            effectiveTo: null,
+            createdAt: now,
+        });
+
+        imageInserts.push({
+            id: imageId(imageCounter++),
+            serviceId: sId,
+            imageUrl: s.img,
+            displayOrder: 1,
+            createdAt: now,
+        });
+
+        serviceCounter++;
+        ruleCounter++;
+        priceCounter++;
+    }
+
+    await prisma.serviceBillingRule.createMany({ data: ruleInserts, skipDuplicates: true });
+    await prisma.service.createMany({ data: serviceInserts, skipDuplicates: true });
+    await prisma.billingSchedule.createMany({ data: scheduleInserts, skipDuplicates: true });
+    await prisma.servicePrice.createMany({ data: priceInserts, skipDuplicates: true });
+    await prisma.serviceImage.createMany({ data: imageInserts, skipDuplicates: true });
+    await prisma.serviceRequirement.createMany({ data: requirementInserts, skipDuplicates: true });
+
+    console.log(`✅ Seed Catalog Service thành công:`);
+    console.log(`   - ${propertiesData.length} Bất động sản lớn có thật.`);
+    console.log(`   - ${roomTypeInserts.length} Loại phòng & ${blockInserts.length} Tòa & ${floorInserts.length} Tầng.`);
+    console.log(`   - ${roomInserts.length} Phòng thực tế (Status: ACTIVE, MAINTENANCE, INACTIVE).`);
+    console.log(`   - ${serviceInserts.length} Dịch vụ (Bao gồm thuê nhà, điện, nước & 25 dịch vụ ngoài).`);
+    console.log(`   - ${priceInserts.length} Bảng giá & ${imageInserts.length} Hình ảnh chất lượng cao.`);
 }
 
 main()
-    .catch(console.error)
+    .catch((e) => {
+        console.error("❌ Lỗi seed Catalog Service:", e);
+        process.exit(1);
+    })
     .finally(() => prisma.$disconnect());

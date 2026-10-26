@@ -1,22 +1,13 @@
-import {
-  Inject,
-  Injectable,
-  UnauthorizedException,
-  HttpException,
-} from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
-import { JwtService } from "@nestjs/jwt";
-import { ConfigService } from "@nestjs/config";
-import { firstValueFrom, catchError, throwError } from "rxjs";
-import { LoginDto } from "./dto/login.dto";
-import { RegisterDto } from "./dto/register.dto";
-
+import { Inject, Injectable, UnauthorizedException, HttpException } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 import { RedisService, SecureRpcService } from "@app/common";
 import { Patterns } from "@app/common/constants/patterns";
-import {
-  AuthenticatedUser,
-  JwtPayload,
-} from "@app/common/types/authenticated-user.type";
+import { AuthenticatedUser, JwtPayload } from "@app/common/types/authenticated-user.type";
+import { AuditEmitterService } from "../shared/audit-emitter.service";
 
 @Injectable()
 export class AuthService {
@@ -26,19 +17,34 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
+    private readonly auditEmitter: AuditEmitterService,
   ) {}
 
   async register(registerDto: RegisterDto, ipAddress?: string) {
     try {
-      return await this.secureRpc.send(
+      const result = await this.secureRpc.send(
         this.identityClient,
         { cmd: Patterns.AUTH_REGISTER },
         { ...registerDto, ipAddress },
       );
+      this.auditEmitter.emit({
+        serviceName: 'identity-service',
+        action:      'CREATE',
+        entityType:  'Identity',
+        ipAddress,
+        description: `Đăng ký tài khoản mới: ${registerDto.email}`,
+      });
+      return result;
     } catch (err: any) {
       console.error("RPC Error in register:", err);
-      const errMsg =
-        err?.message || err?.response?.message || err || "Unknown RPC Error";
+      const errMsg = err?.message || err?.response?.message || err || "Unknown RPC Error";
+      this.auditEmitter.emit({
+        serviceName: 'identity-service',
+        action:      'OTHER',
+        entityType:  'Identity',
+        ipAddress,
+        description: `Đăng ký thất bại: ${registerDto.email} — ${errMsg}`,
+      });
       throw new HttpException(errMsg, err?.status || err?.statusCode || 400);
     }
   }
@@ -53,13 +59,31 @@ export class AuthService {
       );
     } catch (err: any) {
       console.error("RPC Error in login:", err);
-      const errMsg =
-        err?.message || err?.response?.message || err || "Unknown RPC Error";
+      const errMsg = err?.message || err?.response?.message || err || "Unknown RPC Error";
+      this.auditEmitter.emit({
+        serviceName: 'identity-service',
+        action:      'LOGIN_FAILED',
+        entityType:  'Identity',
+        ipAddress,
+        description: `Đăng nhập thất bại: ${loginDto.email}`,
+      });
       throw new HttpException(errMsg, err?.status || err?.statusCode || 401);
     }
 
     const userPayload = response.user || response;
-    return await this.generateTokens(userPayload);
+    const tokens = await this.generateTokens(userPayload);
+
+    this.auditEmitter.emit({
+      userId:      userPayload.id,
+      serviceName: 'identity-service',
+      action:      'LOGIN',
+      entityType:  'Identity',
+      entityId:    userPayload.id,
+      ipAddress,
+      description: `Đăng nhập thành công: ${userPayload.email}`,
+    });
+
+    return tokens;
   }
 
   async refreshToken(refreshToken: string) {
@@ -77,7 +101,15 @@ export class AuthService {
       throw new UnauthorizedException("Refresh token is invalid or revoked");
     }
 
-    const user = { id: userId, email: payload.email, role: payload.role, providerId: payload.providerId };
+    const user = await this.secureRpc.send<AuthenticatedUser>(
+      this.identityClient,
+      { cmd: Patterns.AUTH_GET_USER_PROFILE },
+      { userId },
+    );
+    // Keep the provider profile selected before refresh when the token has one.
+    if (payload.providerId) {
+      user.providerId = payload.providerId;
+    }
     return await this.generateTokens(user);
   }
 
@@ -107,33 +139,60 @@ export class AuthService {
     if (userId) {
       await this.redisService.del(`access_token:${userId}`);
       await this.redisService.del(`refresh_token:${userId}`);
+      await this.redisService.del(`user_active:${userId}`);
+      this.auditEmitter.emit({
+        userId,
+        serviceName: 'identity-service',
+        action:      'LOGOUT',
+        entityType:  'Identity',
+        entityId:    userId,
+        description: 'Đăng xuất',
+      });
     }
   }
 
   private async generateTokens(user: AuthenticatedUser) {
-    const payload = { sub: user.id, role: user.role, email: user.email, providerId: user.providerId };
+    const normalizedUser: AuthenticatedUser = {
+      ...user,
+      isEkycVerified: user.isEkycVerified ?? false,
+      providerId: user.providerId ?? null,
+    };
+    const payload = {
+      sub: normalizedUser.id,
+      role: normalizedUser.role,
+      email: normalizedUser.email,
+      isEkycVerified: normalizedUser.isEkycVerified,
+      providerId: normalizedUser.providerId,
+    };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: "15m" });
     const refreshToken = this.jwtService.sign(payload, { expiresIn: "7d" });
 
     // Save Access Token in Redis (15m TTL)
     await this.redisService.set(
-      `access_token:${user.id}`,
+      `access_token:${normalizedUser.id}`,
       accessToken,
       15 * 60,
     );
 
     // Save Refresh Token in Redis (7d TTL)
     await this.redisService.set(
-      `refresh_token:${user.id}`,
+      `refresh_token:${normalizedUser.id}`,
       refreshToken,
       7 * 24 * 60 * 60,
+    );
+
+    // Prime user_active cache (60s TTL)
+    await this.redisService.set(
+      `user_active:${normalizedUser.id}`,
+      '1',
+      60,
     );
 
     return {
       accessToken,
       refreshToken,
-      user,
+      user: normalizedUser,
     };
   }
 }

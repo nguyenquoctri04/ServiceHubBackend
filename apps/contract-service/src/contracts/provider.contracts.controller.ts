@@ -23,6 +23,11 @@ export class ProviderContractsController {
     return this.providerContractsService.sendContract(payload.providerId, payload.contractId);
   }
 
+  @MessagePattern({ cmd: ProviderContractPatterns.SIGNING_FILE_FIND })
+  async findSigningFile(@Payload() payload: { providerId: string; contractId: string }) {
+    return this.providerContractsService.findSigningFile(payload.providerId, payload.contractId);
+  }
+
   @MessagePattern({ cmd: ProviderContractPatterns.REVOKE })
   async revokeContract(@Payload() payload: { providerId: string; contractId: string; dto: { reason?: string } }) {
     return this.providerContractsService.revokeContract(payload.providerId, payload.contractId, payload.dto?.reason);
@@ -33,9 +38,9 @@ export class ProviderContractsController {
     return this.providerContractsService.cancelContract(payload.providerId, payload.contractId, payload.dto?.reason);
   }
 
-  @MessagePattern({ cmd: ProviderContractPatterns.TERMINATE })
-  async terminateContract(@Payload() payload: { providerId: string; contractId: string; dto: { reason?: string } }) {
-    return this.providerContractsService.terminateContract(payload.providerId, payload.contractId, payload.dto?.reason);
+  @MessagePattern({ cmd: ProviderContractPatterns.CUSTOMERS_FIND })
+  async findCustomers(@Payload() payload: { providerId: string; query?: Record<string, unknown> }) {
+    return this.providerContractsService.findContracts({ providerId: payload.providerId, ...payload.query });
   }
 
   @MessagePattern({ cmd: ProviderContractPatterns.FIND })
@@ -43,15 +48,45 @@ export class ProviderContractsController {
     return this.providerContractsService.findContracts(payload);
   }
 
-  @MessagePattern({ cmd: 'provider.customers.block' })
-  async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string }) {
+  @MessagePattern({ cmd: ProviderContractPatterns.CUSTOMERS_BLOCK })
+  async blockCustomer(@Payload() payload: { providerId: string; customerId: string; reason: string; blockBy: string; contractId?: string }) {
     return this.providerContractsService.blockCustomer(payload);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.RESTRICTIONS_FIND })
+  async findRestrictions(@Payload() payload: { providerId: string; status?: 'ACTIVE' | 'LIFTED' }) {
+    return this.providerContractsService.findRestrictions(payload.providerId, payload.status);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.RESTRICTIONS_LIFT })
+  async liftRestriction(@Payload() payload: { providerId: string; restrictionId: string }) {
+    return this.providerContractsService.liftRestriction(payload.providerId, payload.restrictionId);
   }
 
   @MessagePattern({ cmd: ProviderContractPatterns.FIND_ONE })
   async findOneContract(@Payload() payload: { providerId: string; contractId: string }) {
     // Calling the service method to find one contract
     return this.providerContractsService.findOneContract(payload.providerId, payload.contractId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.FIND_BY_IDS })
+  async findContractsByIds(@Payload() payload: { providerId: string; contractIds: string[] }) {
+    return this.providerContractsService.getContractsByIdsForProvider(payload.providerId, payload.contractIds);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.FIND_ACTIVE_BY_ROOM_IDS })
+  async findActiveContractsByRoomIds(@Payload() payload: { providerId: string; roomIds: string[] }) {
+    return this.providerContractsService.findActiveContractsByRoomIds(payload.providerId, payload.roomIds);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.HAS_ROOM_REFERENCES })
+  async hasRoomReferences(@Payload() payload: { providerId: string; roomId: string }) {
+    return this.providerContractsService.hasRoomReferences(payload.providerId, payload.roomId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.FIND_DRAFT_BY_REQUEST_NUMBER })
+  async findDraftByRequestNumber(@Payload() payload: { providerId: string; contractNumber: string }) {
+    return this.providerContractsService.findDraftByRequestNumber(payload.providerId, payload.contractNumber);
   }
 
   @MessagePattern({ cmd: ProviderContractPatterns.TEMPLATES_FIND })
@@ -72,5 +107,25 @@ export class ProviderContractsController {
   @MessagePattern({ cmd: ProviderBillingPatterns.CONTRACTS_BY_IDS })
   async getContractsByIds(@Payload() contractIds: string[]) {
     return this.providerContractsService.getContractsByIds(contractIds);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.DASHBOARD_STATS })
+  async getDashboardStats(@Payload() payload: { providerId: string }) {
+    return this.providerContractsService.getDashboardStats(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.STATUS_DISTRIBUTION })
+  async getStatusDistribution(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getStatusDistribution(data.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.EXPIRING })
+  async getExpiringContracts(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getExpiringContracts(data.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderContractPatterns.RECENT })
+  async getRecentContracts(@Payload() data: { providerId: string }) {
+    return this.providerContractsService.getRecentContracts(data.providerId);
   }
 }

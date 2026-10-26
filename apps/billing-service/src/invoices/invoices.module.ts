@@ -4,6 +4,10 @@ import { InvoicesService } from './invoices.service';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { parseRedisUrl } from '@app/common/utils/redis.config';
+import { CustomerInvoicesController } from './customer.invoices.controller';
+import { CustomerInvoicesService } from './customer.invoices.service';
+import { PaymentsModule } from '../payments/payments.module';
+import { PayOSModule } from '../payos/payos.module';
 
 @Module({
   imports: [
@@ -17,9 +21,20 @@ import { parseRedisUrl } from '@app/common/utils/redis.config';
         }),
         inject: [ConfigService],
       },
+      ...(['IDENTITY_SERVICE', 'CATALOG_SERVICE'] as const).map((name) => ({
+        name,
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.REDIS as const,
+          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
+        }),
+        inject: [ConfigService],
+      })),
     ]),
+    PaymentsModule,
+    PayOSModule,
   ],
-  controllers: [InvoicesController],
-  providers: [InvoicesService],
+  controllers: [InvoicesController, CustomerInvoicesController],
+  providers: [InvoicesService, CustomerInvoicesService],
 })
-export class InvoicesModule {}
+export class InvoicesModule { }

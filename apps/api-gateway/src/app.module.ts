@@ -12,6 +12,10 @@ import { AuthModule } from "./auth/auth.module";
 import { ProxyModule } from "./proxy/proxy.module";
 import { ProviderModule } from "./provider/provider.module";
 import { CustomerModule } from "./customer/customer.module";
+import { MediaModule } from "./media/media.module";
+import { GatewayNotificationsModule } from "./notifications/notifications.module";
+import { AdminModule } from "./admin/admin.module";
+import { SharedModule } from "./shared/shared.module";
 
 const microservices = [
   "IDENTITY_SERVICE",
@@ -48,10 +52,14 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
       secretEnv: "API_GATEWAY_SECRET",
     }),
     RateLimitModule,
+    SharedModule,
     ProxyModule,
     AuthModule,
     ProviderModule,
     CustomerModule,
+    AdminModule,
+    MediaModule,
+    GatewayNotificationsModule,
   ],
   controllers: [],
   providers: [

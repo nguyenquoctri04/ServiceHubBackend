@@ -1,0 +1,40 @@
+export const CatalogPatterns = {
+    PROPERTY_FIND_BY_ID: 'catalog.property.findById',
+    PROPERTY_CREATE: 'catalog.property.create',
+    PROPERTY_UPDATE: 'catalog.property.update',
+    PROPERTY_DELETE: 'catalog.property.delete',
+    PROPERTIES_FIND_BY_PROVIDER: 'catalog.properties.findByProvider',
+
+    BLOCK_CREATE: 'catalog.block.create',
+    BLOCK_UPDATE: 'catalog.block.update',
+    BLOCK_DELETE: 'catalog.block.delete',
+    BLOCKS_FIND_BY_PROPERTY: 'catalog.blocks.findByProperty',
+
+    FLOOR_CREATE: 'catalog.floor.create',
+    FLOOR_UPDATE: 'catalog.floor.update',
+    FLOOR_DELETE: 'catalog.floor.delete',
+    FLOORS_FIND_BY_BLOCK: 'catalog.floors.findByBlock',
+
+    ROOMS_FIND_BY_FLOOR: 'catalog.rooms.findByFloor',
+    ROOMS_FIND_BY_PROVIDER: 'catalog.rooms.findByProvider',
+    ROOMS_FIND_BY_PROPERTY: 'catalog.rooms.findByProperty',
+    ROOM_CREATE: 'catalog.room.create',
+    ROOM_UPDATE: 'catalog.room.update',
+    ROOM_DELETE: 'catalog.room.delete',
+    ROOM_TYPE_CREATE: 'catalog.roomType.create',
+    ROOM_TYPE_UPDATE: 'catalog.roomType.update',
+    ROOM_TYPE_DELETE: 'catalog.roomType.delete',
+    ROOM_TYPES_FIND_BY_PROPERTY: 'catalog.roomTypes.findByProperty',
+    ROOMS_FIND_BY_IDS: 'catalog.rooms.findByIds',
+
+    ROOMS_COUNT_BY_PROVIDER: 'catalog.rooms.countByProvider',
+    ROOMS_FIND_BY_IDS_FOR_PROVIDER: 'catalog.rooms.findByIdsForProvider',
+
+    // Provider Services Catalog
+    SERVICES_FIND: 'services.find',
+    SERVICES_CATEGORIES_FIND: 'services.categories.find',
+    SERVICES_FIND_ONE: 'services.findOne',
+    SERVICES_CREATE: 'services.create',
+    SERVICES_UPDATE: 'services.update',
+    SERVICES_PRICES_FIND_FOR_PROVIDER: 'services.prices.findForProvider',
+} as const;

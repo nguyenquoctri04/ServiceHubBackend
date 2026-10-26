@@ -5,4 +5,5 @@ export class Patterns {
   public static readonly AUTH_LOGIN = "auth.login";
   public static readonly AUTH_REGISTER = "auth.register";
   public static readonly AUTH_SWITCH_PROFILE = "auth.switchProfile";
+  public static readonly AUTH_GET_USER_PROFILE = "auth.getUserProfile";
 }

@@ -231,6 +231,7 @@ enum ContractStatus {
   EXPIRED
   TERMINATED
   CANCELLED
+  PENDING_PAYMENT
 }
 
 enum ContractTemplateStatus {

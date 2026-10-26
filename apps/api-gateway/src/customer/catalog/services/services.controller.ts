@@ -16,7 +16,7 @@ import {
     GetRelatedServicesDto,
     MarketplaceServicesQueryDto,
 } from "@app/common/dto/customer/catalog";
-import { CurrentUser, JwtAuthGuard, OptionalJwtAuthGuard } from "@app/common";
+import { CurrentUser, OptionalJwtAuthGuard } from "@app/common";
 import { CurrentUserPayload } from "apps/api-gateway/src/provider/provider.controller";
 
 @Controller(CUSTOMER_SERVICES)

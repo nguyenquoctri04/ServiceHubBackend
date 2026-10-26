@@ -14,6 +14,11 @@ export class CustomerPatterns {
     public static readonly INVOICES = "customer.invoices.";
     public static readonly PAYMENTS = "customer.payments.";
 
+    public static readonly FETCH_INVOICES = this.INVOICES + "fetch";
+    public static readonly CREATE_QR_CODE = this.INVOICES + "create-qr-code";
+    public static readonly CHECK_PAYMENT_STATUS =
+        this.INVOICES + "check-payment-status";
+
     /*
         ===============================
             Catalog Service
@@ -65,6 +70,8 @@ export class CustomerPatterns {
 
     public static readonly GET_POPULAR_SERVICES =
         this.CONTRACTS + "get-popular-services";
+    public static readonly CREATE_SERVICE_REQUEST =
+        this.CONTRACTS + "create-service-request";
 
     public static readonly GET_MARKETPLACE_RESTRICTIONS =
         this.CONTRACTS + "get-marketplace-restrictions";
@@ -95,6 +102,8 @@ export class CustomerPatterns {
 
     public static readonly GET_VIOLATION_RULES =
         this.VIOLATIONS + "get-violation-rules";
+    public static readonly CREATE_VIOLATION_REPORT =
+        this.VIOLATIONS + "create-violation-report";
 
     public static readonly GET_CONTRACT_FILE_FOR_VIEWING =
         this.CONTRACTS + "get-contract-file-for-viewing";
@@ -102,12 +111,25 @@ export class CustomerPatterns {
     public static readonly ACTIVATE_CONTRACT_AFTER_CUSTOMER_SIGN =
         this.CONTRACTS + "activate-contract-after-customer-sign";
 
+    public static readonly CONFIRM_CONTRACT_TERMS =
+        this.CONTRACTS + "confirm-contract-terms";
+    public static readonly CANCEL_CUSTOMER_CONTRACT =
+        this.CONTRACTS + "cancel-customer-contract";
+    public static readonly CREATE_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "create-prepayment-invoice";
+    public static readonly DELETE_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "delete-prepayment-invoice";
+    public static readonly CANCEL_CONTRACT_PREPAYMENT_INVOICE =
+        this.CONTRACTS + "cancel-prepayment-invoice";
+
     /*
         ===============================
             Identity & eKYC Service
         ===============================
     */
     public static readonly EKYC = "customer.ekyc.";
+    public static readonly EKYC_OCR = this.EKYC + "ocr";
+    public static readonly EKYC_VERIFY_FACE = this.EKYC + "verify-face";
     public static readonly IDENTITIES = "customer.identities.";
 
     public static readonly SUBMIT_EKYC = CustomerPatterns.EKYC + "submit";

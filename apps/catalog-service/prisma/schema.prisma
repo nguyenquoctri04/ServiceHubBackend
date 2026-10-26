@@ -17,7 +17,6 @@ model Category {
   @@map("category")
 }
 
-/// This model contains an expression index which requires additional setup for migrations. Visit https://pris.ly/d/expression-indexes for more info.
 model Service {
   id                 String               @id @default(uuid()) @db.Uuid
   name               String
@@ -25,9 +24,10 @@ model Service {
   status             ServiceStatus
   address            String
   latitude           Decimal              @db.Decimal(9, 6)
-  longitude          Decimal              @map("longtitude") @db.Decimal(10, 6)
+  longitude          Decimal              @map("longitude") @db.Decimal(10, 6)
   requiresPrepayment Boolean              @default(false) @map("requires_prepayment")
-  requiresContract   Boolean              @default(false) @map("requires_contract")
+  requiresContract   Boolean              @default(true) @map("requires_contract")
+  contractTemplateId String?              @map("contract_template_id") @db.Uuid
   providerId         String               @map("provider_id") @db.Uuid
   categoryId         String               @map("category_id") @db.Uuid
   billingRuleId      String               @map("billing_rule_id") @db.Uuid
@@ -140,7 +140,7 @@ model Property {
   description  String?
   address      String
   latitude     Decimal        @db.Decimal(9, 6)
-  longitude    Decimal        @map("longtitude") @db.Decimal(10, 6)
+  longitude    Decimal        @map("longitude") @db.Decimal(10, 6)
   status       PropertyStatus
   createdAt    DateTime       @map("created_at")
   updatedAt    DateTime       @map("updated_at")
@@ -267,5 +267,6 @@ enum RoomTypeStatus {
 
 enum RoomStatus {
   ACTIVE
+  MAINTENANCE
   INACTIVE
 }

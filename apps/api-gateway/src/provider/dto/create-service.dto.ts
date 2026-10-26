@@ -51,6 +51,27 @@ export class ServicePriceDto {
   @IsString()
   @IsNotEmpty()
   unit: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ServicePriceTierDto)
+  @IsOptional()
+  tiers?: ServicePriceTierDto[];
+}
+
+export class ServicePriceTierDto {
+  @IsNumber()
+  @Min(0)
+  fromValue: number;
+
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  toValue?: number;
+
+  @IsNumber()
+  @Min(0)
+  price: number;
 }
 
 export class CreateServiceDto {
@@ -95,6 +116,10 @@ export class CreateServiceDto {
   @IsOptional()
   requiresContract?: boolean;
 
+  @IsUUID()
+  @IsNotEmpty({ message: 'Vui lòng chọn mẫu hợp đồng cho dịch vụ' })
+  contractTemplateId: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ServicePriceDto)
@@ -104,4 +129,9 @@ export class CreateServiceDto {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+
+  @IsArray()
+  @IsUUID('4', { each: true })
+  @IsOptional()
+  requiredServiceIds?: string[];
 }

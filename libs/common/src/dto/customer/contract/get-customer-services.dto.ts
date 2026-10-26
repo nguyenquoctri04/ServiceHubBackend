@@ -5,8 +5,11 @@ const STATUSES = [
     "ALL",
     "PENDING_PROVIDER_APPROVAL",
     "PENDING_SIGNATURE",
+    "PENDING_PAYMENT",
     "ACTIVE",
     "EXPIRED",
+    "CANCELLED",
+    "TERMINATED",
 ] as const;
 
 export class GetCustomerServicesDto {

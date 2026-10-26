@@ -6,7 +6,7 @@ import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 
 @Controller()
 export class CustomerContractsController {
-    constructor(private readonly service: CustomerContractsService) {}
+    constructor(private readonly service: CustomerContractsService) { }
 
     @MessagePattern({
         cmd: CustomerPatterns.GET_POPULAR_SERVICES,
@@ -80,7 +80,6 @@ export class CustomerContractsController {
         @Payload()
         command: CreateServiceBookingCommand,
     ) {
-        console.log(command.servicePriceId);
         return this.service.createServiceBooking(command);
     }
 
@@ -134,6 +133,26 @@ export class CustomerContractsController {
             );
         }
         return result;
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.CONFIRM_CONTRACT_TERMS })
+    async confirmContractTerms(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        return this.service.confirmContractTerms(
+            payload.customerId,
+            payload.contractId,
+        );
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.CANCEL_CUSTOMER_CONTRACT })
+    async cancelCustomerContract(
+        @Payload() payload: { customerId: string; contractId: string },
+    ) {
+        return this.service.cancelService(
+            payload.customerId,
+            payload.contractId,
+        );
     }
 
     @MessagePattern({ cmd: CustomerPatterns.GET_CONTRACT_FILE_FOR_VIEWING })

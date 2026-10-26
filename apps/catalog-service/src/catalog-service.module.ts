@@ -2,11 +2,10 @@ import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
 import { CategoriesModule } from "./categories/categories.module";
-import { UnitsModule } from "./units/units.module";
 import { ServicesModule } from "./services/services.module";
 import { LocationModule } from "./location/location.module";
+import { PropertiesModule } from "./property/properties.module";
 import { CommonModule } from "@app/common";
-import { RoomsController } from "./rooms.controller";
 
 @Module({
   imports: [
@@ -17,11 +16,11 @@ import { RoomsController } from "./rooms.controller";
     }),
     PrismaModule,
     CategoriesModule,
-    UnitsModule,
     ServicesModule,
     LocationModule,
+    PropertiesModule,
   ],
-  controllers: [RoomsController],
+  controllers: [],
   providers: [],
 })
-export class CatalogServiceModule {}
+export class CatalogServiceModule { }

@@ -24,7 +24,7 @@ export class CustomerContractsService {
         fromEmail: string,
         dto: CreateServiceBookingDto,
     ): Promise<boolean> {
-        console.log(dto.servicePriceId);
+
         return this.secureRpc.send<boolean>(
             this.contractClient,
             { cmd: CustomerPatterns.CREATE_SERVICE_BOOKING },
@@ -56,6 +56,22 @@ export class CustomerContractsService {
         return this.secureRpc.send(
             this.contractClient,
             { cmd: CustomerPatterns.GET_USED_SERVICE_DETAIL },
+            { customerId, contractId },
+        );
+    }
+
+    async confirmContractTerms(customerId: string, contractId: string) {
+        return this.secureRpc.send(
+            this.contractClient,
+            { cmd: CustomerPatterns.CONFIRM_CONTRACT_TERMS },
+            { customerId, contractId },
+        );
+    }
+
+    async cancelService(customerId: string, contractId: string) {
+        return this.secureRpc.send(
+            this.contractClient,
+            { cmd: CustomerPatterns.CANCEL_CUSTOMER_CONTRACT },
             { customerId, contractId },
         );
     }

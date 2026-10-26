@@ -1,12 +1,12 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload, EventPattern } from '@nestjs/microservices';
+import { MessagePattern, Payload } from '@nestjs/microservices';
 import { MetersService } from './meters.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CreateMeterReadingDto } from '@app/common/dto/billing/create-meter-reading.dto';
 import { OcrMeterDto } from '@app/common/dto/billing/ocr-meter.dto';
 import { OcrConfirmDto } from '@app/common/dto/billing/ocr-confirm.dto';
 import { ExcelImportConfirmDto } from '@app/common/dto/billing/excel-import-confirm.dto';
-import { ExcelRowDto, ServiceCreatedPayload } from './dto/meter.dto';
+import { ExcelRowDto } from './dto/meter.dto';
 
 @Controller()
 export class MetersController {
@@ -17,9 +17,19 @@ export class MetersController {
     return this.service.findMeters(payload);
   }
 
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_GROUPED })
+  async findGroupedMeters(@Payload() payload: { providerId: string; roomIds: string[]; month: number; year: number }) {
+    return this.service.findGroupedMeters(payload.providerId, payload.roomIds, payload.month, payload.year);
+  }
+
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_READING_CREATE })
   async createManualReading(@Payload() payload: { providerId: string; recordedBy: string; dto: CreateMeterReadingDto }) {
     return this.service.createMeterReading(payload.providerId, payload.dto, payload.recordedBy, 'MANUAL');
+  }
+
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_READING_CANCEL })
+  async cancelReading(@Payload() payload: { providerId: string; readingId: string }) {
+    return this.service.cancelReading(payload.providerId, payload.readingId);
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_OCR })
@@ -34,7 +44,7 @@ export class MetersController {
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_PREVIEW })
   async previewImport(@Payload() payload: { providerId: string; rows: ExcelRowDto[] }) {
-    return this.service.previewImport(payload.rows);
+    return this.service.previewImport(payload.providerId, payload.rows);
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM })
@@ -42,8 +52,8 @@ export class MetersController {
     return this.service.confirmImport(payload.providerId, payload.dto.rows, payload.recordedBy);
   }
 
-  @EventPattern(ProviderBillingPatterns.EVENT_SERVICE_CREATED)
-  async handleServiceCreated(@Payload() payload: ServiceCreatedPayload) {
-    return this.service.handleServiceCreated(payload);
+  @MessagePattern({ cmd: ProviderBillingPatterns.METERS_DASHBOARD_STATS })
+  async getMeterStats(@Payload() payload: { providerId: string }) {
+    return this.service.getMeterDashboardStats(payload.providerId);
   }
 }

@@ -15,6 +15,9 @@ export const CUSTOMER_AUDIT_ENDPOINT = {};
 export const CUSTOMER_BILLING_SERVICE_PREFIX = "api/customer/billing";
 
 export const CUSTOMER_INVOICES = CUSTOMER_BILLING_SERVICE_PREFIX + "/invoices";
+export const CUSTOMER_INVOICE_QR_CODE = CUSTOMER_INVOICES + "/:invoiceId/qr-code";
+export const CUSTOMER_INVOICE_PAYMENT_STATUS =
+  CUSTOMER_INVOICES + "/:invoiceId/payment-status";
 export const CUSTOMER_PAYMENTS = CUSTOMER_BILLING_SERVICE_PREFIX + "/payments";
 
 export const CUSTOMER_BILLING_ENDPOINT = {};
@@ -50,11 +53,16 @@ export const CUSTOMER_TEMPLATES =
 export const CUSTOMER_TERMS = CUSTOMER_CONTRACT_SERVICE_PREFIX + "/terms";
 export const CUSTOMER_VIOLATIONS =
     CUSTOMER_CONTRACT_SERVICE_PREFIX + "/violations";
+export const CUSTOMER_VIOLATION_REPORTS_ROUTE = "reports";
+export const CUSTOMER_VIOLATION_REPORTS =
+    CUSTOMER_VIOLATIONS + "/" + CUSTOMER_VIOLATION_REPORTS_ROUTE;
 
 export const CUSTOMER_CONTRACT_ENDPOINT = {
     CREATE_SERVICE_BOOKING: "booking",
     GET_USED_SERVICES: "used",
     VIEW_CONTRACT: ":contractId/file",
+    CONFIRM_TERMS: ":contractId/confirm-terms",
+    CANCEL_SERVICE: ":contractId/cancel",
 };
 
 /*
@@ -65,6 +73,10 @@ export const CUSTOMER_CONTRACT_ENDPOINT = {
 export const CUSTOMER_IDENTITY_SERVICE_PREFIX = "api/customer/identity";
 
 export const CUSTOMER_EKYC = CUSTOMER_IDENTITY_SERVICE_PREFIX + "/ekyc";
+export const CUSTOMER_EKYC_ENDPOINT = {
+    OCR: "ocr",
+    VERIFY_FACE: "verify-face",
+};
 export const CUSTOMER_IDENTITIES =
     CUSTOMER_IDENTITY_SERVICE_PREFIX + "/identities";
 

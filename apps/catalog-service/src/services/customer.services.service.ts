@@ -35,6 +35,7 @@ export class CustomerServicesService {
         return this.prisma.service.findMany({
             where: {
                 status: "ACTIVE",
+                serviceType: "NORMAL",
             },
 
             select: {
@@ -57,6 +58,7 @@ export class CustomerServicesService {
                     in: serviceIds,
                 },
                 status: "ACTIVE",
+                serviceType: "NORMAL",
             },
 
             include: {
@@ -149,7 +151,7 @@ export class CustomerServicesService {
             categoryId,
             search,
             page = 1,
-            pageSize = 5,
+            pageSize = 9,
             longitude,
             latitude,
             sortBy = MarketplaceSortBy.NEAREST,
@@ -164,6 +166,7 @@ export class CustomerServicesService {
 
         const baseWhere: Prisma.ServiceWhereInput = {
             status: "ACTIVE",
+            serviceType: "NORMAL",
 
             ...(categoryId &&
                 categoryId !== "all" && {
@@ -575,7 +578,7 @@ export class CustomerServicesService {
             ST_Distance(
                 geography(
                     ST_MakePoint(
-                        s.longtitude::float8,
+                        s.longitude::float8,
                         s.latitude::float8
                     )
                 ),
@@ -593,7 +596,7 @@ export class CustomerServicesService {
         ORDER BY
             geography(
                 ST_MakePoint(
-                    s.longtitude::float8,
+                    s.longitude::float8,
                     s.latitude::float8
                 )
             ) <-> ${originGeo}
@@ -681,6 +684,7 @@ export class CustomerServicesService {
             name: service.name,
             description: service.description,
             address: service.address,
+            requiresContract: service.requiresContract,
             image: service.images[0]?.imageUrl ?? null,
             images: service.images.map((img) => img.imageUrl),
             distanceKm: null,
@@ -740,6 +744,7 @@ export class CustomerServicesService {
         const eligibleServiceIds = await this.getEligibleServiceIds(
             {
                 status: "ACTIVE",
+                serviceType: "NORMAL",
                 categoryId: current.categoryId,
                 id: {
                     not: serviceId,
@@ -795,6 +800,7 @@ export class CustomerServicesService {
          */
         const where = {
             status: "ACTIVE" as const,
+            serviceType: "NORMAL" as const,
             categoryId,
             id: {
                 in: eligibleServiceIds,
@@ -859,7 +865,7 @@ export class CustomerServicesService {
         ST_Distance(
             geography(
                 ST_MakePoint(
-                    s.longtitude::float8,
+                    s.longitude::float8,
                     s.latitude::float8
                 )
             ),
@@ -882,6 +888,7 @@ export class CustomerServicesService {
 
         const whereClause = Prisma.sql`
         s.status = 'ACTIVE'
+        AND s.service_type = 'NORMAL'
         AND s.category_id = ${categoryId}::uuid
         AND s.id != ${serviceId}::uuid
         AND ${serviceIdsCondition}
@@ -961,6 +968,7 @@ export class CustomerServicesService {
                     in: ids,
                 },
                 status: "ACTIVE",
+                serviceType: "NORMAL",
             },
             include: {
                 category: true,
@@ -1222,7 +1230,13 @@ export class CustomerServicesService {
                 price: true,
                 unit: true,
                 service: {
-                    select: { id: true, name: true, providerId: true },
+                    select: {
+                        id: true,
+                        name: true,
+                        providerId: true,
+                        requiresPrepayment: true,
+                        billingRule: { select: { billingFrequency: true } },
+                    },
                 },
             },
         });
@@ -1234,6 +1248,8 @@ export class CustomerServicesService {
             serviceId: servicePrice.service.id,
             serviceName: servicePrice.service.name,
             providerId: servicePrice.service.providerId,
+            requiresPrepayment: servicePrice.service.requiresPrepayment,
+            billingFrequency: servicePrice.service.billingRule.billingFrequency,
             price: Number(servicePrice.price),
             unit: servicePrice.unit,
         };

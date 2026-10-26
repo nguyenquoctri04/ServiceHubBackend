@@ -52,6 +52,24 @@ export class SignaturesService {
         const { hashContract, providerIdentityId, isProviderSigning } =
             fileInfo;
 
+        if (!providerIdentityId) {
+            throw new RpcException({
+                statusCode: 400,
+                message: "Không xác định được nhà cung cấp của hợp đồng.",
+            });
+        }
+
+        await Promise.all([
+            this.keysService.assertIdentityEkycVerified(
+                fileInfo.customerId,
+                "ký hợp đồng",
+            ),
+            this.keysService.assertIdentityEkycVerified(
+                providerIdentityId,
+                "ký hợp đồng",
+            ),
+        ]);
+
         // (2) Customer chỉ được ký SAU khi provider đã ký, và chữ ký đó
         // phải verify lại bằng GPG là còn hợp lệ (không chỉ dựa vào việc
         // record tồn tại trong DB).
@@ -69,7 +87,10 @@ export class SignaturesService {
             );
 
         const existing = await this.prisma.contractSignature.findFirst({
-            where: { contractFileId, gnupgKeyId },
+            where: {
+                contractFileId,
+                gnupgKey: { is: { identityId } },
+            },
             select: { id: true },
         });
 

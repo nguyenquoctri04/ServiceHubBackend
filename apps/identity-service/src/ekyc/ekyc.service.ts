@@ -8,7 +8,7 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import * as FormData from 'form-data';
+import FormData from 'form-data';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitEkycDto, OcrDto, VerifyFaceDto } from './dto/submit-ekyc.dto';
 
@@ -103,8 +103,8 @@ export class EkycService {
                         dateOfBirth:        this.parseDate(aiResult.ocr_info?.date_of_birth),
                         gender:             aiResult.ocr_info?.gender        ?? null,
                         nationality:        aiResult.ocr_info?.nationality   ?? null,
-                        place_of_origin:    aiResult.ocr_info?.place_of_origin    ?? null,
-                        place_of_residence: aiResult.ocr_info?.place_of_residence ?? null,
+                        placeOfOrigin:      aiResult.ocr_info?.place_of_origin    ?? null,
+                        placeOfResidence:   aiResult.ocr_info?.place_of_residence ?? null,
                         frontImageUrl:      dto.frontImageUrl  ?? null,
                         selfieImageUrl:     dto.selfieImageUrl ?? null,
                         ocrRawData:         aiResult.ocr_info as any ?? null,
@@ -288,8 +288,8 @@ export class EkycService {
                             dateOfBirth:        this.parseDate(aiResult.ocr_info?.date_of_birth),
                             gender:             aiResult.ocr_info?.gender        ?? null,
                             nationality:        aiResult.ocr_info?.nationality   ?? null,
-                            place_of_origin:    aiResult.ocr_info?.place_of_origin    ?? null,
-                            place_of_residence: aiResult.ocr_info?.place_of_residence ?? null,
+                            placeOfOrigin:      aiResult.ocr_info?.place_of_origin    ?? null,
+                            placeOfResidence:   aiResult.ocr_info?.place_of_residence ?? null,
                             ocrRawData:         aiResult.ocr_info as any ?? null,
                             createdAt:          new Date(),
                         },

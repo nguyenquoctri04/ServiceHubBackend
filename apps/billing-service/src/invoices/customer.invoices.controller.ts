@@ -48,4 +48,16 @@ export class CustomerInvoicesController {
     cancelContractPrepaymentInvoice(@Payload() payload: { contractId: string }) {
         return this.service.cancelContractPrepaymentInvoice(payload.contractId);
     }
+
+    @MessagePattern({ cmd: CustomerPatterns.CREATE_QR_CODE})
+    createQrCode(@Payload() payload: {invoiceId: string, customerId: string}) {
+        return this.service.createQrCode(payload)
+    }
+
+    @MessagePattern({ cmd: CustomerPatterns.CHECK_PAYMENT_STATUS })
+    checkPaymentStatus(
+        @Payload() payload: { invoiceId: string; customerId: string },
+    ) {
+        return this.service.checkPaymentStatus(payload);
+    }
 }

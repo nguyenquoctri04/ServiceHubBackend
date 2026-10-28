@@ -1,92 +1,56 @@
-import { Inject, Injectable, HttpException } from "@nestjs/common";
-import { ClientProxy } from "@nestjs/microservices";
-import { IsNotEmpty, IsString } from "class-validator";
-import { CustomerPatterns } from "@app/common/constants/customer.patterns";
-import { SecureRpcService } from "@app/common";
-import { AuditEmitterService } from "../../../shared/audit-emitter.service";
-
-export class ApiGatewayExtractOcrDto {
-    @IsString()
-    @IsNotEmpty()
-    frontImage: string;
-
-    @IsString()
-    @IsNotEmpty()
-    backImage: string;
-}
-
-export class ApiGatewayVerifyFaceDto {
-    @IsString()
-    @IsNotEmpty()
-    verificationId: string;
-
-    @IsString()
-    @IsNotEmpty()
-    selfieImage: string;
-}
+import { Inject, Injectable } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+import { SecureRpcService } from '@app/common';
+import { CustomerPatterns } from '@app/common/constants/customer.patterns';
 
 @Injectable()
 export class CustomerEkycService {
     constructor(
-        @Inject("IDENTITY_SERVICE")
+        @Inject('IDENTITY_SERVICE')
         private readonly identityClient: ClientProxy,
+
         private readonly secureRpc: SecureRpcService,
-        private readonly auditEmitter: AuditEmitterService,
     ) {}
 
-    async extractOcr(dto: ApiGatewayExtractOcrDto, identityId: string) {
-        try {
-            return await this.secureRpc.send(
-                this.identityClient,
-                { cmd: CustomerPatterns.EKYC_OCR },
-                { ...dto, identityId },
-                60000,
-            );
-        } catch (err: any) {
-            console.error("RPC Error in extractOcr:", err);
-            const errMsg = err?.message || err?.response?.message || "Lỗi xử lý eKYC OCR";
-            const errStatus = typeof err?.statusCode === "number"
-                ? err.statusCode
-                : (typeof err?.status === "number" ? err.status : 400);
-            throw new HttpException(errMsg, errStatus);
-        }
+    async submitVerification(
+        identityId:       string,
+        frontImageBuffer: Buffer,
+        selfieImageBuffer: Buffer,
+        frontImageUrl?:   string,
+        selfieImageUrl?:  string,
+    ) {
+        return this.secureRpc.send(
+            this.identityClient,
+            { cmd: CustomerPatterns.SUBMIT_EKYC },
+            {
+                identityId,
+                frontImageBuffer,
+                selfieImageBuffer,
+                frontImageUrl,
+                selfieImageUrl,
+            },
+        );
     }
 
-    async verifyFace(dto: ApiGatewayVerifyFaceDto, identityId: string) {
-        try {
-            const result = await this.secureRpc.send(
-                this.identityClient,
-                { cmd: CustomerPatterns.EKYC_VERIFY_FACE },
-                { ...dto, identityId },
-                60000,
-            );
+    async ocrCccd(identityId: string, frontImageBuffer: Buffer) {
+        return this.secureRpc.send(
+            this.identityClient,
+            { cmd: CustomerPatterns.OCR },
+            { identityId, frontImageBuffer },
+            70000,
+        );
+    }
 
-            // Emit audit event after successful face verification
-            const verified = (result as any)?.verified ?? (result as any)?.data?.verified;
-            this.auditEmitter.emit({
-                userId:      identityId,
-                serviceName: 'identity-service',
-                action:      verified ? 'OTHER' : 'OTHER',
-                entityType:  'IdentityVerification',
-                entityId:    dto.verificationId,
-                newData:     {
-                    verificationId: dto.verificationId,
-                    verified,
-                    similarityScore: (result as any)?.similarityScore ?? (result as any)?.data?.similarityScore,
-                },
-                description: verified
-                    ? 'Xác thực eKYC khuôn mặt thành công'
-                    : 'Xác thực eKYC khuôn mặt thất bại',
-            });
-
-            return result;
-        } catch (err: any) {
-            console.error("RPC Error in verifyFace:", err);
-            const errMsg = err?.message || err?.response?.message || "Lỗi xác thực khuôn mặt eKYC";
-            const errStatus = typeof err?.statusCode === "number"
-                ? err.statusCode
-                : (typeof err?.status === "number" ? err.status : 400);
-            throw new HttpException(errMsg, errStatus);
-        }
+    async verifyFace(
+        identityId:        string,
+        frontImageBuffer:  Buffer,
+        selfieImageBuffer: Buffer,
+    ) {
+        return this.secureRpc.send(
+            this.identityClient,
+            { cmd: CustomerPatterns.VERIFY_FACE },
+            { identityId, frontImageBuffer, selfieImageBuffer },
+            70000,
+        );
     }
 }

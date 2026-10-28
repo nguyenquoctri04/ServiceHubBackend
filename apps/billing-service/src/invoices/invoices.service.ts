@@ -136,81 +136,85 @@ export class InvoicesService {
     invoiceId: string,
     dto: PayInvoiceDto,
     idempotencyKey: string,
-    ipAddr?: string,
   ) {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id: invoiceId, providerId },
-      include: { payments: true },
     });
     if (!invoice) throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
 
-    if (
-      dto.paymentMethod === PaymentMethodDto.VNPAY ||
-      dto.paymentMethod === PaymentMethodDto.ZALOPAY
-    ) {
-      if (!this.paymentsService) {
-        throw new RpcException('Payments service chưa được cấu hình');
-      }
-      return this.paymentsService.createPaymentLink({
-        invoiceId,
-        paymentMethod: dto.paymentMethod as 'VNPAY' | 'ZALOPAY',
-        ipAddr: ipAddr ?? '127.0.0.1',
+    if (idempotencyKey) {
+      const previousPayment = await this.prisma.payment.findUnique({
+        where: { paymentLinkId: idempotencyKey },
       });
-    }
-
-    const previousPayment = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
-    if (previousPayment) {
-      if (previousPayment.invoiceId === invoiceId) return previousPayment;
-      throw new RpcException(new ConflictException('Idempotency-Key đã được dùng cho hóa đơn khác'));
+      if (previousPayment) {
+        if (previousPayment.invoiceId === invoiceId) return previousPayment;
+        throw new RpcException(new ConflictException('Idempotency-Key đã được dùng cho hóa đơn khác'));
+      }
     }
 
     try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        const currentInvoice = await tx.invoice.findFirst({
-          where: { id: invoiceId, providerId },
-          include: { payments: { where: { status: 'PENDING' }, select: { id: true } } },
-        });
-        if (!currentInvoice) throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
-        if (currentInvoice.status === 'PAID') throw new RpcException(new ConflictException('Hóa đơn đã được thanh toán'));
-        if (currentInvoice.payments.length > 0) throw new RpcException(new ConflictException('Hóa đơn đang có giao dịch chờ xử lý'));
+      const result = await this.prisma.$transaction(
+        async (tx) => {
+          const currentInvoice = await tx.invoice.findFirst({
+            where: { id: invoiceId, providerId },
+            include: { payments: { where: { status: 'PENDING' }, select: { id: true } } },
+          });
+          if (!currentInvoice) throw new RpcException(new NotFoundException('Không tìm thấy hóa đơn'));
+          if (currentInvoice.status === 'PAID') throw new RpcException(new ConflictException('Hóa đơn đã được thanh toán'));
 
-        const now = new Date();
-        const updated = await tx.invoice.updateMany({
-          where: { id: invoiceId, providerId, status: { in: ['UNPAID', 'OVERDUE'] } },
-          data: { status: 'PAID', updatedAt: now },
-        });
-        if (updated.count !== 1) throw new RpcException(new ConflictException('Hóa đơn không còn ở trạng thái có thể thanh toán'));
+          // Nếu có giao dịch online đang PENDING, đánh dấu FAILED để giải phóng hóa đơn
+          if (currentInvoice.payments && currentInvoice.payments.length > 0) {
+            await tx.payment.updateMany({
+              where: { invoiceId, status: 'PENDING' },
+              data: { status: 'FAILED' },
+            });
+          }
 
-        const payment = await tx.payment.create({
-          data: {
-            invoiceId,
-            paymentMethod: dto.paymentMethod,
-            paymentLinkId: idempotencyKey,
-            status: 'SUCCESS',
-            paidAt: now,
-            createdAt: now,
-          },
-        });
+          const now = new Date();
+          const updated = await tx.invoice.updateMany({
+            where: { id: invoiceId, providerId, status: { in: ['UNPAID', 'OVERDUE'] } },
+            data: { status: 'PAID', updatedAt: now },
+          });
+          if (updated.count !== 1) {
+            throw new RpcException(new ConflictException('Hóa đơn không còn ở trạng thái có thể thanh toán'));
+          }
 
-        return { payment, contractId: currentInvoice.contractId };
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          const payment = await tx.payment.create({
+            data: {
+              invoiceId,
+              paymentMethod: 'CASH',
+              paymentLinkId: idempotencyKey || null,
+              status: 'SUCCESS',
+              paidAt: now,
+              createdAt: now,
+            },
+          });
+
+          return { payment, contractId: currentInvoice.contractId };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
 
       // Nếu hóa đơn gắn với hợp đồng (trả trước hoặc định kỳ), kích hoạt hợp đồng sang ACTIVE
       if (result.contractId) {
-        void this.secureRpc.send(
-          this.contractClient,
-          { cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_PREPAYMENT },
-          { contractId: result.contractId },
-        ).catch((err) => {
-          console.warn(`[InvoicesService.payInvoice] Failed to activate contract ${result.contractId}:`, err?.message || err);
-        });
+        void this.secureRpc
+          .send(
+            this.contractClient,
+            { cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_PREPAYMENT },
+            { contractId: result.contractId },
+          )
+          .catch((err) => {
+            console.warn(`[InvoicesService.payInvoice] Failed to activate contract ${result.contractId}:`, err?.message || err);
+          });
       }
 
       return result.payment;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const duplicate = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
-        if (duplicate?.invoiceId === invoiceId) return duplicate;
+        if (idempotencyKey) {
+          const duplicate = await this.prisma.payment.findUnique({ where: { paymentLinkId: idempotencyKey } });
+          if (duplicate?.invoiceId === invoiceId) return duplicate;
+        }
       }
       throw error;
     }
@@ -448,53 +452,7 @@ export class InvoicesService {
   //   return this.processPayment(invoice, dto, ipAddr);
   // }
 
-  // ─── Shared: xử lý thanh toán (CASH / VNPAY / ZALOPAY) ────────────────────
-  private async processPayment(
-    invoice: any,
-    dto: PayInvoiceDto,
-    ipAddr?: string,
-  ) {
-    if (dto.paymentMethod === PaymentMethodDto.CASH) {
-      const pending = invoice.payments?.find((p: any) => p.status === 'PENDING');
-      if (pending)
-        throw new RpcException(new ConflictException('There is an ongoing pending payment.'));
 
-      const payment = await this.prisma.$transaction(async (tx) => {
-        const p = await tx.payment.create({
-          data: {
-            invoiceId:     invoice.id,
-            paymentMethod: 'CASH',
-            status:        'SUCCESS',
-            paidAt:        new Date(),
-            createdAt:     new Date(),
-          },
-        });
-        await tx.invoice.update({
-          where: { id: invoice.id },
-          data:  { status: 'PAID', updatedAt: new Date() },
-        });
-        return p;
-      });
-
-      return { paymentMethod: 'CASH', status: 'SUCCESS', paymentId: payment.id };
-    }
-
-    if (
-      dto.paymentMethod === PaymentMethodDto.VNPAY ||
-      dto.paymentMethod === PaymentMethodDto.ZALOPAY
-    ) {
-      if (!this.paymentsService) {
-        throw new RpcException('Payments service chưa được cấu hình');
-      }
-      return this.paymentsService.createPaymentLink({
-        invoiceId:     invoice.id,
-        paymentMethod: dto.paymentMethod as 'VNPAY' | 'ZALOPAY',
-        ipAddr:        ipAddr ?? '127.0.0.1',
-      });
-    }
-
-    throw new RpcException('Unsupported payment method');
-  }
 
   // ─── Provider: nhắc nợ hóa đơn ───────────────────────────────────────────
   async remindInvoice(providerId: string, invoiceId: string) {

@@ -304,28 +304,34 @@ async function main() {
                     status: "SUCCESS" as PaymentStatus,
                     paidAt: paymentDate,
                     createdAt: paymentDate,
+                    qrCode: null,
+                    checkOutUrl: null,
                 });
             } else if (invStatus === "OVERDUE" && cNum % 2 === 0) {
                 // Thử thanh toán nhưng thất bại (FAILED)
                 paymentInserts.push({
                     id: paymentId(paymentCounter++),
                     invoiceId: invId,
-                    paymentMethod: "VNPAY",
+                    paymentMethod: "TRANSFER",
                     paymentLinkId: `PAYLINK-${invId.substring(invId.length - 8)}`,
                     status: "FAILED" as PaymentStatus,
                     paidAt: null,
                     createdAt: new Date(invoiceDate.getTime() + 86400000 * 10),
+                    qrCode: null,
+                    checkOutUrl: null
                 });
             } else if (invStatus === "UNPAID" && cNum % 3 === 0) {
                 // Đang chờ xử lý (PENDING)
                 paymentInserts.push({
                     id: paymentId(paymentCounter++),
                     invoiceId: invId,
-                    paymentMethod: "ZALOPAY",
+                    paymentMethod: "TRANSFER",
                     paymentLinkId: `PAYLINK-${invId.substring(invId.length - 8)}`,
                     status: "PENDING" as PaymentStatus,
                     paidAt: null,
                     createdAt: now,
+                    qrCode: null,
+                    checkOutUrl: null
                 });
             }
         }
@@ -422,7 +428,7 @@ async function main() {
     console.log(`   - ${usageInserts.length} Bản ghi ServiceUsage chu kỳ.`);
     console.log(`   - ${invoiceInserts.length} Hóa đơn (Đầy đủ PAID, UNPAID, OVERDUE).`);
     console.log(`   - ${invoiceItemInserts.length} Chi tiết mục hóa đơn.`);
-    console.log(`   - ${paymentInserts.length} Giao dịch thanh toán (VNPAY, ZALOPAY, CASH - SUCCESS/FAILED/PENDING).`);
+    console.log(`   - ${paymentInserts.length} Giao dịch thanh toán (TRANSFER, CASH - SUCCESS/FAILED/PENDING).`);
 }
 
 main()

@@ -18,6 +18,8 @@ export class CustomerBillingPatterns {
   public static readonly PAYMENTS_VNPAY_CALLBACK   = 'customer.billing.payments.vnpay.callback';
   /** POST callback IPN từ ZaloPay → billing-service verify + update DB */
   public static readonly PAYMENTS_ZALOPAY_CALLBACK = 'customer.billing.payments.zalopay.callback';
+  /** POST webhook từ PayOS → billing-service xử lý trạng thái giao dịch */
+  public static readonly PAYMENTS_PAYOS_WEBHOOK = 'customer.billing.payments.payos.webhook';
   /** GET kiểm tra trạng thái payment (FE polling) */
   public static readonly PAYMENTS_CHECK_STATUS     = 'customer.billing.payments.checkStatus';
 }

@@ -13,7 +13,13 @@ RUN apk add --no-cache openssl
 
 COPY package*.json ./
 
-RUN npm ci
+# npm ci bình thường — để các native addon (bcrypt, prisma) tự download
+# prebuilt binary đúng platform (Linux/Alpine x64).
+# Sau đó xóa @swc/core vì nó chỉ cần cho dev local (Windows), binary
+# Windows sẽ không chạy được trên Linux và gây lỗi SIGBUS.
+RUN npm ci \
+    && rm -rf node_modules/@swc/core node_modules/@swc/core-win32-x64-msvc \
+              node_modules/@swc/cli
 
 COPY . .
 

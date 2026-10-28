@@ -15,6 +15,9 @@ export class CustomerPatterns {
     public static readonly PAYMENTS = "customer.payments.";
 
     public static readonly FETCH_INVOICES = this.INVOICES + "fetch";
+    public static readonly CREATE_QR_CODE = this.INVOICES + "create-qr-code";
+    public static readonly CHECK_PAYMENT_STATUS =
+        this.INVOICES + "check-payment-status";
 
     /*
         ===============================
@@ -132,6 +135,12 @@ export class CustomerPatterns {
     public static readonly EKYC_OCR = this.EKYC + "ocr";
     public static readonly EKYC_VERIFY_FACE = this.EKYC + "verify-face";
     public static readonly IDENTITIES = "customer.identities.";
+
+    public static readonly SUBMIT_EKYC = CustomerPatterns.EKYC + "submit";
+
+    public static readonly OCR = CustomerPatterns.EKYC + "ocr";
+
+    public static readonly VERIFY_FACE = CustomerPatterns.EKYC + "verify-face";
 
     public static readonly GET_PROVIDER_IN_POPULAR =
         this.IDENTITIES + "get-provider-in-popular";

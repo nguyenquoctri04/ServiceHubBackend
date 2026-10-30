@@ -13,6 +13,7 @@ import { ProviderContractsController } from "./provider.contracts.controller";
 import { ProviderContractsService } from "./provider.contracts.service";
 import { ContractPdfRendererService } from "./contract-pdf-renderer.service";
 import { ContractRealtimeService } from "./contract-realtime.service";
+import { ContractOutboxWorker } from "./contract-outbox.worker";
 
 const microservices = [
   "IDENTITY_SERVICE",
@@ -45,6 +46,7 @@ const clientProviders: ClientsModuleAsyncOptions = microservices.map(
     ProviderContractsService,
     ContractPdfRendererService,
     ContractRealtimeService,
+    ContractOutboxWorker,
   ],
   exports: [ContractPdfRendererService, ContractRealtimeService],
 })

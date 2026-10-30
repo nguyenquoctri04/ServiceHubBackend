@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { CurrentUser, JwtAuthGuard, ProviderBillingPatterns, ProviderContractPatterns, ProviderIdentityPatterns, Roles, RolesGuard } from '@app/common';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';

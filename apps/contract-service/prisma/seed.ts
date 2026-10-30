@@ -143,6 +143,9 @@ async function main() {
     await prisma.contractService.deleteMany();
     await prisma.billingPeriod.deleteMany();
     await prisma.contract.deleteMany();
+    await prisma.idempotencyRecord.deleteMany();
+    await prisma.outboxMessage.deleteMany();
+    await prisma.inboxMessage.deleteMany();
 
     await prisma.templateVariable.deleteMany();
     await prisma.contractTemplate.deleteMany();

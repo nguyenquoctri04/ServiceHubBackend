@@ -356,8 +356,6 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             throw new BadRequestException("Số lượng không hợp lệ");
         }
 
-        console.log(servicePriceId);
-
         const priceInfo = await this.secureRpc.send(
             this.catalogClient,
             { cmd: CustomerPatterns.VALIDATE_SERVICE_PRICE },
@@ -1338,6 +1336,7 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             where: {
                 status: "PENDING_PAYMENT",
                 signedAt: { gt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+                services: { some: {} },
             },
             include: { services: { take: 1 } },
         });

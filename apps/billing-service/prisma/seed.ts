@@ -37,6 +37,9 @@ async function main() {
     console.log("--> Đang seed Billing Service...");
 
     // 1. CLEAR DỮ LIỆU CŨ THEO ĐÚNG THỨ TỰ PHỤ THUỘC
+    await prisma.idempotencyRecord.deleteMany();
+    await prisma.outboxMessage.deleteMany();
+    await prisma.inboxMessage.deleteMany();
     await prisma.payment.deleteMany();
     await prisma.invoiceItem.deleteMany();
     await prisma.invoice.deleteMany();
@@ -290,8 +293,8 @@ async function main() {
 
             // Ghi nhận thanh toán (Payment) cho hóa đơn
             if (invStatus === "PAID") {
-                const methods: PaymentMethod[] = ["VNPAY", "ZALOPAY", "CASH"];
-                const method = methods[(cNum + m) % 3];
+                const methods: PaymentMethod[] = ["TRANSFER", "CASH"];
+                const method = methods[(cNum + m) % 2];
                 const paymentDate = (m === 5)
                     ? new Date(now.getTime() - ((cNum % 6) + 1) * 3600000)
                     : new Date(invoiceDate.getTime() + 86400000 * 2);

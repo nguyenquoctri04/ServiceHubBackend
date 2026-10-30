@@ -1,13 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
+import { InboxService, EventEnvelope } from '@app/common';
 
 @Injectable()
 export class PropertiesService {
+  private readonly logger = new Logger(PropertiesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly locationService: LocationService,
+    private readonly inboxService: InboxService,
   ) { }
 
   private async resolveCoordinates(address: string) {
@@ -566,5 +570,86 @@ export class PropertiesService {
         typeName: 'asc',
       },
     });
+  }
+
+  /**
+   * Consumer xử lý sự kiện contract.activated.v1 từ Contract Service
+   */
+  async handleContractActivatedEvent(envelope: EventEnvelope<any>) {
+    const consumerName = 'catalog-contract-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) {
+      this.logger.log(`[handleContractActivatedEvent] Event ${envelope.id} đã xử lý hoặc đang claim.`);
+      return;
+    }
+
+    const { roomId, contractId } = envelope.payload || {};
+    if (!roomId) {
+      this.logger.log(`[handleContractActivatedEvent] Hợp đồng ${contractId} không gắn với phòng nào.`);
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      return;
+    }
+
+    try {
+      await this.prisma.room.updateMany({
+        where: { id: roomId },
+        data: {
+          updatedAt: new Date(),
+          revision: { increment: 1 },
+        },
+      });
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      this.logger.log(`[handleContractActivatedEvent] Đã đồng bộ trạng thái phòng ${roomId} cho hợp đồng ${contractId}.`);
+    } catch (err: any) {
+      this.logger.error(`[handleContractActivatedEvent] Lỗi cập nhật phòng ${roomId}: ${err?.message || err}`);
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
+      throw err;
+    }
+  }
+
+  /**
+   * Consumer xử lý sự kiện contract.cancelled.v1 hoặc contract.terminated.v1
+   */
+  async handleContractCancelledOrTerminatedEvent(envelope: EventEnvelope<any>) {
+    const consumerName = 'catalog-contract-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) {
+      this.logger.log(`[handleContractCancelledOrTerminatedEvent] Event ${envelope.id} đã xử lý hoặc đang claim.`);
+      return;
+    }
+
+    const { roomId, contractId } = envelope.payload || {};
+    if (!roomId) {
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      return;
+    }
+
+    try {
+      await this.prisma.room.updateMany({
+        where: { id: roomId },
+        data: {
+          updatedAt: new Date(),
+          revision: { increment: 1 },
+        },
+      });
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      this.logger.log(`[handleContractCancelledOrTerminatedEvent] Đã giải phóng/cập nhật phòng ${roomId} cho hợp đồng ${contractId}.`);
+    } catch (err: any) {
+      this.logger.error(`[handleContractCancelledOrTerminatedEvent] Lỗi cập nhật phòng ${roomId}: ${err?.message || err}`);
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
+      throw err;
+    }
   }
 }

@@ -2,7 +2,6 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
-import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { Prisma, Meter } from '@prisma/client-billing';
 import { CatalogPatterns, ProviderContractPatterns, SecureRpcService } from '@app/common';
 import { ExcelRowDto } from './dto/meter.dto';

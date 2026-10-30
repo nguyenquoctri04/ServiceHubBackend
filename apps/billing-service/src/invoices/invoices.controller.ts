@@ -1,9 +1,10 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, EventPattern, Payload } from '@nestjs/microservices';
 import { InvoicesService } from './invoices.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
+import { ContractEventPatterns, EventEnvelope } from '@app/common';
 
 @Controller()
 export class InvoicesController {
@@ -64,5 +65,12 @@ export class InvoicesController {
   @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_REMIND })
   async remindInvoice(@Payload() payload: { providerId: string; invoiceId: string }) {
     return this.service.remindInvoice(payload.providerId, payload.invoiceId);
+  }
+
+  // ── Saga Event Consumers ───────────────────────────────────────────────────
+
+  @EventPattern(ContractEventPatterns.CANCELLED)
+  async handleContractCancelled(@Payload() envelope: EventEnvelope<{ contractId: string }>) {
+    await this.service.handleContractCancelledEvent(envelope);
   }
 }

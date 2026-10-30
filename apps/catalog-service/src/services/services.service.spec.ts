@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { RpcException } from '@nestjs/microservices';
 import { ServicesService } from './services.service';
 import { LocationService } from '../location/location.service';
 import { PrismaService } from '../prisma/prisma.service';

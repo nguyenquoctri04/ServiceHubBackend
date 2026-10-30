@@ -2,7 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
-import { NotificationPatterns, SecureRpcService, ViolationType } from '@app/common';
+import { NotificationPatterns, SecureRpcService, ViolationType, OutboxService, ContractEventPatterns, ViolationEventPatterns } from '@app/common';
 
 @Injectable()
 export class ViolationsService {
@@ -12,6 +12,7 @@ export class ViolationsService {
     private readonly prisma: PrismaService,
     @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async findByProvider(providerId: string, actorId?: string, status?: string, contractIds?: string[]) {
@@ -257,7 +258,7 @@ export class ViolationsService {
             { violationRule: { targetType: { in: ['CUSTOMER', 'BOTH'] } } },
           ],
         },
-        include: { contract: { select: { id: true, customerId: true, status: true } } },
+        include: { contract: { select: { id: true, customerId: true, status: true, contractNumber: true, roomId: true, revision: true } } },
       });
       if (!violation) throw new RpcException({ statusCode: 404, message: 'Không tìm thấy báo cáo có thể xử lý.' });
       const terminates = data.actionType === 'TERMINATE_CONTRACT';
@@ -267,7 +268,43 @@ export class ViolationsService {
       const action = await tx.violationAction.create({
         data: { violationCaseId: violation.id, performedBy: data.performedBy, actionType: data.actionType as ViolationActionType, reason: data.description, createdAt: now },
       });
-      if (terminates) await tx.contract.update({ where: { id: violation.contractId }, data: { status: 'TERMINATED', updatedAt: now } });
+      if (terminates) {
+        const updatedContract = await tx.contract.update({
+          where: { id: violation.contractId },
+          data: { status: 'TERMINATED', updatedAt: now, revision: { increment: 1 } },
+        });
+
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'Contract',
+          aggregateId: updatedContract.id,
+          aggregateRevision: updatedContract.revision,
+          eventType: ContractEventPatterns.TERMINATED,
+          payload: {
+            contractId: updatedContract.id,
+            contractNumber: updatedContract.contractNumber,
+            providerId: data.providerId,
+            customerId: violation.contract.customerId,
+            roomId: updatedContract.roomId,
+            reason: data.description,
+            violationCaseId: violation.id,
+          },
+        });
+      }
+      if (data.actionType === 'FINE') {
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'ViolationCase',
+          aggregateId: violation.id,
+          aggregateRevision: 1,
+          eventType: ViolationEventPatterns.FINE_IMPOSED,
+          payload: {
+            violationCaseId: violation.id,
+            contractId: violation.contractId,
+            providerId: data.providerId,
+            customerId: violation.contract.customerId,
+            reason: data.description,
+          },
+        });
+      }
       if (terminates && data.createRestriction) {
         const existing = await tx.restriction.findFirst({ where: { providerId: data.providerId, customerId: violation.contract.customerId, scopeType: 'PROVIDER', isDeleted: false, OR: [{ endAt: null }, { endAt: { gt: now } }] }, select: { id: true } });
         if (!existing) await tx.restriction.create({ data: { violationActionId: action.id, providerId: data.providerId, customerId: violation.contract.customerId, scopeType: 'PROVIDER', reason: data.description, startAt: now, createdBy: data.performedBy, createdAt: now, updatedAt: now } });

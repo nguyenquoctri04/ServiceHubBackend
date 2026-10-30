@@ -5,7 +5,7 @@ import { CategoriesModule } from "./categories/categories.module";
 import { ServicesModule } from "./services/services.module";
 import { LocationModule } from "./location/location.module";
 import { PropertiesModule } from "./property/properties.module";
-import { CommonModule } from "@app/common";
+import { CommonModule, ReliabilityModule } from "@app/common";
 
 @Module({
   imports: [
@@ -14,6 +14,7 @@ import { CommonModule } from "@app/common";
       serviceName: "CATALOG_SERVICE_NAME",
       secretEnv: "CATALOG_SERVICE_SECRET",
     }),
+    ReliabilityModule,
     PrismaModule,
     CategoriesModule,
     ServicesModule,

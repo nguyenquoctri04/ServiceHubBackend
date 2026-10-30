@@ -12,7 +12,7 @@ import {
     type Webhook,
     type WebhookData,
 } from "@payos/node";
-import { NotificationPatterns, RedisService } from "@app/common";
+import { NotificationPatterns, RedisService, OutboxService, BillingEventPatterns } from "@app/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PAYOS_CLIENT } from "../payos/payos.provider";
 import { firstValueFrom, timeout } from "rxjs";
@@ -40,6 +40,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         private readonly prisma: PrismaService,
         private readonly redis: RedisService,
         private readonly payOSService: PayOSService,
+        private readonly outboxService: OutboxService,
         @Inject(PAYOS_CLIENT) private readonly payOS: PayOS,
         @Inject("NOTIFICATION_SERVICE")
         private readonly notificationClient: ClientProxy,
@@ -442,9 +443,14 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
             });
             if (!payment || payment.invoiceId !== invoiceId) return false;
 
+            const invoice = await tx.invoice.findUnique({
+                where: { id: invoiceId },
+            });
+            if (!invoice || invoice.status === "PAID") return false;
+
             const invoiceUpdate = await tx.invoice.updateMany({
                 where: { id: invoiceId, status: { not: "PAID" } },
-                data: { status: "PAID", updatedAt: new Date() },
+                data: { status: "PAID", revision: { increment: 1 }, updatedAt: new Date() },
             });
             if (invoiceUpdate.count === 0) return false;
 
@@ -452,6 +458,27 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                 where: { id: payment.id },
                 data: { paymentMethod: "TRANSFER", status: "SUCCESS", paidAt },
             });
+
+            // Ghi Outbox để kích hoạt Hợp đồng và phát tán sự kiện (Saga)
+            if (invoice.contractId) {
+                await this.outboxService.publishLocal(tx, {
+                    eventType: BillingEventPatterns.INVOICE_PAID,
+                    aggregateType: 'INVOICE',
+                    aggregateId: invoiceId,
+                    orderingKey: invoice.contractId,
+                    payload: {
+                        invoiceId,
+                        invoiceNumber: invoice.invoiceNumber,
+                        contractId: invoice.contractId,
+                        customerId: invoice.customerId,
+                        providerId: invoice.providerId,
+                        amount: Number(invoice.total),
+                        paymentMethod: 'TRANSFER',
+                        paidAt,
+                    },
+                });
+            }
+
             return true;
         });
     }

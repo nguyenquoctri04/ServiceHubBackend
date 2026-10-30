@@ -3,7 +3,7 @@ import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
 import { InvoicesModule } from "./invoices/invoices.module";
 import { PaymentsModule } from "./payments/payments.module";
-import { CommonModule } from "@app/common";
+import { CommonModule, ReliabilityModule } from "@app/common";
 import { MetersModule } from "./meters/meters.module";
 
 @Module({
@@ -13,6 +13,7 @@ import { MetersModule } from "./meters/meters.module";
       serviceName: "BILLING_SERVICE_NAME",
       secretEnv: "BILLING_SERVICE_SECRET",
     }),
+    ReliabilityModule,
     PrismaModule,
     InvoicesModule,
     PaymentsModule,

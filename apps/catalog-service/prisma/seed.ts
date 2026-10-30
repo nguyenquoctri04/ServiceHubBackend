@@ -564,6 +564,8 @@ async function main() {
     await prisma.roomType.deleteMany();
     await prisma.property.deleteMany();
     await prisma.category.deleteMany();
+    await prisma.outboxMessage.deleteMany();
+    await prisma.inboxMessage.deleteMany();
 
     // 2. CATEGORIES (6 Danh mục)
     await prisma.category.createMany({

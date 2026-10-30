@@ -2,10 +2,9 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
-import { ContractStatus, Contract } from '@prisma/client-contract';
-import { CatalogPatterns, NotificationPatterns, ProviderBillingPatterns, ProviderIdentityPatterns, SecureRpcService } from '@app/common';
+import { ContractStatus, Contract, ContractTemplate, Term } from '@prisma/client-contract';
+import { CatalogPatterns, NotificationPatterns, ProviderBillingPatterns, ProviderIdentityPatterns, SecureRpcService, OutboxService, InboxService, ContractEventPatterns, EventEnvelope } from '@app/common';
 import { CustomerPatterns } from '@app/common/constants/customer.patterns';
-import { ContractTemplate, Term } from '@prisma/client-contract';
 import { createHash } from 'node:crypto';
 import { ContractPdfRendererService } from './contract-pdf-renderer.service';
 import { ContractRealtimeService } from './contract-realtime.service';
@@ -96,6 +95,8 @@ export class ProviderContractsService {
     private readonly configService: ConfigService,
     private readonly pdfRenderer: ContractPdfRendererService,
     private readonly contractRealtime: ContractRealtimeService,
+    private readonly outboxService: OutboxService,
+    private readonly inboxService: InboxService,
   ) {}
 
   /**
@@ -446,10 +447,30 @@ export class ProviderContractsService {
 
     const nextStatus = ContractStatus.PENDING_SIGNATURE;
 
-    const contract = await this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: nextStatus, updatedAt: new Date() },
-      include: { services: true, terms: true, files: true }
+    const contract = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.contract.update({
+        where: { id: contractId },
+        data: { status: nextStatus, updatedAt: new Date(), revision: { increment: 1 } },
+        include: { services: true, terms: true, files: true }
+      });
+
+      await this.outboxService.publishLocal(tx, {
+        aggregateType: 'Contract',
+        aggregateId: updated.id,
+        aggregateRevision: updated.revision,
+        eventType: ContractEventPatterns.SENT_FOR_SIGNING,
+        payload: {
+          contractId: updated.id,
+          contractNumber: updated.contractNumber,
+          providerId: updated.providerId,
+          customerId: updated.customerId,
+          roomId: updated.roomId,
+          requireSignature: updated.requireSignature,
+          status: nextStatus,
+        },
+      });
+
+      return updated;
     });
 
     await this.secureRpc.send(
@@ -839,9 +860,28 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Chỉ có thể từ chối yêu cầu dịch vụ đang ở trạng thái nháp.' });
     }
 
-    const contract = await this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: ContractStatus.CANCELLED, updatedAt: new Date() }
+    const contract = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.contract.update({
+        where: { id: contractId },
+        data: { status: ContractStatus.CANCELLED, updatedAt: new Date(), revision: { increment: 1 } }
+      });
+
+      await this.outboxService.publishLocal(tx, {
+        aggregateType: 'Contract',
+        aggregateId: updated.id,
+        aggregateRevision: updated.revision,
+        eventType: ContractEventPatterns.CANCELLED,
+        payload: {
+          contractId: updated.id,
+          contractNumber: updated.contractNumber,
+          providerId: updated.providerId,
+          customerId: updated.customerId,
+          roomId: updated.roomId,
+          reason: normalizedReason,
+        },
+      });
+
+      return updated;
     });
     await this.secureRpc.send(
       this.notificationClient,
@@ -1492,5 +1532,134 @@ export class ProviderContractsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Consumer xử lý sự kiện billing.invoice_paid.v1 từ Billing Service theo Saga Choreography
+   * Đảm bảo Idempotency qua Inbox Pattern và tự động chuyển hợp đồng sang ACTIVE khi đủ điều kiện chữ ký
+   */
+  async handleInvoicePaidEvent(envelope: EventEnvelope<any>) {
+    const consumerName = 'contract-invoice-paid-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) {
+      this.logger.log(`[handleInvoicePaidEvent] Event ${envelope.id} đã xử lý hoặc đang xử lý. Bỏ qua.`);
+      return;
+    }
+
+    const { contractId, invoiceId } = envelope.payload || {};
+    if (!contractId) {
+      this.logger.log(`[handleInvoicePaidEvent] Hóa đơn ${invoiceId} không gắn với contractId. Bỏ qua.`);
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      return;
+    }
+
+    try {
+      const contract = await this.prisma.contract.findUnique({
+        where: { id: contractId },
+        include: { files: true },
+      });
+
+      if (!contract) {
+        this.logger.warn(`[handleInvoicePaidEvent] Không tìm thấy hợp đồng ${contractId}`);
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      if (contract.status === ContractStatus.ACTIVE) {
+        this.logger.log(`[handleInvoicePaidEvent] Hợp đồng ${contractId} đã ACTIVE từ trước.`);
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      // Kiểm tra chữ ký số nếu hợp đồng yêu cầu ký
+      let fullySigned = true;
+      if (contract.requireSignature) {
+        const file = contract.files?.[0];
+        if (file) {
+          const verification = await this.secureRpc.send<any>(
+            this.signatureClient,
+            { cmd: CustomerPatterns.VERIFY_CONTRACT },
+            { contractFileId: file.id },
+            15000,
+          ).catch(() => null);
+          fullySigned = Boolean(verification?.providerSigned && verification?.customerSigned);
+        } else {
+          fullySigned = false;
+        }
+      }
+
+      const now = new Date();
+
+      if (!fullySigned) {
+        this.logger.warn(`[handleInvoicePaidEvent] Hợp đồng ${contractId} đã thanh toán nhưng chưa đủ chữ ký số.`);
+        await this.prisma.$transaction(async (tx) => {
+          await this.outboxService.publishLocal(tx, {
+            aggregateType: 'Contract',
+            aggregateId: contract.id,
+            aggregateRevision: contract.revision,
+            orderingKey: contract.id,
+            eventType: ContractEventPatterns.ACTIVATION_FAILED,
+            payload: {
+              contractId: contract.id,
+              invoiceId,
+              reason: 'Chưa hoàn tất chữ ký số 2 bên trước khi kích hoạt.',
+            },
+          });
+        });
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      // Đã đủ điều kiện: Chuyển sang ACTIVE và phát Outbox ContractEventPatterns.ACTIVATED
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const c = await tx.contract.update({
+          where: { id: contractId },
+          data: {
+            status: ContractStatus.ACTIVE,
+            signedAt: contract.signedAt || now,
+            updatedAt: now,
+            revision: { increment: 1 },
+          },
+        });
+
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'Contract',
+          aggregateId: c.id,
+          aggregateRevision: c.revision,
+          orderingKey: c.id,
+          eventType: ContractEventPatterns.ACTIVATED,
+          payload: {
+            contractId: c.id,
+            contractNumber: c.contractNumber,
+            providerId: c.providerId,
+            customerId: c.customerId,
+            roomId: c.roomId,
+            activatedAt: now.toISOString(),
+          },
+        });
+
+        return c;
+      });
+
+      // Phát Socket Invalidation Realtime cho hai bên giao diện
+      this.contractRealtime.emitStatusChanged({
+        contractId: updated.id,
+        status: ContractStatus.ACTIVE,
+        recipientUserIds: [updated.providerId, updated.customerId],
+      });
+
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      this.logger.log(`[handleInvoicePaidEvent] Đã kích hoạt hợp đồng ${contractId} sang ACTIVE thành công qua Saga Outbox.`);
+    } catch (err: any) {
+      this.logger.error(`[handleInvoicePaidEvent] Lỗi xử lý event ${envelope.id}: ${err?.message || err}`);
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
+      throw err;
+    }
   }
 }

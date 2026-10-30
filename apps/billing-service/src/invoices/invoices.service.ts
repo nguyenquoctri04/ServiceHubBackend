@@ -1,19 +1,18 @@
-import { Inject, Injectable, Optional, ConflictException, NotFoundException } from '@nestjs/common';
-import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { Injectable, Optional, ConflictException, NotFoundException } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
-import { PayInvoiceDto, PaymentMethodDto } from '@app/common/dto/billing/pay-invoice.dto';
+import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
 import { Prisma } from '@prisma/client-billing';
 import { PaymentsService } from '../payments/payments.service';
-import { SecureRpcService } from '@app/common';
-import { CustomerPatterns } from '@app/common/constants/customer.patterns';
+import { OutboxService, InboxService, BillingEventPatterns, EventEnvelope } from '@app/common';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
-    @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
-    private readonly secureRpc: SecureRpcService,
+    private readonly outboxService: OutboxService,
+    private readonly inboxService: InboxService,
     @Optional() private readonly paymentsService?: PaymentsService,
   ) {}
 
@@ -173,7 +172,7 @@ export class InvoicesService {
           const now = new Date();
           const updated = await tx.invoice.updateMany({
             where: { id: invoiceId, providerId, status: { in: ['UNPAID', 'OVERDUE'] } },
-            data: { status: 'PAID', updatedAt: now },
+            data: { status: 'PAID', revision: { increment: 1 }, updatedAt: now },
           });
           if (updated.count !== 1) {
             throw new RpcException(new ConflictException('Hóa đơn không còn ở trạng thái có thể thanh toán'));
@@ -190,23 +189,30 @@ export class InvoicesService {
             },
           });
 
+          // Ghi Outbox sự kiện thanh toán hóa đơn (để kích hoạt hợp đồng & thông báo)
+          if (currentInvoice.contractId) {
+            await this.outboxService.publishLocal(tx, {
+              eventType: BillingEventPatterns.INVOICE_PAID,
+              aggregateType: 'INVOICE',
+              aggregateId: invoiceId,
+              orderingKey: currentInvoice.contractId,
+              payload: {
+                invoiceId,
+                invoiceNumber: currentInvoice.invoiceNumber,
+                contractId: currentInvoice.contractId,
+                customerId: currentInvoice.customerId,
+                providerId,
+                amount: Number(currentInvoice.total),
+                paymentMethod: 'CASH',
+                paidAt: now,
+              },
+            });
+          }
+
           return { payment, contractId: currentInvoice.contractId };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
-
-      // Nếu hóa đơn gắn với hợp đồng (trả trước hoặc định kỳ), kích hoạt hợp đồng sang ACTIVE
-      if (result.contractId) {
-        void this.secureRpc
-          .send(
-            this.contractClient,
-            { cmd: CustomerPatterns.ACTIVATE_CONTRACT_AFTER_PREPAYMENT },
-            { contractId: result.contractId },
-          )
-          .catch((err) => {
-            console.warn(`[InvoicesService.payInvoice] Failed to activate contract ${result.contractId}:`, err?.message || err);
-          });
-      }
 
       return result.payment;
     } catch (error) {
@@ -481,5 +487,41 @@ export class InvoicesService {
       contractId: invoice.contractId,
       status: invoice.status,
     };
+  }
+
+  /**
+   * Xử lý sự kiện Hợp đồng bị hủy (contract.cancelled.v1) từ Contract Service thông qua Inbox (Saga Step)
+   */
+  async handleContractCancelledEvent(envelope: EventEnvelope<{ contractId: string }>) {
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName: 'billing-contract-cancelled-consumer',
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) return;
+
+    try {
+      const contractId = envelope.payload?.contractId || envelope.aggregateId;
+      if (contractId) {
+        const invoices = await this.prisma.invoice.findMany({
+          where: { contractId, status: { not: 'PAID' } },
+          select: { id: true },
+        });
+        const ids = invoices.map((i) => i.id);
+        if (ids.length > 0) {
+          await this.prisma.$transaction([
+            this.prisma.payment.deleteMany({ where: { invoiceId: { in: ids } } }),
+            this.prisma.invoiceItem.deleteMany({ where: { invoiceId: { in: ids } } }),
+            this.prisma.invoice.deleteMany({ where: { id: { in: ids } } }),
+          ]);
+        }
+      }
+      await this.inboxService.markProcessed(this.prisma, 'billing-contract-cancelled-consumer', envelope.id);
+    } catch (error) {
+      await this.inboxService.markFailed(this.prisma, 'billing-contract-cancelled-consumer', envelope.id);
+      throw error;
+    }
   }
 }

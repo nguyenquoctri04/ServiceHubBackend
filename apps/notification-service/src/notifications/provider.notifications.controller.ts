@@ -1,5 +1,5 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, Payload, RpcException } from '@nestjs/microservices';
 import { NotificationPatterns } from '@app/common';
 import { ProviderNotificationsService } from './provider.notifications.service';
 
@@ -21,12 +21,45 @@ export class ProviderNotificationsController {
 
   @MessagePattern({ cmd: NotificationPatterns.CREATE_IN_APP })
   async createInAppNotification(
-    @Payload() data: { userId?: string; providerId?: string; title: string; content: string; createdBy?: string },
+    @Payload() payload: {
+      userId?: string;
+      providerId?: string;
+      title?: string;
+      content?: string;
+      createdBy?: string;
+      data?: {
+        userId?: string;
+        providerId?: string;
+        title?: string;
+        content?: string;
+        createdBy?: string;
+      };
+    },
   ) {
+    // HmacGuard thường bóc envelope; hỗ trợ thêm trường hợp transport vẫn chuyển { meta, data } nguyên vẹn.
+    const data = payload?.data ?? payload;
+    if (!data || typeof data !== 'object') {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Payload thông báo không hợp lệ.',
+      });
+    }
     const targetUserId = data.userId || data.providerId;
     const createdBy = data.createdBy || (data.userId && data.providerId ? data.providerId : null);
+
+    if (
+      !targetUserId ||
+      typeof data.title !== 'string' ||
+      typeof data.content !== 'string'
+    ) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Thiếu người nhận hoặc nội dung thông báo.',
+      });
+    }
+
     return this.service.createInAppNotification({
-      userId: targetUserId!,
+      userId: targetUserId,
       title: data.title,
       content: data.content,
       createdBy,

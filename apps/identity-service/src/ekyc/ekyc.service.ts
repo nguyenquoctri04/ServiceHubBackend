@@ -8,7 +8,7 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
-import FormData from 'form-data';
+import FormData = require('form-data');
 import { PrismaService } from '../prisma/prisma.service';
 import { SubmitEkycDto, OcrDto, VerifyFaceDto } from './dto/submit-ekyc.dto';
 

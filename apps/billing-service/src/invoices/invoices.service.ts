@@ -3,7 +3,7 @@ import { RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto, PaymentMethodDto } from '@app/common/dto/billing/pay-invoice.dto';
-import { Prisma } from '@prisma/client-billing';
+import { Prisma, type LedgerStatus, type LedgerType } from '@prisma/client-billing';
 import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
@@ -44,6 +44,92 @@ export class InvoicesService {
     ]);
 
     return { data, total, page, limit };
+  }
+
+  async getRevenueSummary(providerId: string) {
+    const totals = await this.prisma.ledger.groupBy({
+      by: ['type', 'status'],
+      where: { providerId },
+      _sum: { amount: true },
+    });
+
+    const sum = (type: LedgerType, statuses: LedgerStatus[]) =>
+      totals
+        .filter((row) => row.type === type && statuses.includes(row.status))
+        .reduce((value, row) => value + Number(row._sum.amount ?? 0), 0);
+
+    const collected = sum('INCOME', ['SUCCEEDED']);
+    const sent = sum('PAYOUT', ['SUCCEEDED']);
+    const refunded = sum('REFUND', ['SUCCEEDED']);
+    const reserved = sum('PAYOUT', ['PENDING', 'PROCESSING', 'UNKNOWN']);
+
+    return {
+      currency: 'VND',
+      totalCollected: collected,
+      totalSent: sent,
+      totalRefunded: refunded,
+      pendingPayout: reserved,
+      availableBalance: collected - sent - refunded - reserved,
+    };
+  }
+
+  async getRevenueTransactions(
+    providerId: string,
+    query: {
+      page?: number;
+      limit?: number;
+      type?: string;
+      status?: string;
+      search?: string;
+    },
+  ) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 10));
+    const search = query.search?.trim();
+    const where: Prisma.LedgerWhereInput = {
+      providerId,
+      ...(query.type ? { type: query.type as LedgerType } : {}),
+      ...(query.status ? { status: query.status as LedgerStatus } : {}),
+      ...(search
+        ? {
+            OR: [
+              { referenceId: { contains: search, mode: 'insensitive' } },
+              {
+                invoice: {
+                  is: {
+                    invoiceNumber: { contains: search, mode: 'insensitive' },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.ledger.count({ where }),
+      this.prisma.ledger.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          invoice: {
+            select: { id: true, invoiceNumber: true, customerId: true },
+          },
+          payoutBatch: {
+            select: { id: true, batchId: true, status: true },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: rows.map((row) => ({ ...row, amount: Number(row.amount) })),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ─── Provider: tổng nợ đọng theo hợp đồng ─────────────────────────────────

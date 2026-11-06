@@ -17,6 +17,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PAYOS_CLIENT } from "../payos/payos.provider";
 import { firstValueFrom, timeout } from "rxjs";
 import { PayOSService } from "../payos/payos.service";
+import { Prisma } from "@prisma/client-billing";
 
 const RECONCILE_SCHEDULE_KEY = "payments:reconcile:schedule";
 const RECONCILE_HASH_PREFIX = "payment:reconcile:";
@@ -147,6 +148,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                     invoice.id,
                     paymentLinkId,
                     this.getPaidAt(link),
+                    link.amountPaid,
                 );
                 await this.removeReconciliation(paymentLinkId);
                 if (updated && invoice.customerId) {
@@ -214,6 +216,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                 invoiceId,
                 paymentLinkId,
                 link.paidAt ? new Date(link.paidAt) : new Date(),
+                link.amountPaid,
             );
             await this.removeReconciliation(paymentLinkId);
             if (updated && payment.invoice.customerId) {
@@ -374,6 +377,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                     invoice.id,
                     paymentLinkId,
                     this.getPaidAt(link),
+                    link.amountPaid,
                 );
                 await this.removeReconciliation(paymentLinkId);
                 if (updated && invoice.customerId) {
@@ -435,25 +439,92 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         invoiceId: string,
         paymentLinkId: string,
         paidAt: Date,
+        amountPaid: number,
     ): Promise<boolean> {
         return this.prisma.$transaction(async (tx) => {
-            const payment = await tx.payment.findUnique({
-                where: { paymentLinkId },
-            });
-            if (!payment || payment.invoiceId !== invoiceId) return false;
+            return this.markInvoicePaidInTransaction(
+                tx,
+                invoiceId,
+                paymentLinkId,
+                paidAt,
+                amountPaid,
+            );
+        });
+    }
 
+    async markInvoicePaidInTransaction(
+        tx: Prisma.TransactionClient,
+        invoiceId: string,
+        paymentLinkId: string,
+        paidAt: Date,
+        amountPaid: number,
+    ): Promise<boolean> {
+        const payment = await tx.payment.findUnique({
+            where: { paymentLinkId },
+            include: { invoice: true },
+        });
+        if (
+            !payment ||
+            payment.invoiceId !== invoiceId ||
+            !Number.isFinite(amountPaid)
+        ) {
+            return false;
+        }
+
+        let transitionedToPaid = false;
+        if (payment.invoice.status !== "PAID") {
             const invoiceUpdate = await tx.invoice.updateMany({
                 where: { id: invoiceId, status: { not: "PAID" } },
                 data: { status: "PAID", updatedAt: new Date() },
             });
-            if (invoiceUpdate.count === 0) return false;
+            transitionedToPaid = invoiceUpdate.count === 1;
 
-            await tx.payment.update({
-                where: { id: payment.id },
-                data: { paymentMethod: "TRANSFER", status: "SUCCESS", paidAt },
-            });
-            return true;
+            if (!transitionedToPaid) {
+                const currentInvoice = await tx.invoice.findUnique({
+                    where: { id: invoiceId },
+                    select: { status: true },
+                });
+                if (currentInvoice?.status !== "PAID") return false;
+            }
+        }
+
+        await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+                paymentMethod: "TRANSFER",
+                status: "SUCCESS",
+                paidAt: payment.paidAt ?? paidAt,
+            },
         });
+
+        // One credit record per invoice makes repeated webhooks/retries idempotent.
+        // Keep its amount equal to PayOS's cumulative amount paid, not Invoice.total.
+        const recordedAt = new Date();
+        await tx.ledger.upsert({
+            where: {
+                referenceId: `INVOICE_PAYMENT:${payment.invoice.id}`,
+            },
+            create: {
+                providerId: payment.invoice.providerId,
+                invoiceId: payment.invoice.id,
+                type: "INCOME",
+                amount: amountPaid,
+                currency: "VND",
+                status: "SUCCEEDED",
+                referenceId: `INVOICE_PAYMENT:${payment.invoice.id}`,
+                createdAt: recordedAt,
+                updatedAt: recordedAt,
+                completedAt: paidAt,
+            },
+            update: {
+                amount: amountPaid,
+                status: "SUCCEEDED",
+                updatedAt: recordedAt,
+                completedAt: paidAt,
+            },
+        });
+
+        return transitionedToPaid;
     }
 
     private async markPaymentFailed(invoiceId: string, paymentLinkId: string) {

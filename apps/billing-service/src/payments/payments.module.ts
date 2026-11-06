@@ -7,6 +7,7 @@ import { CustomerPaymentsService } from './customer.payments.service';
 import { PayOSModule } from '../payos/payos.module';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { parseRedisUrl } from '@app/common';
+import { PayoutsService } from '../payouts/payouts.service';
 
 @Module({
   imports: [
@@ -22,10 +23,19 @@ import { parseRedisUrl } from '@app/common';
         }),
         inject: [ConfigService],
       },
+      {
+        name: 'IDENTITY_SERVICE',
+        imports: [ConfigModule],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.REDIS as const,
+          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
+        }),
+        inject: [ConfigService],
+      },
     ]),
   ],
   controllers: [PaymentsController, CustomerPaymentsController],
-  providers: [PaymentsService, CustomerPaymentsService],
-  exports: [PaymentsService, CustomerPaymentsService],
+  providers: [PaymentsService, CustomerPaymentsService, PayoutsService],
+  exports: [PaymentsService, CustomerPaymentsService, PayoutsService],
 })
 export class PaymentsModule {}

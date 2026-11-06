@@ -1,9 +1,14 @@
 import { Module } from "@nestjs/common";
-import { payOSProvider } from "./payos.provider";
+import {
+    PAYOS_CLIENT,
+    PAYOS_PAYOUT_CLIENT,
+    payOSProvider,
+    payOSPayoutProvider,
+} from "./payos.provider";
 import { PayOSService } from "./payos.service";
 
 @Module({
-    providers: [payOSProvider, PayOSService],
-    exports: [payOSProvider, PayOSService],
+    providers: [payOSProvider, payOSPayoutProvider, PayOSService],
+    exports: [PAYOS_CLIENT, PAYOS_PAYOUT_CLIENT, PayOSService],
 })
 export class PayOSModule {}

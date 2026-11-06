@@ -15,4 +15,5 @@ export interface ProviderRpcSummary {
   businessType?: string;
   accountNumber?: string;
   bankName?: string;
+  bin?: string;
 }

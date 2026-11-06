@@ -6,6 +6,7 @@ import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { GroupedMeterQueryDto } from '../dto/meter.dto';
+import { RevenueLedgerQueryDto } from '../dto/revenue-ledger-query.dto';
 
 @Injectable()
 export class ProviderBillingBffService {
@@ -91,6 +92,40 @@ export class ProviderBillingBffService {
     });
 
     return { ...invoicesResp, data: mappedData };
+  }
+
+  async getRevenueTransactions(providerId: string, query: RevenueLedgerQueryDto) {
+    const response = await this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.REVENUE_TRANSACTIONS },
+      { providerId, query },
+    );
+    if (!response?.data?.length) return response;
+
+    const customerIds = [...new Set(
+      response.data.map((row: any) => row.invoice?.customerId).filter(Boolean),
+    )];
+    const identities = customerIds.length
+      ? await this.proxy.send<any[]>(
+          this.identityClient,
+          { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
+          { identityIds: customerIds },
+        ).catch(() => [])
+      : [];
+    const byId = new Map((identities || []).map((identity: any) => [identity.id, identity]));
+
+    return {
+      ...response,
+      data: response.data.map((row: any) => {
+        const identity = row.invoice?.customerId
+          ? byId.get(row.invoice.customerId) as any
+          : null;
+        return {
+          ...row,
+          customerName: identity?.fullName || identity?.email || identity?.phone || null,
+        };
+      }),
+    };
   }
 
   async getGroupedMeters(providerId: string, query: GroupedMeterQueryDto) {

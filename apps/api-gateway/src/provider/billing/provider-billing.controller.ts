@@ -24,6 +24,7 @@ import { ProviderCacheService } from '../provider-cache.service';
 import { ProviderBillingBffService } from './provider-billing-bff.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CurrentUserPayload } from '../provider.controller';
+import { RevenueLedgerQueryDto } from '../dto/revenue-ledger-query.dto';
 
 @Controller('api/provider/billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -40,6 +41,25 @@ export class ProviderBillingController {
   async getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.billingBffService.getInvoices(providerId, query);
+  }
+
+  @Get('revenue/summary')
+  async getRevenueSummary(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.REVENUE_SUMMARY },
+      { providerId },
+    );
+  }
+
+  @Get('revenue/transactions')
+  async getRevenueTransactions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: RevenueLedgerQueryDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.billingBffService.getRevenueTransactions(providerId, query);
   }
 
   @Post('invoices/:id/pay')

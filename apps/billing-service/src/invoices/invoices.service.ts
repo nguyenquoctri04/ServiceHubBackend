@@ -195,6 +195,7 @@ export class InvoicesService {
               eventType: BillingEventPatterns.INVOICE_PAID,
               aggregateType: 'INVOICE',
               aggregateId: invoiceId,
+              aggregateRevision: (currentInvoice.revision || 1) + 1,
               orderingKey: currentInvoice.contractId,
               payload: {
                 invoiceId,
@@ -521,6 +522,169 @@ export class InvoicesService {
       await this.inboxService.markProcessed(this.prisma, 'billing-contract-cancelled-consumer', envelope.id);
     } catch (error) {
       await this.inboxService.markFailed(this.prisma, 'billing-contract-cancelled-consumer', envelope.id);
+      throw error;
+    }
+  }
+
+  /**
+   * Xử lý sự kiện Kích hoạt hợp đồng thất bại (contract.activation_failed.v1)
+   * Treo hoàn tiền và bù trừ công nợ (Saga Compensation Step)
+   */
+  async handleContractActivationFailedEvent(envelope: EventEnvelope<{ contractId: string; invoiceId?: string; reason?: string }>) {
+    const consumerName = 'billing-contract-activation-failed-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) return;
+
+    try {
+      const { contractId, invoiceId, reason } = envelope.payload || {};
+      const targetInvoiceId = invoiceId || envelope.aggregateId;
+
+      await this.prisma.$transaction(async (tx) => {
+        let invoice = targetInvoiceId
+          ? await tx.invoice.findUnique({ where: { id: targetInvoiceId }, include: { payments: true } })
+          : null;
+
+        if (!invoice && contractId) {
+          invoice = await tx.invoice.findFirst({
+            where: { contractId, status: 'PAID' },
+            orderBy: { updatedAt: 'desc' },
+            include: { payments: true },
+          });
+        }
+
+        if (!invoice) return;
+
+        const nextRevision = (invoice.revision || 1) + 1;
+        const updatedInvoice = await tx.invoice.update({
+          where: { id: invoice.id },
+          data: {
+            revision: nextRevision,
+            updatedAt: new Date(),
+          },
+        });
+
+        if (invoice.payments && invoice.payments.length > 0) {
+          await tx.payment.updateMany({
+            where: { invoiceId: invoice.id, status: 'SUCCESS' },
+            data: { status: 'FAILED' },
+          });
+        }
+
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'Invoice',
+          aggregateId: updatedInvoice.id,
+          aggregateRevision: nextRevision,
+          eventType: BillingEventPatterns.REFUND_REQUESTED,
+          payload: {
+            invoiceId: updatedInvoice.id,
+            invoiceNumber: updatedInvoice.invoiceNumber,
+            contractId: updatedInvoice.contractId,
+            customerId: updatedInvoice.customerId,
+            providerId: updatedInvoice.providerId,
+            amount: Number(updatedInvoice.total),
+            reason: reason || 'Kích hoạt hợp đồng thất bại do không đủ chữ ký số hợp lệ.',
+            status: 'REFUND_PENDING',
+            refundRequestedAt: new Date().toISOString(),
+          },
+        });
+      });
+
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+    } catch (error) {
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
+      throw error;
+    }
+  }
+
+  /**
+   * Xử lý sự kiện Phạt vi phạm (violation.fine_imposed.v1) từ Contract Service
+   * Tự động sinh hóa đơn công nợ phạt (UNPAID)
+   */
+  async handleViolationFineImposedEvent(envelope: EventEnvelope<{
+    violationCaseId: string;
+    contractId?: string;
+    providerId: string;
+    customerId: string;
+    fineAmount?: number;
+    reason?: string;
+  }>) {
+    const consumerName = 'billing-violation-fine-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) return;
+
+    try {
+      const { violationCaseId, contractId, providerId, customerId, fineAmount, reason } = envelope.payload || {};
+      const amount = Number(fineAmount) > 0 ? Number(fineAmount) : 200000;
+
+      await this.prisma.$transaction(async (tx) => {
+        const caseRef = (violationCaseId || '').slice(0, 8).toUpperCase();
+        // Kiểm tra xem đã có hóa đơn phạt cho vi phạm này chưa (idempotent nghiệp vụ)
+        const existingFine = await tx.invoice.findFirst({
+          where: { invoiceNumber: { contains: `FINE-${caseRef}` } },
+        });
+        if (existingFine) return;
+
+        const invoiceNumber = `INV-FINE-${caseRef}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const now = new Date();
+
+        const invoice = await tx.invoice.create({
+          data: {
+            invoiceNumber,
+            providerId,
+            customerId,
+            contractId: contractId || null,
+            total: amount,
+            status: 'UNPAID',
+            revision: 1,
+            createdAt: now,
+            updatedAt: now,
+            items: {
+              create: [
+                {
+                  quantity: 1,
+                  unit: 'Lần phạt',
+                  unitPrice: amount,
+                  amount: amount,
+                  createdAt: now,
+                },
+              ],
+            },
+          },
+        });
+
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'Invoice',
+          aggregateId: invoice.id,
+          aggregateRevision: 1,
+          eventType: BillingEventPatterns.FINE_INVOICE_CREATED,
+          payload: {
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            contractId: invoice.contractId,
+            customerId: invoice.customerId,
+            providerId: invoice.providerId,
+            total: amount,
+            violationCaseId,
+            reason,
+          },
+        });
+      });
+
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+    } catch (error) {
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
       throw error;
     }
   }

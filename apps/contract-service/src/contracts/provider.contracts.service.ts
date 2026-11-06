@@ -146,7 +146,31 @@ export class ProviderContractsService {
           throw new RpcException({ statusCode: 404, message: 'Room not found' });
         }
       } catch (error) {
+        if (error instanceof RpcException) throw error;
         throw new RpcException({ statusCode: 400, message: 'Invalid room ID' });
+      }
+
+      const conflictingContract = await this.prisma.contract.findFirst({
+        where: {
+          providerId,
+          roomId: dto.roomId,
+          status: {
+            in: [
+              ContractStatus.DRAFT,
+              ContractStatus.PENDING_SIGNATURE,
+              ContractStatus.PENDING_PAYMENT,
+              ContractStatus.ACTIVE,
+            ],
+          },
+        },
+        select: { id: true, contractNumber: true, status: true },
+      });
+
+      if (conflictingContract) {
+        throw new RpcException({
+          statusCode: 400,
+          message: `Phòng này đang được gán cho hợp đồng khác (${conflictingContract.contractNumber}) ở trạng thái ${conflictingContract.status}.`,
+        });
       }
     }
 
@@ -246,6 +270,30 @@ export class ProviderContractsService {
         this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds: [dto.roomId] },
       );
       if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
+
+      const conflictingContract = await this.prisma.contract.findFirst({
+        where: {
+          providerId,
+          roomId: dto.roomId,
+          id: { not: contractId },
+          status: {
+            in: [
+              ContractStatus.DRAFT,
+              ContractStatus.PENDING_SIGNATURE,
+              ContractStatus.PENDING_PAYMENT,
+              ContractStatus.ACTIVE,
+            ],
+          },
+        },
+        select: { id: true, contractNumber: true, status: true },
+      });
+
+      if (conflictingContract) {
+        throw new RpcException({
+          statusCode: 400,
+          message: `Phòng này đang được gán cho hợp đồng khác (${conflictingContract.contractNumber}) ở trạng thái ${conflictingContract.status}.`,
+        });
+      }
     }
     let finalServices = dto.services;
     if (dto.services !== undefined) {
@@ -934,9 +982,9 @@ export class ProviderContractsService {
           ).catch(() => [])
         : [],
     ]);
-    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
-    const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
-    const pricesById = new Map(prices.map((price) => [price.id, price] as const));
+    const identitiesById = new Map((identities || []).map((identity) => [identity.id, identity] as const));
+    const roomsById = new Map((rooms || []).map((room) => [room.id, room] as const));
+    const pricesById = new Map((prices || []).map((price) => [price.id, price] as const));
 
     return contracts.map((contract) => {
       const customer = identitiesById.get(contract.customerId);

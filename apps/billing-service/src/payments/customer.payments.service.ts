@@ -465,6 +465,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                     eventType: BillingEventPatterns.INVOICE_PAID,
                     aggregateType: 'INVOICE',
                     aggregateId: invoiceId,
+                    aggregateRevision: (invoice.revision || 1) + 1,
                     orderingKey: invoice.contractId,
                     payload: {
                         invoiceId,

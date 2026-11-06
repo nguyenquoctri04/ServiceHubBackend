@@ -187,22 +187,31 @@ export class MetersService {
     });
     const metersMap = Object.fromEntries(meters.map(m => [m.id, m]));
 
-    // 3. Process each row with pre-fetched context (Partial Success)
-    const promises = rows.map(async row => {
-      if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
-      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
-      if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found or unauthorized`);
+    // 3. Process each row with pre-fetched context in chunks of 50 to prevent connection pool exhaustion & DB lock contention
+    const CHUNK_SIZE = 50;
+    const results: PromiseSettledResult<any>[] = [];
 
-      const context = {
-        meter: metersMap[row.meterId],
-        room: row.roomId ? roomsMap[row.roomId] : null,
-        contract: row.contractId ? contractsMap[row.contractId] : null
-      };
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + CHUNK_SIZE);
+      const chunkPromises = chunk.map(async (row) => {
+        if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
+        if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
+        if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) {
+          throw new Error(`Contract ${row.contractId} not found or unauthorized`);
+        }
 
-      return this.createMeterReadingCore(providerId, row, recordedBy, 'EXCEL_IMPORT', context);
-    });
+        const context = {
+          meter: metersMap[row.meterId],
+          room: row.roomId ? roomsMap[row.roomId] : null,
+          contract: row.contractId ? contractsMap[row.contractId] : null,
+        };
 
-    const results = await Promise.allSettled(promises);
+        return this.createMeterReadingCore(providerId, row, recordedBy, 'EXCEL_IMPORT', context);
+      });
+
+      const chunkResults = await Promise.allSettled(chunkPromises);
+      results.push(...chunkResults);
+    }
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
     const failed = results

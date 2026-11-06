@@ -9,23 +9,38 @@ describe('InvoicesService', () => {
     const tx = {
       invoice: {
         findFirst: jest.fn().mockResolvedValue(invoice),
+        findUnique: jest.fn().mockResolvedValue(invoice),
+        update: jest.fn().mockResolvedValue({ ...invoice, revision: 2 }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({ id: 'fine-invoice-1', invoiceNumber: 'INV-FINE-001', total: 200000, status: 'UNPAID' }),
+      },
+      payment: {
+        create: jest.fn().mockResolvedValue(payment),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      payment: { create: jest.fn().mockResolvedValue(payment) },
     };
     const prisma = customPrisma ?? {
       invoice: { findFirst: jest.fn().mockResolvedValue({ id: invoice.id }) },
       payment: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((callback: (client: typeof tx) => unknown) => callback(tx)),
     };
+    const outboxService = { publishLocal: jest.fn().mockResolvedValue(undefined) };
+    const inboxService = {
+      claim: jest.fn().mockResolvedValue(true),
+      markProcessed: jest.fn().mockResolvedValue(undefined),
+      markFailed: jest.fn().mockResolvedValue(undefined),
+    };
     return {
       service: new InvoicesService(
         prisma as any,
-        {} as any,
+        outboxService as any,
+        inboxService as any,
         { send: jest.fn().mockResolvedValue(undefined) } as any,
       ),
       prisma,
       tx,
+      outboxService,
+      inboxService,
     };
   };
 
@@ -123,5 +138,77 @@ describe('InvoicesService', () => {
     const result = await service.getRecentPayments('provider-1');
     expect(result).toHaveLength(1);
     expect(result[0]).toEqual(expect.objectContaining({ title: 'Thanh toán thành công', description: 'HĐ số INV-1' }));
+  });
+
+  describe('handleContractActivationFailedEvent', () => {
+    it('claims inbox, marks refund requested, increments revision and marks processed', async () => {
+      const { service, inboxService, outboxService, tx } = makeService();
+
+      const envelope: any = {
+        id: 'evt-fail-1',
+        eventType: 'contract.activation_failed.v1',
+        source: 'contract-service',
+        orderingKey: 'contract-1',
+        payload: {
+          contractId: 'contract-1',
+          invoiceId: 'invoice-1',
+          reason: 'Thiếu chữ ký số điện tử hợp lệ.',
+        },
+      };
+
+      await service.handleContractActivationFailedEvent(envelope);
+
+      expect(inboxService.claim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        consumerName: 'billing-contract-activation-failed-consumer',
+        eventId: 'evt-fail-1',
+      }));
+      expect(tx.invoice.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'invoice-1' },
+      }));
+      expect(outboxService.publishLocal).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        eventType: 'billing.refund_requested.v1',
+      }));
+      expect(inboxService.markProcessed).toHaveBeenCalledWith(expect.anything(), 'billing-contract-activation-failed-consumer', 'evt-fail-1');
+    });
+  });
+
+  describe('handleViolationFineImposedEvent', () => {
+    it('claims inbox, creates unpaid fine invoice and emits fine invoice created event', async () => {
+      const { service, inboxService, outboxService, tx } = makeService();
+
+      const envelope: any = {
+        id: 'evt-fine-1',
+        eventType: 'violation.fine_imposed.v1',
+        source: 'contract-service',
+        orderingKey: 'contract-1',
+        payload: {
+          violationCaseId: 'viol-case-12345678',
+          contractId: 'contract-1',
+          providerId: 'provider-1',
+          customerId: 'customer-1',
+          fineAmount: 500000,
+          reason: 'Gây ồn ào quá 23h',
+        },
+      };
+
+      tx.invoice.findFirst.mockResolvedValueOnce(null); // No existing fine
+
+      await service.handleViolationFineImposedEvent(envelope);
+
+      expect(inboxService.claim).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        consumerName: 'billing-violation-fine-consumer',
+        eventId: 'evt-fine-1',
+      }));
+      expect(tx.invoice.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          total: 500000,
+          status: 'UNPAID',
+        }),
+      }));
+      expect(outboxService.publishLocal).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+        eventType: 'billing.fine_invoice_created.v1',
+      }));
+      expect(inboxService.markProcessed).toHaveBeenCalledWith(expect.anything(), 'billing-violation-fine-consumer', 'evt-fine-1');
+    });
   });
 });

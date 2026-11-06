@@ -96,6 +96,7 @@ export class ViolationActionDto {
   @IsString() @MaxLength(2000) description: string;
   @IsBoolean() resolveViolation: boolean;
   @IsBoolean() @IsOptional() createRestriction?: boolean;
+  @IsNumber() @IsOptional() amount?: number;
 }
 
 export class ContractQueryDto {

@@ -232,6 +232,7 @@ export class ProviderContractController {
         performedBy: user.id,
         resolveViolation: dto.resolveViolation,
         createRestriction: dto.createRestriction,
+        amount: dto.amount,
       },
     );
     this.auditEmitter.emit({

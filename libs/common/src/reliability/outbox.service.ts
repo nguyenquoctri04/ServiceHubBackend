@@ -75,6 +75,19 @@ export class OutboxService {
   ): Promise<OutboxMessageRow> {
     const now = new Date();
     const revision = options.aggregateRevision ?? 1;
+
+    // Idempotent: nếu bản ghi outbox cho aggregate cùng revision đã tồn tại, trả về bản ghi đó
+    const existing = await tx.outboxMessage.findFirst({
+      where: {
+        eventType: options.eventType,
+        aggregateId: options.aggregateId,
+        aggregateRevision: revision,
+      },
+    });
+    if (existing) {
+      return existing;
+    }
+
     const payloadJson = typeof options.payload === 'string' ? options.payload : canonicalizeJson(options.payload);
     const payloadHash = createHash('sha256').update(payloadJson).digest('hex');
     const rowSignature = this.computeSignature(

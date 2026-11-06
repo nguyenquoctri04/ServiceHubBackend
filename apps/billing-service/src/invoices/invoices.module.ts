@@ -9,6 +9,7 @@ import { CustomerInvoicesService } from './customer.invoices.service';
 import { PaymentsModule } from '../payments/payments.module';
 import { PayOSModule } from '../payos/payos.module';
 import { BillingOutboxWorker } from './billing-outbox.worker';
+import { BillingMaintenanceWorker } from './billing-maintenance.worker';
 
 @Module({
   imports: [
@@ -36,6 +37,6 @@ import { BillingOutboxWorker } from './billing-outbox.worker';
     PayOSModule,
   ],
   controllers: [InvoicesController, CustomerInvoicesController],
-  providers: [InvoicesService, CustomerInvoicesService, BillingOutboxWorker],
+  providers: [InvoicesService, CustomerInvoicesService, BillingOutboxWorker, BillingMaintenanceWorker],
 })
 export class InvoicesModule { }

@@ -4,7 +4,7 @@ import { InvoicesService } from './invoices.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { PayInvoiceDto } from '@app/common/dto/billing/pay-invoice.dto';
-import { ContractEventPatterns, EventEnvelope } from '@app/common';
+import { ContractEventPatterns, ViolationEventPatterns, EventEnvelope } from '@app/common';
 
 @Controller()
 export class InvoicesController {
@@ -72,5 +72,15 @@ export class InvoicesController {
   @EventPattern(ContractEventPatterns.CANCELLED)
   async handleContractCancelled(@Payload() envelope: EventEnvelope<{ contractId: string }>) {
     await this.service.handleContractCancelledEvent(envelope);
+  }
+
+  @EventPattern(ContractEventPatterns.ACTIVATION_FAILED)
+  async handleContractActivationFailed(@Payload() envelope: EventEnvelope<{ contractId: string; invoiceId?: string; reason?: string }>) {
+    await this.service.handleContractActivationFailedEvent(envelope);
+  }
+
+  @EventPattern(ViolationEventPatterns.FINE_IMPOSED)
+  async handleViolationFineImposed(@Payload() envelope: EventEnvelope<any>) {
+    await this.service.handleViolationFineImposedEvent(envelope);
   }
 }

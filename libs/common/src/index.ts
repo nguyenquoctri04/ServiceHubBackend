@@ -36,4 +36,5 @@ export * from "./reliability/reliability.types";
 export * from "./reliability/outbox.service";
 export * from "./reliability/inbox.service";
 export * from "./reliability/outbox-poller.service";
+export * from "./reliability/retention.service";
 export * from "./reliability/reliability.module";

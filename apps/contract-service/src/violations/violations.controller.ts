@@ -41,6 +41,7 @@ export class ViolationsController {
       performedBy: string;
       resolveViolation: boolean;
       createRestriction?: boolean;
+      amount?: number;
     },
   ) {
     return this.service.handleAction(data);

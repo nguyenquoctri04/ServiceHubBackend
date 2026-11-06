@@ -10,6 +10,8 @@ export class BillingEventPatterns {
   public static readonly INVOICE_PAID = 'billing.invoice_paid.v1';
   public static readonly INVOICE_ISSUED = 'billing.invoice_issued.v1';
   public static readonly INVOICE_CANCELLED = 'billing.invoice_cancelled.v1';
+  public static readonly REFUND_REQUESTED = 'billing.refund_requested.v1';
+  public static readonly FINE_INVOICE_CREATED = 'billing.fine_invoice_created.v1';
 }
 
 export class ViolationEventPatterns {

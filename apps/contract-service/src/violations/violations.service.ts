@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { PrismaService } from '../prisma/prisma.service';
-import { AppealStatus, ViolationActionType } from '@prisma/client-contract';
+import { AppealStatus, ViolationActionType, Prisma } from '@prisma/client-contract';
 import { NotificationPatterns, SecureRpcService, ViolationType, OutboxService, ContractEventPatterns, ViolationEventPatterns } from '@app/common';
 
 @Injectable()
@@ -245,6 +245,7 @@ export class ViolationsService {
     performedBy: string;
     resolveViolation: boolean;
     createRestriction?: boolean;
+    amount?: number;
   }) {
     const now = new Date();
     const result = await this.prisma.$transaction(async (tx) => {
@@ -266,7 +267,14 @@ export class ViolationsService {
         throw new RpcException({ statusCode: 400, message: 'Chỉ có thể chấm dứt hợp đồng đang hiệu lực.' });
       }
       const action = await tx.violationAction.create({
-        data: { violationCaseId: violation.id, performedBy: data.performedBy, actionType: data.actionType as ViolationActionType, reason: data.description, createdAt: now },
+        data: {
+          violationCaseId: violation.id,
+          performedBy: data.performedBy,
+          actionType: data.actionType as ViolationActionType,
+          reason: data.description,
+          amount: data.amount ? new Prisma.Decimal(data.amount) : null,
+          createdAt: now,
+        },
       });
       if (terminates) {
         const updatedContract = await tx.contract.update({
@@ -301,6 +309,7 @@ export class ViolationsService {
             contractId: violation.contractId,
             providerId: data.providerId,
             customerId: violation.contract.customerId,
+            fineAmount: data.amount ? Number(data.amount) : 200000,
             reason: data.description,
           },
         });

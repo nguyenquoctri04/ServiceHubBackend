@@ -1,4 +1,24 @@
 services:
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: servicehub-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-servicehub}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-servicehub_secret_2026}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - servicehub-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   redis:
     image: redis:8-alpine
     container_name: servicehub-redis
@@ -26,7 +46,7 @@ services:
     ports:
       - 3000:3000   # DUY NHẤT service expose ra ngoài
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -56,7 +76,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -87,7 +107,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -117,7 +137,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -149,7 +169,7 @@ services:
     volumes:
       - gnupg-data:/var/lib/signature-service/gnupg
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -179,7 +199,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -209,7 +229,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -239,7 +259,7 @@ services:
     restart: unless-stopped
     env_file: .env
     depends_on:
-      redis:
+      rabbitmq:
         condition: service_healthy
     networks:
       - servicehub-net
@@ -260,6 +280,7 @@ services:
           path: package-lock.json
 
 volumes:
+  rabbitmq-data:
   redis-data:
   gnupg-data:
 

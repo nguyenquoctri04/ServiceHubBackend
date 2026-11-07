@@ -5,6 +5,7 @@ import {
     ForbiddenException,
     Inject,
     Injectable,
+    Logger,
     NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
@@ -17,6 +18,7 @@ import { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 
 @Injectable()
 export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
+    private readonly logger = new Logger(CustomerContractsService.name);
     private paymentExpiryTimer?: NodeJS.Timeout;
 
     constructor(
@@ -511,17 +513,60 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
     }
 
     private async computeFileHash(pdfUrl: string): Promise<string> {
-        const response = await fetch(pdfUrl);
+        let buffer: Buffer;
+        const dataUriPrefix = "data:application/pdf;base64,";
 
-        if (!response.ok) {
-            throw new RpcException(
-                new BadRequestException(
-                    "Không thể tải file hợp đồng để xác minh hash.",
-                ),
-            );
+        if (pdfUrl.startsWith(dataUriPrefix)) {
+            const encodedPdf = pdfUrl.slice(dataUriPrefix.length);
+            if (!encodedPdf || !/^[A-Za-z0-9+/]+={0,2}$/.test(encodedPdf)) {
+                throw new RpcException({
+                    statusCode: 400,
+                    message: "Dữ liệu PDF của hợp đồng không hợp lệ.",
+                });
+            }
+            buffer = Buffer.from(encodedPdf, "base64");
+        } else {
+            let host: string;
+            try {
+                host = new URL(pdfUrl).host;
+            } catch {
+                throw new RpcException({
+                    statusCode: 400,
+                    message: "Địa chỉ file hợp đồng không hợp lệ.",
+                });
+            }
+
+            let response: Response;
+            try {
+                response = await fetch(pdfUrl, {
+                    signal: AbortSignal.timeout(15_000),
+                });
+            } catch (error) {
+                const fetchError = error as Error & {
+                    cause?: { code?: string; message?: string };
+                };
+                this.logger.error(
+                    `Không tải được PDF từ host ${host}: ${fetchError.cause?.code ?? fetchError.cause?.message ?? fetchError.message}`,
+                );
+                throw new RpcException({
+                    statusCode: 503,
+                    message: "Không thể kết nối kho lưu trữ file hợp đồng để xác minh chữ ký.",
+                });
+            }
+
+            if (!response.ok) {
+                this.logger.warn(
+                    `Kho file trả HTTP ${response.status} khi tải PDF từ host ${host}.`,
+                );
+                throw new RpcException({
+                    statusCode: 503,
+                    message: "Không thể tải file hợp đồng để xác minh chữ ký.",
+                });
+            }
+
+            buffer = Buffer.from(await response.arrayBuffer());
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
         return createHash("sha256").update(buffer).digest("hex");
     }
 
@@ -542,20 +587,8 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             });
         }
 
-        // Lấy PDF thật từ storage
-        const response = await fetch(contractFile.pdfUrl);
-
-        if (!response.ok) {
-            throw new RpcException({
-                statusCode: 500,
-                message: "Không thể lấy file hợp đồng.",
-            });
-        }
-
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        // Hash lại file PDF hiện tại
-        const currentHash = createHash("sha256").update(buffer).digest("hex");
+        // Dùng chung cách đọc file và tính hash với luồng ký.
+        const currentHash = await this.computeFileHash(contractFile.pdfUrl);
 
         return {
             contractFileId: contractFile.id,

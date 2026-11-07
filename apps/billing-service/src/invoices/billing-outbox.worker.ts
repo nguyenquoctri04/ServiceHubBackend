@@ -1,7 +1,6 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { OutboxPollerService } from '@app/common';
+import { OutboxPollerService, RabbitMqEventBusService } from '@app/common';
 
 @Injectable()
 export class BillingOutboxWorker implements OnModuleInit, OnModuleDestroy {
@@ -12,7 +11,7 @@ export class BillingOutboxWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outboxPoller: OutboxPollerService,
-    @Inject('CONTRACT_SERVICE') private readonly brokerClient: ClientProxy,
+    private readonly eventBus: RabbitMqEventBusService,
   ) {}
 
   onModuleInit() {
@@ -20,7 +19,7 @@ export class BillingOutboxWorker implements OnModuleInit, OnModuleDestroy {
       void this.tick();
     }, 2000);
     this.timer.unref();
-    this.logger.log('BillingOutboxWorker đã khởi động (chu kỳ 2s/lần với SKIP LOCKED)');
+    this.logger.log('BillingOutboxWorker đã khởi động (chu kỳ 2s/lần với SKIP LOCKED & Topic Exchange)');
   }
 
   onModuleDestroy() {
@@ -33,7 +32,7 @@ export class BillingOutboxWorker implements OnModuleInit, OnModuleDestroy {
     if (this.isProcessing) return;
     this.isProcessing = true;
     try {
-      await this.outboxPoller.processPendingMessages(this.prisma, this.brokerClient, 50);
+      await this.outboxPoller.processPendingMessages(this.prisma, this.eventBus as any, 50);
     } catch (error: any) {
       this.logger.error(`Lỗi trong chu kỳ quét Outbox: ${error?.message || error}`);
     } finally {

@@ -428,6 +428,11 @@ export class PropertiesService {
 
         totalRooms: rooms.length,
 
+        rooms: rooms.map(room => ({
+          id: room.id,
+          status: room.status,
+        })),
+
         emptyRooms: rooms.filter(
           room => room.status === 'ACTIVE'
         ).length

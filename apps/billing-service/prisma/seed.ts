@@ -345,7 +345,8 @@ async function main() {
         const cId = contractId(extC);
         const pNum = 11 + ((extC - 121) % 16); // Provider 11 -> 26
         const custId = userId(101 + ((extC * 3) % 60));
-        const extPriceId = pNum === 26 ? servicePriceId(56) : servicePriceId(30 + ((pNum - 11) * 2) + 1);
+        const extPriceMap: Record<number, number> = { 11: 31, 12: 33, 13: 35, 14: 37, 15: 39, 16: 41, 17: 43, 18: 45, 19: 47, 20: 48, 21: 50, 22: 51, 23: 52, 24: 53, 25: 54, 26: 56 };
+        const extPriceId = servicePriceId(extPriceMap[pNum] || 31);
 
         for (let m = 0; m < 6; m++) {
             const invDate = new Date(now.getFullYear(), now.getMonth() - (5 - m), 10 + (extC % 15));
@@ -398,7 +399,7 @@ async function main() {
                 paymentInserts.push({
                     id: paymentId(paymentCounter++),
                     invoiceId: invId,
-                    paymentMethod: extC % 2 === 0 ? "VNPAY" : "ZALOPAY",
+                    paymentMethod: extC % 2 === 0 ? "TRANSFER" : "CASH",
                     paymentLinkId: `PAYLINK-${invId.substring(invId.length - 8)}`,
                     status: "SUCCESS" as PaymentStatus,
                     paidAt: paymentDate,

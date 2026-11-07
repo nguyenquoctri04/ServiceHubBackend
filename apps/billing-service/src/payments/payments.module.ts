@@ -5,8 +5,8 @@ import { PaymentsService } from './payments.service';
 import { CustomerPaymentsController } from './customer.payments.controller';
 import { CustomerPaymentsService } from './customer.payments.service';
 import { PayOSModule } from '../payos/payos.module';
-import { ClientsModule, Transport } from '@nestjs/microservices';
-import { parseRedisUrl } from '@app/common';
+import { ClientsModule } from '@nestjs/microservices';
+import { SERVICE_QUEUES, getRabbitMqClientOptions } from '@app/common';
 
 @Module({
   imports: [
@@ -16,10 +16,11 @@ import { parseRedisUrl } from '@app/common';
       {
         name: 'NOTIFICATION_SERVICE',
         imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.REDIS as const,
-          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
-        }),
+        useFactory: (configService: ConfigService) =>
+          getRabbitMqClientOptions(
+            SERVICE_QUEUES.NOTIFICATION,
+            configService.get<string>('RABBITMQ_URL'),
+          ),
         inject: [ConfigService],
       },
     ]),

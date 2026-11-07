@@ -198,7 +198,7 @@ async function main() {
     let fileCounter = 1;
     let cServiceCounter = 1;
     let cTermCounter = 1;
-    let periodCounter = 1;
+
 
     // --- A. 120 HỢP ĐỒNG HOUSING (Có roomId) ---
     // Phân bổ: 10 Provider BĐS x 12 hợp đồng
@@ -342,7 +342,7 @@ async function main() {
                     const pEnd = new Date(startYear, startMonth + 1, 0);
 
                     billingPeriodInserts.push({
-                        id: periodId(periodCounter++),
+                        id: periodId((currentContractNum - 1) * 12 + m + 1),
                         contractId: cId,
                         periodStart: pStart,
                         periodEnd: pEnd,
@@ -432,7 +432,14 @@ async function main() {
         }
 
         // Gắn ServicePrice từ catalog (External services có priceId từ 31 trở đi)
-        const extPriceId = pNum === 26 ? priceId(56) : priceId(30 + ((pNum - 11) * 2) + 1);
+        // Gắn ServicePrice từ catalog (External services có priceId từ 31 đến 57)
+        const extPriceMap: Record<number, number> = {
+            11: 31, 12: 33, 13: 35, 14: 37, 15: 39,
+            16: 41, 17: 43, 18: 45, 19: 47, 20: 48,
+            21: 50, 22: 51, 23: 52, 24: 53, 25: 54,
+            26: 56,
+        };
+        const extPriceId = priceId(extPriceMap[pNum] || 31);
         contractServiceInserts.push({
             id: contractService(cServiceCounter++),
             contractId: cId,
@@ -456,7 +463,7 @@ async function main() {
                 const pStart = new Date(2026, m, 1);
                 const pEnd = new Date(2026, m + 1, 0);
                 billingPeriodInserts.push({
-                    id: periodId(periodCounter++),
+                    id: periodId((currentContractNum - 1) * 12 + m + 1),
                     contractId: cId,
                     periodStart: pStart,
                     periodEnd: pEnd,
@@ -517,7 +524,9 @@ async function main() {
         const ruleIdx = ((c - 1) % 6) + 1;
         const ruleDbId = violationRuleId(ruleIdx);
         const relatedContractId = contract(c);
-        const pNum = ((c - 1) % 10) + 1;
+        const actualPNum = Math.floor((c - 1) / 12) + 1;
+        const servId = serviceId((actualPNum - 1) * 3 + 1);
+        const pNum = actualPNum;
         const provId = providerId(pNum);
 
         // Quy tắc 1, 2, 3: Target là CUSTOMER (Khách hàng vi phạm -> Provider hoặc Admin/Hệ thống phát hiện)
@@ -545,7 +554,7 @@ async function main() {
             contractId: relatedContractId,
             providerId: provId,
             reportedBy: repBy,
-            serviceId: serviceId(((c - 1) * 3) + 1),
+            serviceId: servId,
             status: caseStatus,
             description: `Ghi nhận vụ việc số ${c}: Vi phạm quy chuẩn an toàn và cam kết theo điều khoản hợp đồng.`,
             occurredAt: new Date(Date.now() - (c * 86400000 * 2)),

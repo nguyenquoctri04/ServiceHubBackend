@@ -129,7 +129,53 @@ export class ProviderCatalogController {
   @Get('properties')
   async getProperties(@CurrentUser() user: CurrentUserPayload) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId });
+    const properties = await this.proxy.send<any[]>(
+      this.catalogClient,
+      { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER },
+      { providerId },
+    );
+
+    if (!Array.isArray(properties) || properties.length === 0) {
+      return properties || [];
+    }
+
+    const allRoomIds = properties.flatMap((p: any) => (p.rooms || []).map((r: any) => r.id));
+    const activeContractsByRoomId = new Set<string>();
+
+    if (allRoomIds.length > 0) {
+      try {
+        const activeContracts = await this.proxy.send<any[]>(
+          this.contractClient,
+          { cmd: ProviderContractPatterns.FIND_ACTIVE_BY_ROOM_IDS },
+          { providerId, roomIds: allRoomIds },
+        );
+        if (Array.isArray(activeContracts)) {
+          activeContracts.forEach((c: any) => {
+            if (c.roomId && c.status === 'ACTIVE') {
+              activeContractsByRoomId.add(c.roomId);
+            }
+          });
+        }
+      } catch (err) {
+        // Fallback gracefully if contract-service is temporarily unavailable
+      }
+    }
+
+    return properties.map((p: any) => {
+      const rooms: Array<{ id: string; status: string }> = p.rooms || [];
+      const occupiedRooms = rooms.filter((r) => activeContractsByRoomId.has(r.id)).length;
+      const emptyRooms = rooms.filter(
+        (r) => r.status === 'ACTIVE' && !activeContractsByRoomId.has(r.id),
+      ).length;
+
+      const { rooms: _discard, ...rest } = p;
+      return {
+        ...rest,
+        totalRooms: rooms.length,
+        emptyRooms,
+        occupiedRooms,
+      };
+    });
   }
 
   @Post('properties')

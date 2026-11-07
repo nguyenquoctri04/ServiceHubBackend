@@ -3,9 +3,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import {
   ClientsModule,
   ClientsModuleAsyncOptions,
-  Transport,
 } from "@nestjs/microservices";
-import { parseRedisUrl } from "@app/common";
+import { SERVICE_QUEUES, getRabbitMqClientOptions } from "@app/common";
 
 import { CustomerContractsController } from "./customer.contracts.controller";
 import { CustomerContractsService } from "./customer.contracts.service";
@@ -15,22 +14,20 @@ import { ContractPdfRendererService } from "./contract-pdf-renderer.service";
 import { ContractRealtimeService } from "./contract-realtime.service";
 import { ContractOutboxWorker } from "./contract-outbox.worker";
 
-const microservices = [
-  "IDENTITY_SERVICE",
-  "CATALOG_SERVICE",
-  "NOTIFICATION_SERVICE",
-  "SIGNATURE_SERVICE",
-  "BILLING_SERVICE",
-];
+const microserviceQueueMap: Record<string, string> = {
+  IDENTITY_SERVICE: SERVICE_QUEUES.IDENTITY,
+  CATALOG_SERVICE: SERVICE_QUEUES.CATALOG,
+  NOTIFICATION_SERVICE: SERVICE_QUEUES.NOTIFICATION,
+  SIGNATURE_SERVICE: SERVICE_QUEUES.SIGNATURE,
+  BILLING_SERVICE: SERVICE_QUEUES.BILLING,
+};
 
-const clientProviders: ClientsModuleAsyncOptions = microservices.map(
-  (name) => ({
+const clientProviders: ClientsModuleAsyncOptions = Object.entries(microserviceQueueMap).map(
+  ([name, queue]) => ({
     name,
     imports: [ConfigModule],
-    useFactory: (configService: ConfigService) => ({
-      transport: Transport.REDIS,
-      options: parseRedisUrl(configService.get<string>("REDIS_BROKER_URL")),
-    }),
+    useFactory: (configService: ConfigService) =>
+      getRabbitMqClientOptions(queue, configService.get<string>("RABBITMQ_URL")),
     inject: [ConfigService],
   }),
 );

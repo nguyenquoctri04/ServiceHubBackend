@@ -661,11 +661,14 @@ async function main() {
                     const roomNumber = `P.${fIdx}${String(rIdx).padStart(2, "0")}`; // e.g., P.101, P.102
 
                     // Phân bổ trạng thái phòng thực tế: 85% ACTIVE, 10% MAINTENANCE, 5% INACTIVE
+                    const roomInProperty = ((totalRoomCount - 1) % 40) + 1;
                     let status: "ACTIVE" | "MAINTENANCE" | "INACTIVE" = "ACTIVE";
-                    if (totalRoomCount % 10 === 0) {
-                        status = "MAINTENANCE";
-                    } else if (totalRoomCount % 20 === 0) {
-                        status = "INACTIVE";
+                    if (roomInProperty > 12) {
+                        if (roomInProperty % 20 === 0) {
+                            status = "INACTIVE";
+                        } else if (roomInProperty % 10 === 0) {
+                            status = "MAINTENANCE";
+                        }
                     }
 
                     // Ghép loại phòng tương ứng

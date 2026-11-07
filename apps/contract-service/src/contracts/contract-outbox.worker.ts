@@ -1,11 +1,11 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
-import { ClientProxy } from '@nestjs/microservices';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { OutboxPollerService } from '@app/common';
+import { OutboxPollerService, RabbitMqEventBusService } from '@app/common';
 
 /**
  * Worker nền chạy chu kỳ quét Outbox table của contract-service
  * Áp dụng SELECT ... FOR UPDATE SKIP LOCKED chống concurrency race condition giữa các instance.
+ * Sử dụng RabbitMqEventBusService phát tán lên Topic Exchange 'servicehub.events'.
  */
 @Injectable()
 export class ContractOutboxWorker implements OnModuleInit, OnModuleDestroy {
@@ -16,7 +16,7 @@ export class ContractOutboxWorker implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outboxPoller: OutboxPollerService,
-    @Inject('BILLING_SERVICE') private readonly brokerClient: ClientProxy,
+    private readonly eventBus: RabbitMqEventBusService,
   ) {}
 
   onModuleInit() {
@@ -24,7 +24,7 @@ export class ContractOutboxWorker implements OnModuleInit, OnModuleDestroy {
       void this.tick();
     }, 2000);
     this.timer.unref();
-    this.logger.log('ContractOutboxWorker đã khởi động (chu kỳ 2s/lần với SKIP LOCKED)');
+    this.logger.log('ContractOutboxWorker đã khởi động (chu kỳ 2s/lần với SKIP LOCKED & Topic Exchange)');
   }
 
   onModuleDestroy() {
@@ -37,7 +37,7 @@ export class ContractOutboxWorker implements OnModuleInit, OnModuleDestroy {
     if (this.isProcessing) return;
     this.isProcessing = true;
     try {
-      await this.outboxPoller.processPendingMessages(this.prisma, this.brokerClient, 50);
+      await this.outboxPoller.processPendingMessages(this.prisma, this.eventBus as any, 50);
     } catch (error: any) {
       this.logger.error(`Lỗi trong chu kỳ quét Contract Outbox: ${error?.message || error}`);
     } finally {

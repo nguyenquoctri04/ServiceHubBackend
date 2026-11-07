@@ -38,3 +38,7 @@ export * from "./reliability/inbox.service";
 export * from "./reliability/outbox-poller.service";
 export * from "./reliability/retention.service";
 export * from "./reliability/reliability.module";
+export * from "./rabbitmq/rabbitmq-topology.service";
+export * from "./rabbitmq/rabbitmq-event-bus.service";
+export * from "./rabbitmq/shared-client-rmq";
+export * from "./utils/rabbitmq.config";

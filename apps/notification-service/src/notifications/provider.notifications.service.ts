@@ -53,12 +53,17 @@ export class ProviderNotificationsService {
     content: string;
     createdBy?: string | null;
   }) {
+    if (!data?.userId) {
+      this.logger.warn('Skipping createInAppNotification: userId is missing or empty');
+      return null;
+    }
+
     const notification = await this.prisma.notification.create({
       data: {
         userId: data.userId,
         createdBy: data.createdBy ?? null,
-        title: data.title,
-        content: data.content,
+        title: data.title || 'Thông báo mới',
+        content: data.content || '',
         channel: NotificationChannel.IN_APP,
         status: NotificationStatus.SENT,
         sendAt: new Date(),
@@ -146,5 +151,32 @@ export class ProviderNotificationsService {
       count: result.count,
       updated: result.count,
     };
+  }
+
+  async emitContractStatusChanged(data: {
+    contractId: string;
+    status: string;
+    recipientUserIds: string[];
+    occurredAt?: string;
+    eventId?: string;
+  }) {
+    const payload = {
+      eventId: data.eventId || (await import('crypto')).randomUUID(),
+      contractId: data.contractId,
+      status: data.status,
+      occurredAt: data.occurredAt || new Date().toISOString(),
+    };
+
+    for (const userId of data.recipientUserIds) {
+      if (userId) {
+        try {
+          this.gateway.emitContractStatusChanged(userId, payload);
+          this.logger.log(`Emitted contract.signature-status.changed.v1 to user=${userId} contract=${data.contractId} status=${data.status}`);
+        } catch (err: any) {
+          this.logger.warn(`Failed to emit contract socket to user ${userId}: ${err?.message || err}`);
+        }
+      }
+    }
+    return { success: true };
   }
 }

@@ -12,7 +12,7 @@ import {
     type Webhook,
     type WebhookData,
 } from "@payos/node";
-import { NotificationPatterns, RedisService } from "@app/common";
+import { NotificationPatterns, RedisService, OutboxService, BillingEventPatterns } from "@app/common";
 import { PrismaService } from "../prisma/prisma.service";
 import { PAYOS_CLIENT } from "../payos/payos.provider";
 import { firstValueFrom, timeout } from "rxjs";
@@ -41,10 +41,11 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         private readonly prisma: PrismaService,
         private readonly redis: RedisService,
         private readonly payOSService: PayOSService,
+        private readonly outboxService: OutboxService,
         @Inject(PAYOS_CLIENT) private readonly payOS: PayOS,
         @Inject("NOTIFICATION_SERVICE")
         private readonly notificationClient: ClientProxy,
-    ) {}
+    ) { }
 
     onModuleInit() {
         this.workerTimer = setInterval(() => {
@@ -141,7 +142,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
 
             // ========== Test xong bỏ comment chỗ này ==========
             if (
-                link.status === "PAID" 
+                link.status === "PAID"
                 // && link.amountPaid >= Number(invoice.total)
             ) {
                 const updated = await this.markInvoicePaid(
@@ -370,7 +371,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
 
             // ========== Test xong bỏ comment chỗ này ==========
             if (
-                link.status === "PAID" 
+                link.status === "PAID"
                 // && link.amountPaid >= Number(invoice.total)
             ) {
                 const updated = await this.markInvoicePaid(
@@ -475,7 +476,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         if (payment.invoice.status !== "PAID") {
             const invoiceUpdate = await tx.invoice.updateMany({
                 where: { id: invoiceId, status: { not: "PAID" } },
-                data: { status: "PAID", updatedAt: new Date() },
+                data: { status: "PAID", revision: { increment: 1 }, updatedAt: new Date() },
             });
             transitionedToPaid = invoiceUpdate.count === 1;
 
@@ -496,6 +497,27 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                 paidAt: payment.paidAt ?? paidAt,
             },
         });
+
+        // Ghi Outbox để kích hoạt Hợp đồng và phát tán sự kiện (Saga)
+        if (transitionedToPaid && payment.invoice.contractId) {
+            await this.outboxService.publishLocal(tx, {
+                eventType: BillingEventPatterns.INVOICE_PAID,
+                aggregateType: 'INVOICE',
+                aggregateId: invoiceId,
+                aggregateRevision: (payment.invoice.revision || 1) + 1,
+                orderingKey: payment.invoice.contractId,
+                payload: {
+                    invoiceId,
+                    invoiceNumber: payment.invoice.invoiceNumber,
+                    contractId: payment.invoice.contractId,
+                    customerId: payment.invoice.customerId,
+                    providerId: payment.invoice.providerId,
+                    amount: Number(payment.invoice.total),
+                    paymentMethod: 'TRANSFER',
+                    paidAt,
+                },
+            });
+        }
 
         // One credit record per invoice makes repeated webhooks/retries idempotent.
         // Keep its amount equal to PayOS's cumulative amount paid, not Invoice.total.

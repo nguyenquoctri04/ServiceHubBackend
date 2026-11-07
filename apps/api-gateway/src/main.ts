@@ -33,7 +33,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor(), new TraceIdInterceptor());
 
   await app.listen(process.env.PORT_API_GATEWAY || 3000);
-  console.log(`API Gateway is running on: ${await app.getUrl()}`);
+  console.log(`✅ API Gateway is running on: ${await app.getUrl()} (Ready)`);
 }
 
 bootstrap();

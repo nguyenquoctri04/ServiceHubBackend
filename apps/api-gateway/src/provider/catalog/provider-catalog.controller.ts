@@ -34,6 +34,7 @@ import {
   UpdateRoomTypeDto,
 } from '../dto/property.dto';
 import { CurrentUserPayload } from '../provider.controller';
+import { AuditEmitterService } from '../../shared/audit-emitter.service';
 
 @Controller('api/provider/catalog')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -45,6 +46,7 @@ export class ProviderCatalogController {
     private readonly proxy: GatewayProxyService,
     private readonly providerCache: ProviderCacheService,
     private readonly providerBffService: ProviderBffService,
+    private readonly auditEmitter: AuditEmitterService,
   ) {}
 
   @Get('services')
@@ -85,11 +87,20 @@ export class ProviderCatalogController {
     @Body() dto: CreateServiceDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.SERVICES_CREATE },
       { providerId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE',
+      entityType: 'Service',
+      entityId: (result as any)?.id,
+      description: `Tạo dịch vụ: ${dto.name}`,
+    });
+    return result;
   }
 
   @Put('services/:id')
@@ -99,17 +110,72 @@ export class ProviderCatalogController {
     @Body() dto: UpdateServiceDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.SERVICES_UPDATE },
       { providerId, serviceId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE',
+      entityType: 'Service',
+      entityId: serviceId,
+      description: `Cập nhật dịch vụ: ${dto.name || serviceId}`,
+    });
+    return result;
   }
 
   @Get('properties')
   async getProperties(@CurrentUser() user: CurrentUserPayload) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER }, { providerId });
+    const properties = await this.proxy.send<any[]>(
+      this.catalogClient,
+      { cmd: CatalogPatterns.PROPERTIES_FIND_BY_PROVIDER },
+      { providerId },
+    );
+
+    if (!Array.isArray(properties) || properties.length === 0) {
+      return properties || [];
+    }
+
+    const allRoomIds = properties.flatMap((p: any) => (p.rooms || []).map((r: any) => r.id));
+    const activeContractsByRoomId = new Set<string>();
+
+    if (allRoomIds.length > 0) {
+      try {
+        const activeContracts = await this.proxy.send<any[]>(
+          this.contractClient,
+          { cmd: ProviderContractPatterns.FIND_ACTIVE_BY_ROOM_IDS },
+          { providerId, roomIds: allRoomIds },
+        );
+        if (Array.isArray(activeContracts)) {
+          activeContracts.forEach((c: any) => {
+            if (c.roomId && c.status === 'ACTIVE') {
+              activeContractsByRoomId.add(c.roomId);
+            }
+          });
+        }
+      } catch (err) {
+        // Fallback gracefully if contract-service is temporarily unavailable
+      }
+    }
+
+    return properties.map((p: any) => {
+      const rooms: Array<{ id: string; status: string }> = p.rooms || [];
+      const occupiedRooms = rooms.filter((r) => activeContractsByRoomId.has(r.id)).length;
+      const emptyRooms = rooms.filter(
+        (r) => r.status === 'ACTIVE' && !activeContractsByRoomId.has(r.id),
+      ).length;
+
+      const { rooms: _discard, ...rest } = p;
+      return {
+        ...rest,
+        totalRooms: rooms.length,
+        emptyRooms,
+        occupiedRooms,
+      };
+    });
   }
 
   @Post('properties')
@@ -118,11 +184,20 @@ export class ProviderCatalogController {
     @Body() dto: CreatePropertyDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.PROPERTY_CREATE },
       { providerId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE_PROPERTY',
+      entityType: 'Property',
+      entityId: (result as any)?.id,
+      description: `Tạo bất động sản: ${dto.propertyName || (dto as any).name}`,
+    });
+    return result;
   }
 
   @Get('properties/:id')
@@ -138,13 +213,31 @@ export class ProviderCatalogController {
   @Put('properties/:id')
   async updateProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string, @Body() dto: UpdatePropertyDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_UPDATE }, { providerId, propertyId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_UPDATE }, { providerId, propertyId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE_PROPERTY',
+      entityType: 'Property',
+      entityId: propertyId,
+      description: `Cập nhật bất động sản: ${dto.propertyName || (dto as any).name || propertyId}`,
+    });
+    return result;
   }
 
   @Delete('properties/:id')
   async deleteProperty(@CurrentUser() user: CurrentUserPayload, @Param('id') propertyId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_DELETE }, { providerId, propertyId });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.PROPERTY_DELETE }, { providerId, propertyId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'DELETE_PROPERTY',
+      entityType: 'Property',
+      entityId: propertyId,
+      description: `Xóa bất động sản: ${propertyId}`,
+    });
+    return result;
   }
 
   @Post('properties/:id/blocks')
@@ -154,23 +247,50 @@ export class ProviderCatalogController {
     @Body() dto: CreateBlockDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.BLOCK_CREATE },
       { providerId, propertyId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE',
+      entityType: 'Block',
+      entityId: (result as any)?.id,
+      description: `Tạo tòa nhà/khối: ${dto.blockName || (dto as any).name}`,
+    });
+    return result;
   }
 
   @Delete('blocks/:id')
   async deleteBlock(@CurrentUser() user: CurrentUserPayload, @Param('id') blockId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.BLOCK_DELETE }, { providerId, blockId });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.BLOCK_DELETE }, { providerId, blockId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'DELETE',
+      entityType: 'Block',
+      entityId: blockId,
+      description: `Xóa tòa nhà/khối: ${blockId}`,
+    });
+    return result;
   }
 
   @Put('blocks/:id')
   async updateBlock(@CurrentUser() user: CurrentUserPayload, @Param('id') blockId: string, @Body() dto: UpdateBlockDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.BLOCK_UPDATE }, { providerId, blockId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.BLOCK_UPDATE }, { providerId, blockId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE',
+      entityType: 'Block',
+      entityId: blockId,
+      description: `Cập nhật tòa nhà/khối: ${dto.blockName || (dto as any).name || blockId}`,
+    });
+    return result;
   }
 
   @Post('blocks/:id/floors')
@@ -180,11 +300,20 @@ export class ProviderCatalogController {
     @Body() dto: CreateFloorDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.FLOOR_CREATE },
       { providerId, blockId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE',
+      entityType: 'Floor',
+      entityId: (result as any)?.id,
+      description: `Tạo tầng: ${dto.floorName || (dto as any).name}`,
+    });
+    return result;
   }
 
   @Put('floors/:id')
@@ -194,13 +323,31 @@ export class ProviderCatalogController {
     @Body() dto: UpdateFloorDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.FLOOR_UPDATE }, { providerId, floorId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.FLOOR_UPDATE }, { providerId, floorId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE',
+      entityType: 'Floor',
+      entityId: floorId,
+      description: `Cập nhật tầng: ${dto.floorName || (dto as any).name || floorId}`,
+    });
+    return result;
   }
 
   @Delete('floors/:id')
   async deleteFloor(@CurrentUser() user: CurrentUserPayload, @Param('id') floorId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.FLOOR_DELETE }, { providerId, floorId });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.FLOOR_DELETE }, { providerId, floorId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'DELETE',
+      entityType: 'Floor',
+      entityId: floorId,
+      description: `Xóa tầng: ${floorId}`,
+    });
+    return result;
   }
 
   @Post('properties/:id/room-types')
@@ -210,35 +357,80 @@ export class ProviderCatalogController {
     @Body() dto: CreateRoomTypeDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.catalogClient,
       { cmd: CatalogPatterns.ROOM_TYPE_CREATE },
       { providerId, propertyId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE',
+      entityType: 'RoomType',
+      entityId: (result as any)?.id,
+      description: `Tạo loại phòng: ${dto.typeName || (dto as any).name}`,
+    });
+    return result;
   }
 
   @Put('room-types/:id')
   async updateRoomType(@CurrentUser() user: CurrentUserPayload, @Param('id') roomTypeId: string, @Body() dto: UpdateRoomTypeDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_UPDATE }, { providerId, roomTypeId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_UPDATE }, { providerId, roomTypeId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE',
+      entityType: 'RoomType',
+      entityId: roomTypeId,
+      description: `Cập nhật loại phòng: ${dto.typeName || (dto as any).name || roomTypeId}`,
+    });
+    return result;
   }
 
   @Delete('room-types/:id')
   async deleteRoomType(@CurrentUser() user: CurrentUserPayload, @Param('id') roomTypeId: string) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_DELETE }, { providerId, roomTypeId });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_TYPE_DELETE }, { providerId, roomTypeId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'DELETE',
+      entityType: 'RoomType',
+      entityId: roomTypeId,
+      description: `Xóa loại phòng: ${roomTypeId}`,
+    });
+    return result;
   }
 
   @Post('rooms')
   async createRoom(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateRoomDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_CREATE }, { providerId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_CREATE }, { providerId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'CREATE_ROOM',
+      entityType: 'Room',
+      entityId: (result as any)?.id,
+      description: `Tạo phòng mới: ${dto.roomNumber}`,
+    });
+    return result;
   }
 
   @Put('rooms/:id')
   async updateRoom(@CurrentUser() user: CurrentUserPayload, @Param('id') roomId: string, @Body() dto: UpdateRoomDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_UPDATE }, { providerId, roomId, dto });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_UPDATE }, { providerId, roomId, dto });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'UPDATE_ROOM',
+      entityType: 'Room',
+      entityId: roomId,
+      description: `Cập nhật phòng: ${dto.roomNumber || roomId}`,
+    });
+    return result;
   }
 
   @Delete('rooms/:id')
@@ -252,7 +444,16 @@ export class ProviderCatalogController {
     if (reference?.hasReferences) {
       throw new BadRequestException('Không thể xóa phòng đang được hợp đồng tham chiếu.');
     }
-    return this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_DELETE }, { providerId, roomId });
+    const result = await this.proxy.send(this.catalogClient, { cmd: CatalogPatterns.ROOM_DELETE }, { providerId, roomId });
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'catalog-service',
+      action: 'DELETE_ROOM',
+      entityType: 'Room',
+      entityId: roomId,
+      description: `Xóa phòng: ${roomId}`,
+    });
+    return result;
   }
 
   @Get('rooms')

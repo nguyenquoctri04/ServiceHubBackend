@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { SecureRpcService } from '@app/common';
 import { AuditPatterns } from '@app/common/constants/audit.patterns';
 
 export interface EmitAuditPayload {
@@ -17,7 +18,8 @@ export interface EmitAuditPayload {
 
 /**
  * Thin wrapper around AUDIT_SERVICE client.
- * Uses .emit() (fire-and-forget) so it never blocks the main request.
+ * Uses .emit() with HMAC signature & replay protection so it never blocks the main request
+ * while guaranteeing zero-trust cryptographic authenticity.
  */
 @Injectable()
 export class AuditEmitterService {
@@ -26,13 +28,13 @@ export class AuditEmitterService {
   constructor(
     @Inject('AUDIT_SERVICE')
     private readonly auditClient: ClientProxy,
+    private readonly secureRpc: SecureRpcService,
   ) {}
 
   emit(payload: EmitAuditPayload): void {
     try {
-      // Use plain string pattern to match @EventPattern('audit.log') on audit-service.
-      // .emit() is fire-and-forget and does NOT go through HmacGuard (EventPattern context).
-      this.auditClient.emit('audit.log', payload);
+      // Use HMAC-signed emit via SecureRpcService
+      this.secureRpc.emit(this.auditClient, 'audit.log', payload);
     } catch (err: any) {
       // Never let audit errors bubble up to the caller
       this.logger.error(`Failed to emit audit event: ${err?.message}`, err?.stack);

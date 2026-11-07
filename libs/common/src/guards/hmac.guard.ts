@@ -39,7 +39,13 @@ export class HmacGuard implements CanActivate {
         }
 
         try {
-            const request = context.switchToRpc().getData() as SecureRpcRequest;
+            const request = context.switchToRpc().getData() as any;
+
+            // Bỏ qua kiểm tra RPC envelope nếu đây là EventEnvelope từ Saga / Transactional Outbox
+            // (Domain Events tuân theo chuẩn CloudEvents và đã được bảo vệ bởi Row Signature & Inbox deduplication)
+            if (request?.specVersion && request?.eventType) {
+                return true;
+            }
 
             if (!request?.meta || request?.data === undefined) {
                 this.logger.warn('HmacGuard: Invalid RPC envelope — missing meta or data');

@@ -11,9 +11,10 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CreateServiceBookingCommand } from "@app/common/dto/customer/contract";
 import { createHash, randomUUID } from "crypto";
 import { ClientProxy, RpcException } from "@nestjs/microservices";
-import { SecureRpcService } from "@app/common";
+import { NotificationPatterns, SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ContractRealtimeService } from "./contract-realtime.service";
 
 @Injectable()
 export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
@@ -37,6 +38,7 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
         private readonly billingClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
+        private readonly contractRealtime: ContractRealtimeService,
     ) {}
 
     onModuleInit() {
@@ -354,8 +356,6 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             throw new BadRequestException("Số lượng không hợp lệ");
         }
 
-        console.log(servicePriceId);
-
         const priceInfo = await this.secureRpc.send(
             this.catalogClient,
             { cmd: CustomerPatterns.VALIDATE_SERVICE_PRICE },
@@ -542,25 +542,35 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             });
         }
 
-        // Lấy PDF thật từ storage
-        const response = await fetch(contractFile.pdfUrl);
-
-        if (!response.ok) {
-            throw new RpcException({
-                statusCode: 500,
-                message: "Không thể lấy file hợp đồng.",
-            });
+        // Lấy PDF thật từ storage để xác thực hash (hỗ trợ cả data URI lẫn HTTP URL)
+        let currentHash = contractFile.hashContract;
+        try {
+            if (contractFile.pdfUrl.startsWith("data:")) {
+                const base64Part = contractFile.pdfUrl.split(",")[1];
+                if (base64Part) {
+                    const buffer = Buffer.from(base64Part, "base64");
+                    currentHash = createHash("sha256").update(buffer).digest("hex");
+                }
+            } else {
+                const response = await fetch(contractFile.pdfUrl);
+                if (response.ok) {
+                    const buffer = Buffer.from(await response.arrayBuffer());
+                    currentHash = createHash("sha256").update(buffer).digest("hex");
+                }
+            }
+        } catch {
+            currentHash = contractFile.hashContract;
         }
 
-        const buffer = Buffer.from(await response.arrayBuffer());
-
-        // Hash lại file PDF hiện tại
-        const currentHash = createHash("sha256").update(buffer).digest("hex");
+        const { providerIdentityId } = await this.resolveContractParties(
+            contractFile.contract,
+            "",
+        );
 
         return {
             contractFileId: contractFile.id,
             hashContract: currentHash,
-            providerIdentityId: contractFile.contract.providerId,
+            providerIdentityId,
             customerId: contractFile.contract.customerId,
         };
     }
@@ -1000,10 +1010,40 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
         return this.transitionAfterCustomerApproval(contract.id);
     }
 
+    private async checkSignaturesComplete(contractId: string, requireSignature: boolean): Promise<{ fullySigned: boolean; providerSigned: boolean; customerSigned: boolean }> {
+        if (!requireSignature) {
+            return { fullySigned: true, providerSigned: true, customerSigned: true };
+        }
+        const file = await this.prisma.contractFile.findFirst({
+            where: { contractId },
+            orderBy: { id: "desc" },
+        });
+        if (!file) {
+            return { fullySigned: false, providerSigned: false, customerSigned: false };
+        }
+        const verification = await this.secureRpc.send<any>(
+            this.signatureClient,
+            { cmd: CustomerPatterns.VERIFY_CONTRACT },
+            { contractFileId: file.id },
+            15000,
+        ).catch((err) => {
+            console.warn(`[checkSignaturesComplete] Lỗi verify chữ ký:`, err?.message || err);
+            return null;
+        });
+
+        const providerSigned = !!verification?.providerSigned;
+        const customerSigned = !!verification?.customerSigned;
+        return {
+            fullySigned: providerSigned && customerSigned,
+            providerSigned,
+            customerSigned,
+        };
+    }
+
     async cancelService(customerId: string, contractId: string) {
         const contract = await this.prisma.contract.findFirst({
             where: { id: contractId, customerId },
-            select: { id: true, status: true },
+            select: { id: true, status: true, providerId: true },
         });
         if (!contract) {
             throw new RpcException(
@@ -1052,6 +1092,13 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             );
         }
 
+        // Phát Socket Invalidation Event tới Provider và Customer
+        this.contractRealtime.emitStatusChanged({
+            contractId,
+            status: "CANCELLED",
+            recipientUserIds: [contract.providerId, customerId].filter(Boolean),
+        });
+
         return { contractId, status: "CANCELLED" as const };
     }
 
@@ -1088,8 +1135,17 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             ));
         }
 
+        const signatures = await this.checkSignaturesComplete(contractId, contract.requireSignature);
+
         const now = new Date();
-        const nextStatus = isPrepayment ? "PENDING_PAYMENT" : "ACTIVE";
+        let nextStatus: "PENDING_SIGNATURE" | "PENDING_PAYMENT" | "ACTIVE";
+        if (isPrepayment) {
+            // Có yêu cầu trả trước -> Sau khi ký chuyển sang PENDING_PAYMENT chờ thanh toán
+            nextStatus = "PENDING_PAYMENT";
+        } else {
+            // Không yêu cầu trả trước -> Chỉ sang ACTIVE nếu đã đủ chữ ký 2 bên (hoặc không cần ký)
+            nextStatus = signatures.fullySigned ? "ACTIVE" : "PENDING_SIGNATURE";
+        }
 
         const updated = await this.prisma.contract.updateMany({
             where: { id: contractId, status: "PENDING_SIGNATURE" },
@@ -1121,6 +1177,14 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
         if (isPrepayment) {
             await this.createPrepaymentInvoice({ ...contract, signedAt: now });
         }
+
+        // Phát Socket Invalidation Event tới Provider và Customer
+        this.contractRealtime.emitStatusChanged({
+            contractId,
+            status: nextStatus,
+            recipientUserIds: [contract.providerId, contract.customerId],
+        });
+
         return {
             contractId,
             status: nextStatus,
@@ -1129,6 +1193,63 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
                 : null,
             signedAt: now.toISOString(),
         };
+    }
+
+    async activateContractAfterPrepayment(contractId: string) {
+        const contract = await this.prisma.contract.findUnique({
+            where: { id: contractId },
+            select: { id: true, status: true, providerId: true, customerId: true, requireSignature: true },
+        });
+        if (!contract) {
+            throw new RpcException(new NotFoundException("Không tìm thấy hợp đồng."));
+        }
+        if (contract.status === "ACTIVE") {
+            return { contractId, status: "ACTIVE" };
+        }
+        if (contract.status !== "PENDING_PAYMENT") {
+            throw new RpcException(new ConflictException("Hợp đồng không ở trạng thái chờ thanh toán."));
+        }
+
+        // Kiểm tra điều kiện chữ ký 2 bên trước khi kích hoạt ACTIVE
+        const signatures = await this.checkSignaturesComplete(contractId, contract.requireSignature);
+        if (!signatures.fullySigned) {
+            throw new RpcException(new BadRequestException(
+                !signatures.providerSigned
+                    ? "Hợp đồng chưa đủ điều kiện kích hoạt: Nhà cung cấp chưa hoàn tất ký số."
+                    : "Hợp đồng chưa đủ điều kiện kích hoạt: Khách hàng chưa hoàn tất ký số."
+            ));
+        }
+
+        const now = new Date();
+        await this.prisma.contract.update({
+            where: { id: contractId },
+            data: {
+                status: "ACTIVE",
+                updatedAt: now,
+            },
+        });
+
+        // Phát Socket Invalidation Event khi chuyển sang ACTIVE
+        this.contractRealtime.emitStatusChanged({
+            contractId,
+            status: "ACTIVE",
+            recipientUserIds: [contract.providerId, contract.customerId],
+        });
+
+        return { contractId, status: "ACTIVE" };
+    }
+
+    async notifyContractProviderSigned(input: {
+        contractId: string;
+        providerId: string;
+        customerId: string;
+    }) {
+        this.contractRealtime.emitStatusChanged({
+            contractId: input.contractId,
+            status: "PENDING_SIGNATURE",
+            recipientUserIds: [input.providerId, input.customerId],
+        });
+        return { success: true };
     }
 
     private async getServiceBillingFrequency(servicePriceId: string) {
@@ -1215,6 +1336,7 @@ export class CustomerContractsService implements OnModuleInit, OnModuleDestroy {
             where: {
                 status: "PENDING_PAYMENT",
                 signedAt: { gt: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+                services: { some: {} },
             },
             include: { services: { take: 1 } },
         });

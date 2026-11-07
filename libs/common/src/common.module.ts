@@ -6,6 +6,8 @@ import { HmacService } from "./security/hmac.service";
 import { ReplayProtectionService } from "./security/replay-protection.service";
 import { RedisService } from "./utils/redis.service";
 import { HmacGuard } from "./guards/hmac.guard";
+import { RabbitMqTopologyService } from "./rabbitmq/rabbitmq-topology.service";
+import { RabbitMqEventBusService } from "./rabbitmq/rabbitmq-event-bus.service";
 
 import {
     SecureRpcService,
@@ -52,6 +54,8 @@ export class CommonModule {
                 },
 
                 SecureRpcService,
+                RabbitMqTopologyService,
+                RabbitMqEventBusService,
             ],
 
             exports: [
@@ -61,6 +65,8 @@ export class CommonModule {
                 HmacGuard,
                 RedisService,
                 ReplayProtectionService,
+                RabbitMqTopologyService,
+                RabbitMqEventBusService,
             ],
         };
     }

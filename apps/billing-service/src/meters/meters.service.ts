@@ -2,7 +2,6 @@ import { Injectable, Inject, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
 import { OcrService } from '../ocr/ocr.service';
-import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { Prisma, Meter } from '@prisma/client-billing';
 import { CatalogPatterns, ProviderContractPatterns, SecureRpcService } from '@app/common';
 import { ExcelRowDto } from './dto/meter.dto';
@@ -88,17 +87,12 @@ export class MetersService {
   }
 
   private async fetchValidationContext(providerId: string, data: { roomId?: string; contractId?: string; meterId: string }) {
-    // 1 RPC call to either Catalog or Contract based on which ID is provided
     let room = null;
     let contract = null;
 
     if (data.roomId) {
       try {
         const rooms = await this.secureRpc.send<any[]>(this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds: [data.roomId] });
-
-
-
-
         if (!rooms || rooms.length === 0) throw new RpcException(new NotFoundException('Room not found or unauthorized'));
         room = rooms[0];
       } catch (err) {
@@ -107,10 +101,6 @@ export class MetersService {
     } else if (data.contractId) {
       try {
         const contractsMap = await this.secureRpc.send<any>(this.contractClient, { cmd: ProviderContractPatterns.FIND_BY_IDS }, { providerId, contractIds: [data.contractId] });
-
-
-
-
         contract = contractsMap?.[data.contractId];
         if (!contract || contract.providerId !== providerId) throw new RpcException(new NotFoundException('Contract not found or unauthorized'));
       } catch (err) {
@@ -161,9 +151,6 @@ export class MetersService {
     ]);
     const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
 
-
-
-
     const results = rows.map(row => {
       let isValid = true;
       let errors = [];
@@ -193,9 +180,6 @@ export class MetersService {
     ]);
     const roomsMap = Object.fromEntries((rooms || []).map((r: any) => [r.id, r]));
 
-
-
-
     // 2. Fetch all meters internally
     const meterIds = [...new Set(rows.map(r => r.meterId).filter(Boolean))];
     const meters = await this.prisma.meter.findMany({
@@ -203,22 +187,31 @@ export class MetersService {
     });
     const metersMap = Object.fromEntries(meters.map(m => [m.id, m]));
 
-    // 3. Process each row with pre-fetched context (Partial Success)
-    const promises = rows.map(async row => {
-      if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
-      if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
-      if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) throw new Error(`Contract ${row.contractId} not found or unauthorized`);
+    // 3. Process each row with pre-fetched context in chunks of 50 to prevent connection pool exhaustion & DB lock contention
+    const CHUNK_SIZE = 50;
+    const results: PromiseSettledResult<any>[] = [];
 
-      const context = {
-        meter: metersMap[row.meterId],
-        room: row.roomId ? roomsMap[row.roomId] : null,
-        contract: row.contractId ? contractsMap[row.contractId] : null
-      };
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + CHUNK_SIZE);
+      const chunkPromises = chunk.map(async (row) => {
+        if (!metersMap[row.meterId]) throw new Error(`Meter ${row.meterId} not found`);
+        if (row.roomId && !roomsMap[row.roomId]) throw new Error(`Room ${row.roomId} not found or unauthorized`);
+        if (row.contractId && (!contractsMap?.[row.contractId] || contractsMap[row.contractId].providerId !== providerId)) {
+          throw new Error(`Contract ${row.contractId} not found or unauthorized`);
+        }
 
-      return this.createMeterReadingCore(providerId, row, recordedBy, 'EXCEL_IMPORT', context);
-    });
+        const context = {
+          meter: metersMap[row.meterId],
+          room: row.roomId ? roomsMap[row.roomId] : null,
+          contract: row.contractId ? contractsMap[row.contractId] : null,
+        };
 
-    const results = await Promise.allSettled(promises);
+        return this.createMeterReadingCore(providerId, row, recordedBy, 'EXCEL_IMPORT', context);
+      });
+
+      const chunkResults = await Promise.allSettled(chunkPromises);
+      results.push(...chunkResults);
+    }
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
     const failed = results
@@ -269,9 +262,39 @@ export class MetersService {
   }
 
   async getMeterDashboardStats(providerId: string) {
-    const totalMeters = await this.prisma.meter.count({
-      where: { providerId, status: 'ACTIVE' }
+    const activeMeters = await this.prisma.meter.findMany({
+      where: { providerId, status: 'ACTIVE' },
+      select: { id: true, serviceId: true, unit: true },
     });
+
+    const distinctMetersMap = new Map<string, typeof activeMeters[number]>();
+    for (const m of activeMeters) {
+      const key = m.serviceId || m.unit;
+      if (!distinctMetersMap.has(key)) {
+        distinctMetersMap.set(key, m);
+      }
+    }
+    const metersPerRoom = distinctMetersMap.size || (activeMeters.length > 0 ? activeMeters.length : 2);
+
+    let activeRoomsCount = 0;
+    try {
+      const contractStats = await this.secureRpc.send<{ activeContracts?: number }>(
+        this.contractClient,
+        { cmd: ProviderContractPatterns.DASHBOARD_STATS },
+        { providerId },
+        5000,
+      );
+      activeRoomsCount = contractStats?.activeContracts || 0;
+    } catch {
+      const previousRooms = await this.prisma.meterReading.findMany({
+        where: { meter: { providerId }, status: 'VALID' },
+        distinct: ['roomId'],
+        select: { roomId: true },
+      });
+      activeRoomsCount = previousRooms.filter((r) => Boolean(r.roomId)).length;
+    }
+
+    const totalMeters = activeRoomsCount > 0 ? activeRoomsCount * metersPerRoom : activeMeters.length;
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -281,17 +304,14 @@ export class MetersService {
       where: {
         meter: { providerId },
         createdAt: { gte: startOfMonth, lte: endOfMonth },
-        status: 'VALID'
+        status: 'VALID',
       },
       distinct: ['roomId', 'meterId'],
-      select: { id: true }
+      select: { id: true },
     });
 
+    const recordedMeters = totalMeters > 0 ? Math.min(readings.length, totalMeters) : readings.length;
 
-
-
-
-
-    return { totalMeters, recordedMeters: readings.length };
+    return { totalMeters, recordedMeters };
   }
 }

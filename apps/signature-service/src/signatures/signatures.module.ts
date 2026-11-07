@@ -1,24 +1,23 @@
 import { Module } from '@nestjs/common';
 import { SignaturesController } from './signatures.controller';
 import { SignaturesService } from './signatures.service';
-import { ClientsModule, ClientsModuleAsyncOptions, Transport } from '@nestjs/microservices';
+import { ClientsModule, ClientsModuleAsyncOptions } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { parseRedisUrl } from '@app/common';
+import { SERVICE_QUEUES, getRabbitMqClientOptions } from '@app/common';
 import { KeysModule } from '../keys/keys.module';
 
-const microservices = ["CONTRACT_SERVICE"];
-
-const clientProviders: ClientsModuleAsyncOptions = microservices.map(
-  (name) => ({
-    name,
+const clientProviders: ClientsModuleAsyncOptions = [
+  {
+    name: 'CONTRACT_SERVICE',
     imports: [ConfigModule],
-    useFactory: (configService: ConfigService) => ({
-      transport: Transport.REDIS,
-      options: parseRedisUrl(configService.get<string>("REDIS_BROKER_URL")),
-    }),
+    useFactory: (configService: ConfigService) =>
+      getRabbitMqClientOptions(
+        SERVICE_QUEUES.CONTRACT,
+        configService.get<string>('RABBITMQ_URL'),
+      ),
     inject: [ConfigService],
-  }),
-);
+  },
+];
 
 @Module({
   imports: [

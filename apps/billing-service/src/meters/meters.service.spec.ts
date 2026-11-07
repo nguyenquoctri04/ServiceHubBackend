@@ -48,3 +48,34 @@ describe('MetersService.findGroupedMeters', () => {
     expect(prisma.meterReading.findMany).not.toHaveBeenCalled();
   });
 });
+
+describe('MetersService.getMeterDashboardStats', () => {
+  it('calculates totalMeters based on activeContracts and distinct meters per room', async () => {
+    const prisma = {
+      meter: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'meter-1', serviceId: 'service-elec', unit: 'kWh' },
+          { id: 'meter-2', serviceId: 'service-water', unit: 'm³' },
+        ]),
+      },
+      meterReading: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'r1' },
+          { id: 'r2' },
+          { id: 'r3' },
+          { id: 'r4' },
+        ]),
+      },
+    };
+    const secureRpc = {
+      send: jest.fn().mockResolvedValue({ activeContracts: 6 }),
+    };
+    const service = new MetersService(prisma as any, {} as any, {} as any, {} as any, secureRpc as any);
+
+    const stats = await service.getMeterDashboardStats('provider-1');
+    expect(stats).toEqual({
+      totalMeters: 12, // 6 active contracts * 2 distinct meters
+      recordedMeters: 4,
+    });
+  });
+});

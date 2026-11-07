@@ -32,7 +32,7 @@ export class SignaturesService {
         private readonly contractClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
-    ) {}
+    ) { }
 
     async signContract(input: {
         identityId: string;
@@ -91,10 +91,10 @@ export class SignaturesService {
                 contractFileId,
                 gnupgKey: { is: { identityId } },
             },
-            select: { id: true },
+            select: { id: true, signatureHash: true },
         });
 
-        if (existing) {
+        if (existing && existing.signatureHash === hashContract) {
             throw new RpcException({
                 statusCode: 400,
                 message: "Bạn đã ký file hợp đồng này rồi.",
@@ -151,15 +151,25 @@ export class SignaturesService {
 
             const signatureFile = await readFile(sigFile, "utf8");
 
-            const signature = await this.prisma.contractSignature.create({
-                data: {
-                    contractFileId,
-                    gnupgKeyId,
-                    signatureFile,
-                    signatureHash: hashContract,
-                    signedAt: new Date(),
-                },
-            });
+            const signature = existing
+                ? await this.prisma.contractSignature.update({
+                    where: { id: existing.id },
+                    data: {
+                        gnupgKeyId,
+                        signatureFile,
+                        signatureHash: hashContract,
+                        signedAt: new Date(),
+                    },
+                })
+                : await this.prisma.contractSignature.create({
+                    data: {
+                        contractFileId,
+                        gnupgKeyId,
+                        signatureFile,
+                        signatureHash: hashContract,
+                        signedAt: new Date(),
+                    },
+                });
 
             // Customer ký thành công -> activate contract
             if (!isProviderSigning) {
@@ -172,6 +182,26 @@ export class SignaturesService {
                         contractFileId,
                     },
                 );
+            } else {
+                // Provider ký thành công -> thông báo cho contract-service để phát socket realtime
+                void this.secureRpc
+                    .send(
+                        this.contractClient,
+                        {
+                            cmd: CustomerPatterns.NOTIFY_CONTRACT_PROVIDER_SIGNED,
+                        },
+                        {
+                            contractId: fileInfo.contractId,
+                            providerId: fileInfo.providerId,
+                            customerId: fileInfo.customerId,
+                        },
+                    )
+                    .catch((err) => {
+                        console.warn(
+                            `[SignaturesService] Không thể thông báo provider đã ký cho hợp đồng ${fileInfo.contractId}:`,
+                            err?.message || err,
+                        );
+                    });
             }
 
             return {
@@ -217,8 +247,8 @@ export class SignaturesService {
 
         const providerSignature = providerKey
             ? await this.prisma.contractSignature.findFirst({
-                  where: { contractFileId, gnupgKeyId: providerKey.id },
-              })
+                where: { contractFileId, gnupgKeyId: providerKey.id },
+            })
             : null;
 
         if (!providerSignature) {
@@ -404,8 +434,13 @@ export class SignaturesService {
             (signature) => signature.valid && signature.hashValid,
         );
 
-        const providerSigned = !!providerSignature;
-        const customerSigned = customerSignatures.length > 0;
+        const providerSigned =
+            !!providerSignature &&
+            providerSignature.valid &&
+            providerSignature.hashValid;
+        const customerSigned =
+            customerSignatures.length > 0 &&
+            customerSignatures.every((s) => s.valid && s.hashValid);
 
         return {
             contractFileId,
@@ -421,12 +456,12 @@ export class SignaturesService {
             customerSigned,
             provider: providerSignature
                 ? {
-                      signatureId: providerSignature.signatureId,
-                      fingerprint: providerSignature.fingerprint,
-                      signedAt: providerSignature.signedAt,
-                      valid: providerSignature.valid,
-                      hashValid: providerSignature.hashValid,
-                  }
+                    signatureId: providerSignature.signatureId,
+                    fingerprint: providerSignature.fingerprint,
+                    signedAt: providerSignature.signedAt,
+                    valid: providerSignature.valid,
+                    hashValid: providerSignature.hashValid,
+                }
                 : null,
             customer: customerSignatures.map((signature) => ({
                 signatureId: signature.signatureId,

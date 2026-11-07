@@ -17,6 +17,7 @@ model Contract {
   startDate        DateTime          @map("start_date") @db.Date
   endDate          DateTime?         @map("end_date") @db.Date
   status           ContractStatus
+  revision         Int               @default(1)
   requireSignature Boolean           @default(false) @map("require_signature")
   signedAt         DateTime?         @map("signed_at")
   createdAt        DateTime          @map("created_at")
@@ -278,4 +279,142 @@ enum AppealStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+// =========================================================================
+// RELIABILITY TABLES (Transactional Outbox, Inbox, Idempotency)
+// =========================================================================
+
+/// Bảng Transactional Outbox lưu trữ các sự kiện nghiệp vụ phát sinh từ Contract Service.
+/// Đảm bảo nguyên tắc: Mutation nghiệp vụ và Lưu sự kiện nằm trong cùng một Local Transaction.
+model OutboxMessage {
+  /// Khóa chính định danh duy nhất của sự kiện (UUID v4)
+  id                String    @id @default(uuid()) @db.Uuid
+
+  /// Phiên bản của chuẩn CloudEvents (mặc định "1.0")
+  specVersion       String    @default("1.0") @map("spec_version") @db.VarChar(10)
+
+  /// Tên loại sự kiện có phân cấp phiên bản (VD: "contract.sent_for_signing.v1", "contract.activated.v1")
+  eventType         String    @map("event_type") @db.VarChar(100)
+
+  /// Tên dịch vụ phát sinh sự kiện (mặc định "servicehub.contract")
+  source            String    @default("servicehub.contract") @db.VarChar(100)
+
+  /// Khóa định danh của đối tượng chính (thường là contractId)
+  subject           String    @db.VarChar(100)
+
+  /// Khóa gom nhóm tuần tự (FIFO) nhằm đảm bảo các event của cùng một hợp đồng không bị xử lý lộn xộn
+  orderingKey       String    @map("ordering_key") @db.VarChar(100)
+
+  /// Loại đối tượng nghiệp vụ (mặc định "CONTRACT")
+  aggregateType     String    @default("CONTRACT") @map("aggregate_type") @db.VarChar(50)
+
+  /// Khóa chính ID của đối tượng nghiệp vụ (contractId)
+  aggregateId       String    @map("aggregate_id") @db.Uuid
+
+  /// Phiên bản của hợp đồng tại thời điểm phát sinh sự kiện (phục vụ Optimistic Locking)
+  aggregateRevision Int       @default(1) @map("aggregate_revision")
+
+  /// Dữ liệu chi tiết của sự kiện dạng JSONB (chỉ chứa minimal facts, không chứa secret/PII)
+  payload           Json      @db.JsonB
+
+  /// Chữ ký HMAC của dòng dữ liệu nhằm chống Insider Threat (Dev/DBA chèn bản ghi giả mạo qua SQL)
+  rowSignature      String?   @map("row_signature") @db.VarChar(128)
+
+  /// Trạng thái xử lý: PENDING (chờ phát), PUBLISHED (đã gửi), DEAD_LETTER (lỗi quá 5 lần), TAMPERED (bị sửa trộm)
+  status            String    @default("PENDING") @db.VarChar(20)
+
+  /// Số lần đã thử phát lại sự kiện qua Message Broker
+  attemptCount      Int       @default(0) @map("attempt_count")
+
+  /// Số lần thử lại tối đa trước khi đưa vào Dead Letter (mặc định 5 lần)
+  maxAttempts       Int       @default(5) @map("max_attempts")
+
+  /// Thời điểm kế tiếp cho phép worker quét và thử lại (tính theo Exponential Backoff)
+  nextAttemptAt     DateTime  @default(now()) @map("next_attempt_at")
+
+  /// Mã lỗi gần nhất nếu việc phát tin thất bại
+  lastErrorCode     String?   @map("last_error_code") @db.VarChar(100)
+
+  /// Chi tiết thông điệp lỗi kỹ thuật để lập trình viên điều tra
+  lastErrorMessage  String?   @map("last_error_message") @db.Text
+
+  /// Mã định danh truy vết phân tán xuyên suốt các microservice (Distributed Tracing ID)
+  correlationId     String?   @map("correlation_id") @db.Uuid
+
+  /// Thời điểm sự kiện thực tế phát sinh trong nghiệp vụ
+  occurredAt        DateTime  @default(now()) @map("occurred_at")
+
+  /// Thời điểm sự kiện đã được chuyển giao thành công sang Message Broker
+  publishedAt       DateTime? @map("published_at")
+
+  @@index([status, nextAttemptAt, occurredAt], name: "idx_outbox_polling")
+  @@index([aggregateType, aggregateId], name: "idx_outbox_aggregate")
+  @@unique([eventType, aggregateId, aggregateRevision], name: "uq_outbox_event_revision")
+  @@map("outbox_message")
+}
+
+/// Bảng Idempotent Inbox dùng để khử trùng lặp sự kiện nhận được từ các service khác (VD: billing.invoice_paid.v1).
+model InboxMessage {
+  /// Tên định danh của Consumer tiếp nhận (VD: "contract-invoice-paid-consumer")
+  consumerName      String    @map("consumer_name") @db.VarChar(100)
+
+  /// Khóa định danh của sự kiện nhận được (lấy từ OutboxMessage.id của nguồn phát)
+  eventId           String    @map("event_id") @db.Uuid
+
+  /// Tên loại sự kiện đã nhận (VD: "billing.invoice_paid.v1")
+  eventType         String    @map("event_type") @db.VarChar(100)
+
+  /// Tên dịch vụ nguồn phát sinh (VD: "servicehub.billing")
+  producer          String    @db.VarChar(100)
+
+  /// Khóa gom nhóm tuần tự nhận từ nguồn phát
+  orderingKey       String?   @map("ordering_key") @db.VarChar(100)
+
+  /// Mã băm SHA-256 của payload nhận được dùng để đối soát chống can thiệp trên đường truyền
+  payloadHash       String?   @map("payload_hash") @db.VarChar(64)
+
+  /// Trạng thái xử lý: PROCESSING (đang chạy), PROCESSED (thành công), FAILED (thất bại)
+  status            String    @default("PROCESSED") @db.VarChar(20)
+
+  /// Thời điểm Consumer nhận được tin nhắn từ Message Broker
+  receivedAt        DateTime  @default(now()) @map("received_at")
+
+  /// Thời điểm Consumer hoàn tất việc cập nhật nghiệp vụ
+  processedAt       DateTime? @map("processed_at")
+
+  @@id([consumerName, eventId])
+  @@index([orderingKey])
+  @@map("inbox_message")
+}
+
+/// Bảng API Idempotency Record dùng để chặn trùng lặp Request từ Client hoặc Webhook.
+model IdempotencyRecord {
+  /// Phạm vi áp dụng của khóa (VD: "CONTRACT_SEND", "CONTRACT_CANCEL")
+  scope             String    @db.VarChar(50)
+
+  /// Khóa định danh duy nhất gửi qua Header X-Idempotency-Key
+  key               String    @db.VarChar(128)
+
+  /// ID của người dùng thực hiện thao tác
+  actorId           String?   @map("actor_id") @db.Uuid
+
+  /// Mã SHA-256 băm toàn bộ Request Body nhằm phát hiện request trùng Key nhưng khác nội dung
+  requestHash       String    @map("request_hash") @db.VarChar(64)
+
+  /// Trạng thái: PROCESSING (đang xử lý), COMPLETED (thành công), FAILED (thất bại)
+  status            String    @db.VarChar(20)
+
+  /// Bản chụp kết quả phản hồi của lần chạy đầu tiên để trả lại ngay nếu có request gửi trùng
+  responseSnapshot  Json?     @map("response_snapshot") @db.JsonB
+
+  /// Thời điểm tạo bản ghi
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  /// Thời điểm hết hạn của bản ghi Idempotency (thường sau 24h)
+  expiresAt         DateTime  @map("expires_at")
+
+  @@id([scope, key])
+  @@index([expiresAt])
+  @@map("idempotency_record")
 }

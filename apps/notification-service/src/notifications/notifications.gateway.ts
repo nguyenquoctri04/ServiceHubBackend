@@ -13,6 +13,7 @@ type SocketUser = {
   sub: string;
   email?: string;
   role?: string;
+  providerId?: string;
 };
 
 @WebSocketGateway({
@@ -46,11 +47,15 @@ export class NotificationsGateway
       client.data.user = user;
       await client.join(this.getUserRoom(user.sub));
 
+      if (user.providerId) {
+        await client.join(this.getUserRoom(user.providerId));
+      }
+
       if (user.role) {
         await client.join(`role:${user.role}`);
       }
 
-      this.logger.log(`Socket connected: ${client.id} user=${user.sub}`);
+      this.logger.log(`Socket connected: ${client.id} user=${user.sub} provider=${user.providerId || "none"}`);
     } catch (error: any) {
       this.logger.warn(`Socket rejected: ${client.id} - Reason: ${error?.message || error}`);
       client.disconnect(true);
@@ -60,6 +65,12 @@ export class NotificationsGateway
   handleDisconnect(@ConnectedSocket() client: Socket) {
     const userId = client.data?.user?.sub;
     this.logger.log(`Socket disconnected: ${client.id} user=${userId || "unknown"}`);
+  }
+
+  emitContractStatusChanged(userId: string, payload: unknown) {
+    this.server
+      .to(this.getUserRoom(userId))
+      .emit("contract.signature-status.changed.v1", payload);
   }
 
   emitNewNotification(userId: string, notification: unknown) {

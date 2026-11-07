@@ -6,6 +6,7 @@ import {
 } from "@app/common/dto/customer/signature";
 import { Inject, Injectable } from "@nestjs/common";
 import { ClientProxy } from "@nestjs/microservices";
+import { AuditEmitterService } from "../../../shared/audit-emitter.service";
 
 @Injectable()
 export class CustomerKeysService {
@@ -17,6 +18,7 @@ export class CustomerKeysService {
         private readonly identityClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
+        private readonly auditEmitter: AuditEmitterService,
     ) {}
 
     async createKey(
@@ -35,7 +37,7 @@ export class CustomerKeysService {
         );
 
         // Tạo signature key
-        return this.secureRpc.send(
+        const result = await this.secureRpc.send(
             this.signatureClient,
             {
                 cmd: CustomerPatterns.CREATE_SIGNATURE,
@@ -48,5 +50,16 @@ export class CustomerKeysService {
                 expiresIn: dto.expiresIn,
             },
         );
+
+        this.auditEmitter.emit({
+            userId: identityId,
+            serviceName: 'signature-service',
+            action: 'CREATE',
+            entityType: 'SignatureKey',
+            entityId: (result as any)?.id,
+            description: `Khởi tạo cặp khóa chữ ký số điện tử cho ${identity.name || identity.email || identityId}`,
+        });
+
+        return result;
     }
 }

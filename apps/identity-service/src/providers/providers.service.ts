@@ -27,7 +27,9 @@ export class ProvidersService {
     const provider = await this.prisma.provider.findFirst({
       where: { identityId, ...(providerId ? { id: providerId } : {}) },
       include: { 
-        legalDocuments: true,
+        legalDocuments: {
+          orderBy: { createdAt: 'desc' },
+        },
         identity: {
           select: {
             email: true,
@@ -104,7 +106,11 @@ export class ProvidersService {
         nameBank: dto.nameBank,
         updatedAt: new Date(),
       },
-      include: { legalDocuments: true },
+      include: {
+        legalDocuments: {
+          orderBy: { createdAt: 'desc' },
+        },
+      },
     });
 
     return updated;

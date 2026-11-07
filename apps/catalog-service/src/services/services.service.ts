@@ -1,12 +1,12 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ClientProxy, RpcException } from '@nestjs/microservices';
+import { Injectable, Logger } from '@nestjs/common';
+import { RpcException } from '@nestjs/microservices';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { Prisma } from '@prisma/client-catalog';
-import { SecureRpcService } from '@app/common';
+
 import { ServiceQueryDto } from './dto/service-query.dto';
 
 export interface ProviderInfo {
@@ -39,8 +39,8 @@ export class ServicesService {
     private readonly prisma: PrismaService,
     private readonly locationService: LocationService,
     private readonly configService: ConfigService,
-    @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
-    private readonly secureRpc: SecureRpcService,
+
+
   ) {}
 
   async createService(providerId: string, dto: CreateServiceDto) {

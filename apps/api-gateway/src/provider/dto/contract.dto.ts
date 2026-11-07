@@ -66,6 +66,7 @@ export class CreateViolationDto {
   @IsUUID() contractId: string;
   @IsString() @MaxLength(1000) description: string;
   @IsString() @IsOptional() @MaxLength(100) violationType?: string;
+  @IsArray() @IsString({ each: true }) @IsOptional() evidenceUrls?: string[];
 }
 
 export class BlockCustomerDto {
@@ -79,6 +80,9 @@ export class RestrictionQueryDto {
 export class ViolationQueryDto {
   @IsIn(['REPORTED', 'REJECTED', 'RESOLVED', 'CANCELLED']) @IsOptional()
   status?: 'REPORTED' | 'REJECTED' | 'RESOLVED' | 'CANCELLED';
+
+  @IsIn(['REPORTED_BY_ME', 'REPORTED_AGAINST_ME']) @IsOptional()
+  type?: 'REPORTED_BY_ME' | 'REPORTED_AGAINST_ME';
 }
 
 export class CreateViolationAppealDto {
@@ -92,6 +96,7 @@ export class ViolationActionDto {
   @IsString() @MaxLength(2000) description: string;
   @IsBoolean() resolveViolation: boolean;
   @IsBoolean() @IsOptional() createRestriction?: boolean;
+  @IsNumber() @IsOptional() amount?: number;
 }
 
 export class ContractQueryDto {

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ClientsModule, Transport } from '@nestjs/microservices';
-import { parseRedisUrl } from '@app/common';
+import { ClientsModule } from '@nestjs/microservices';
+import { SERVICE_QUEUES, getRabbitMqClientOptions } from '@app/common';
 import { ViolationsController } from './violations.controller';
 import { ViolationsService } from './violations.service';
 import { CustomerViolationsController } from './customer.violations.controller';
@@ -13,19 +13,21 @@ import { CustomerViolationsService } from './customer.violations.service';
       {
         name: 'NOTIFICATION_SERVICE',
         imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.REDIS,
-          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
-        }),
+        useFactory: (configService: ConfigService) =>
+          getRabbitMqClientOptions(
+            SERVICE_QUEUES.NOTIFICATION,
+            configService.get<string>('RABBITMQ_URL'),
+          ),
         inject: [ConfigService],
       },
       {
         name: 'CATALOG_SERVICE',
         imports: [ConfigModule],
-        useFactory: (configService: ConfigService) => ({
-          transport: Transport.REDIS,
-          options: parseRedisUrl(configService.get<string>('REDIS_BROKER_URL')),
-        }),
+        useFactory: (configService: ConfigService) =>
+          getRabbitMqClientOptions(
+            SERVICE_QUEUES.CATALOG,
+            configService.get<string>('RABBITMQ_URL'),
+          ),
         inject: [ConfigService],
       },
     ]),

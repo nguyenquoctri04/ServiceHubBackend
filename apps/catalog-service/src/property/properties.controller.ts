@@ -1,9 +1,10 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, EventPattern, Payload } from '@nestjs/microservices';
 import { PropertiesService } from './properties.service';
-import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
-import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
+
+
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
+import { ContractEventPatterns, EventEnvelope } from '@app/common';
 
 @Controller()
 export class PropertiesController {
@@ -187,5 +188,20 @@ export class PropertiesController {
     @Payload() data: { providerId: string; propertyId: string },
   ) {
     return this.propertiesService.getRoomTypes(data.providerId, data.propertyId);
+  }
+
+  @EventPattern(ContractEventPatterns.ACTIVATED)
+  async handleContractActivated(@Payload() envelope: EventEnvelope<any>) {
+    await this.propertiesService.handleContractActivatedEvent(envelope);
+  }
+
+  @EventPattern(ContractEventPatterns.CANCELLED)
+  async handleContractCancelled(@Payload() envelope: EventEnvelope<any>) {
+    await this.propertiesService.handleContractCancelledOrTerminatedEvent(envelope);
+  }
+
+  @EventPattern(ContractEventPatterns.TERMINATED)
+  async handleContractTerminated(@Payload() envelope: EventEnvelope<any>) {
+    await this.propertiesService.handleContractCancelledOrTerminatedEvent(envelope);
   }
 }

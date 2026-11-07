@@ -1,8 +1,9 @@
 import { Controller } from '@nestjs/common';
-import { MessagePattern, Payload } from '@nestjs/microservices';
+import { MessagePattern, EventPattern, Payload } from '@nestjs/microservices';
 import { ProviderContractsService, CreateContractPayload, UpdateContractPayload } from './provider.contracts.service';
 import { ProviderContractPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
+import { BillingEventPatterns, EventEnvelope } from '@app/common';
 
 @Controller()
 export class ProviderContractsController {
@@ -127,5 +128,10 @@ export class ProviderContractsController {
   @MessagePattern({ cmd: ProviderContractPatterns.RECENT })
   async getRecentContracts(@Payload() data: { providerId: string }) {
     return this.providerContractsService.getRecentContracts(data.providerId);
+  }
+
+  @EventPattern(BillingEventPatterns.INVOICE_PAID)
+  async handleInvoicePaid(@Payload() envelope: EventEnvelope<any>) {
+    await this.providerContractsService.handleInvoicePaidEvent(envelope);
   }
 }

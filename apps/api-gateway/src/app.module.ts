@@ -7,7 +7,12 @@ import {
   ClientsModuleAsyncOptions,
 } from "@nestjs/microservices";
 import { ThrottlerGuard } from "@nestjs/throttler";
-import { CommonModule, RateLimitModule, parseRedisUrl } from "@app/common";
+import {
+  CommonModule,
+  RateLimitModule,
+  SERVICE_QUEUES,
+  getRabbitMqClientOptions,
+} from "@app/common";
 import { AuthModule } from "./auth/auth.module";
 import { ProxyModule } from "./proxy/proxy.module";
 import { ProviderModule } from "./provider/provider.module";
@@ -17,24 +22,22 @@ import { GatewayNotificationsModule } from "./notifications/notifications.module
 import { AdminModule } from "./admin/admin.module";
 import { SharedModule } from "./shared/shared.module";
 
-const microservices = [
-  "IDENTITY_SERVICE",
-  "CATALOG_SERVICE",
-  "CONTRACT_SERVICE",
-  "SIGNATURE_SERVICE",
-  "BILLING_SERVICE",
-  "NOTIFICATION_SERVICE",
-  "AUDIT_SERVICE",
-];
+const microserviceQueueMap: Record<string, string> = {
+  IDENTITY_SERVICE: SERVICE_QUEUES.IDENTITY,
+  CATALOG_SERVICE: SERVICE_QUEUES.CATALOG,
+  CONTRACT_SERVICE: SERVICE_QUEUES.CONTRACT,
+  SIGNATURE_SERVICE: SERVICE_QUEUES.SIGNATURE,
+  BILLING_SERVICE: SERVICE_QUEUES.BILLING,
+  NOTIFICATION_SERVICE: SERVICE_QUEUES.NOTIFICATION,
+  AUDIT_SERVICE: SERVICE_QUEUES.AUDIT,
+};
 
-const clientProviders: ClientsModuleAsyncOptions = microservices.map(
-  (name) => ({
+const clientProviders: ClientsModuleAsyncOptions = Object.entries(microserviceQueueMap).map(
+  ([name, queue]) => ({
     name,
     imports: [ConfigModule],
-    useFactory: (configService: ConfigService) => ({
-      transport: Transport.REDIS,
-      options: parseRedisUrl(configService.get<string>("REDIS_BROKER_URL")),
-    }),
+    useFactory: (configService: ConfigService) =>
+      getRabbitMqClientOptions(queue, configService.get<string>("RABBITMQ_URL")),
     inject: [ConfigService],
   }),
 );

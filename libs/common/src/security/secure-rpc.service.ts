@@ -44,4 +44,22 @@ export class SecureRpcService {
             )
         );
     }
+
+    emit(
+        client: ClientProxy,
+        pattern: string | object,
+        data: any = {},
+    ): void {
+        const patternKey =
+            typeof pattern === "string" ? pattern : JSON.stringify(pattern);
+
+        const request = this.hmacService.createRequest(
+            this.identity.name,
+            this.identity.secret,
+            data,
+            patternKey,
+        );
+
+        client.emit(pattern, request);
+    }
 }

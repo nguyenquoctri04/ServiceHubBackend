@@ -18,7 +18,7 @@ export class ViolationsController {
   }
 
   @MessagePattern({ cmd: ProviderContractPatterns.VIOLATIONS_CREATE })
-  async createReport(@Payload() data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string }) {
+  async createReport(@Payload() data: { providerId: string; contractId: string; reportedBy: string; description: string; violationType?: string; evidenceUrls?: string[] }) {
     return this.service.createReport(data);
   }
 
@@ -41,6 +41,7 @@ export class ViolationsController {
       performedBy: string;
       resolveViolation: boolean;
       createRestriction?: boolean;
+      amount?: number;
     },
   ) {
     return this.service.handleAction(data);

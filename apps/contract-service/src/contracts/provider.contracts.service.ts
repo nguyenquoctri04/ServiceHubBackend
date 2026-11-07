@@ -2,12 +2,12 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientProxy, RpcException } from '@nestjs/microservices';
-import { ContractStatus, Contract } from '@prisma/client-contract';
-import { CatalogPatterns, NotificationPatterns, ProviderBillingPatterns, ProviderIdentityPatterns, SecureRpcService } from '@app/common';
+import { ContractStatus, Contract, ContractTemplate, Term } from '@prisma/client-contract';
+import { CatalogPatterns, NotificationPatterns, ProviderBillingPatterns, ProviderIdentityPatterns, SecureRpcService, OutboxService, InboxService, ContractEventPatterns, EventEnvelope } from '@app/common';
 import { CustomerPatterns } from '@app/common/constants/customer.patterns';
-import { ContractTemplate, Term } from '@prisma/client-contract';
 import { createHash } from 'node:crypto';
 import { ContractPdfRendererService } from './contract-pdf-renderer.service';
+import { ContractRealtimeService } from './contract-realtime.service';
 /**
  * Payload interface for creating a contract.
  */
@@ -55,6 +55,9 @@ export interface CustomerIdentity {
 export interface EnrichedContract extends Contract {
   customerName: string;
   customerPhone: string;
+  customerCccd?: string;
+  customerAddress?: string;
+  customerEmail?: string;
   roomName: string;
   services: any[];
   terms?: any[];
@@ -87,9 +90,13 @@ export class ProviderContractsService {
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
+    @Inject('SIGNATURE_SERVICE') private readonly signatureClient: ClientProxy,
     private readonly secureRpc: SecureRpcService,
     private readonly configService: ConfigService,
     private readonly pdfRenderer: ContractPdfRendererService,
+    private readonly contractRealtime: ContractRealtimeService,
+    private readonly outboxService: OutboxService,
+    private readonly inboxService: InboxService,
   ) {}
 
   /**
@@ -139,7 +146,31 @@ export class ProviderContractsService {
           throw new RpcException({ statusCode: 404, message: 'Room not found' });
         }
       } catch (error) {
+        if (error instanceof RpcException) throw error;
         throw new RpcException({ statusCode: 400, message: 'Invalid room ID' });
+      }
+
+      const conflictingContract = await this.prisma.contract.findFirst({
+        where: {
+          providerId,
+          roomId: dto.roomId,
+          status: {
+            in: [
+              ContractStatus.DRAFT,
+              ContractStatus.PENDING_SIGNATURE,
+              ContractStatus.PENDING_PAYMENT,
+              ContractStatus.ACTIVE,
+            ],
+          },
+        },
+        select: { id: true, contractNumber: true, status: true },
+      });
+
+      if (conflictingContract) {
+        throw new RpcException({
+          statusCode: 400,
+          message: `Phòng này đang được gán cho hợp đồng khác (${conflictingContract.contractNumber}) ở trạng thái ${conflictingContract.status}.`,
+        });
       }
     }
 
@@ -220,9 +251,12 @@ export class ProviderContractsService {
   /**
    * Updates an existing draft contract.
    */
-  async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<ContractWithRelations> {
+  async updateContract(providerId: string, contractId: string, dto: UpdateContractPayload): Promise<ContractWithRelations & { hasChanges?: boolean }> {
     this.logger.log(`Updating contract: ${contractId}`);
-    const existing = await this.prisma.contract.findFirst({ where: { id: contractId, providerId } });
+    const existing = await this.prisma.contract.findFirst({
+      where: { id: contractId, providerId },
+      include: { services: true, terms: { include: { term: true } }, files: true },
+    });
     
     if (!existing) {
       throw new RpcException({ statusCode: 404, message: 'Contract not found' });
@@ -236,6 +270,30 @@ export class ProviderContractsService {
         this.catalogClient, { cmd: CatalogPatterns.ROOMS_FIND_BY_IDS_FOR_PROVIDER }, { providerId, roomIds: [dto.roomId] },
       );
       if (rooms.length !== 1) throw new RpcException({ statusCode: 400, message: 'Phòng không thuộc nhà cung cấp.' });
+
+      const conflictingContract = await this.prisma.contract.findFirst({
+        where: {
+          providerId,
+          roomId: dto.roomId,
+          id: { not: contractId },
+          status: {
+            in: [
+              ContractStatus.DRAFT,
+              ContractStatus.PENDING_SIGNATURE,
+              ContractStatus.PENDING_PAYMENT,
+              ContractStatus.ACTIVE,
+            ],
+          },
+        },
+        select: { id: true, contractNumber: true, status: true },
+      });
+
+      if (conflictingContract) {
+        throw new RpcException({
+          statusCode: 400,
+          message: `Phòng này đang được gán cho hợp đồng khác (${conflictingContract.contractNumber}) ở trạng thái ${conflictingContract.status}.`,
+        });
+      }
     }
     let finalServices = dto.services;
     if (dto.services !== undefined) {
@@ -282,20 +340,62 @@ export class ProviderContractsService {
     }
     if (dto.templateId !== undefined) await this.ensureTemplateAvailable(providerId, dto.templateId);
 
-    const contractNumber = existing.contractNumber.startsWith('YCDV-')
+    // Kiểm tra xem nội dung hợp đồng có thay đổi hay không so với bản hiện tại
+    const normalizeDate = (d: any) => {
+      if (!d) return null;
+      const dateObj = new Date(d);
+      return isNaN(dateObj.getTime()) ? null : dateObj.toISOString().slice(0, 10);
+    };
+
+    const isRequestDraft = existing.contractNumber.startsWith('YCDV-') || existing.contractNumber.startsWith('CTR-');
+    const roomIdChanged = dto.roomId !== undefined && (dto.roomId || null) !== (existing.roomId || null);
+    const startDateChanged = dto.startDate !== undefined && normalizeDate(dto.startDate) !== normalizeDate(existing.startDate);
+    const endDateChanged = dto.endDate !== undefined && normalizeDate(dto.endDate) !== normalizeDate(existing.endDate);
+    const requireSignatureChanged = dto.requireSignature !== undefined && dto.requireSignature !== existing.requireSignature;
+    const templateChanged = dto.templateId !== undefined && (dto.templateId || null) !== ((existing as any).templateId || null);
+
+    let servicesChanged = false;
+    if (finalServices !== undefined) {
+      if (finalServices.length !== existing.services.length) {
+        servicesChanged = true;
+      } else {
+        const existingMap = new Map(existing.services.map((s) => [s.servicePriceId, Number(s.quantity ?? 1)]));
+        servicesChanged = finalServices.some((s) => existingMap.get(s.servicePriceId) !== Number(s.quantity ?? 1));
+      }
+    }
+
+    let termsChanged = false;
+    if (dto.termIds !== undefined) {
+      const newTermIds = [...new Set(dto.termIds)];
+      const existingTermIds = existing.terms.map((t) => t.termId);
+      if (newTermIds.length !== existingTermIds.length) {
+        termsChanged = true;
+      } else {
+        const existingSet = new Set(existingTermIds);
+        termsChanged = newTermIds.some((id) => !existingSet.has(id));
+      }
+    }
+
+    const hasChanged = isRequestDraft || roomIdChanged || startDateChanged || endDateChanged || requireSignatureChanged || templateChanged || servicesChanged || termsChanged;
+    const hasExistingSigningFile = Boolean(existing.files?.[0]?.hashContract);
+
+    // Nếu không có bất kỳ thông tin nào thay đổi và đã có sẵn file hợp đồng
+    // -> Giữ nguyên file snapshot PDF và giữ nguyên toàn bộ chữ ký số, không bắt ký lại
+    if (!hasChanged && hasExistingSigningFile) {
+      this.logger.log(`[updateContract] Hợp đồng ${contractId} không có bất kỳ thay đổi nào. Giữ nguyên snapshot PDF và chữ ký số.`);
+      return {
+        ...existing,
+        hasChanges: false,
+      } as any;
+    }
+
+    const contractNumber = isRequestDraft
       ? await this.generateContractNumber()
       : existing.contractNumber;
-
-    const nextStatus = (finalServices !== undefined && finalServices.length > 0)
-      ? ((dto.requireSignature ?? (dto.requireSignature !== undefined ? dto.requireSignature : existing.requireSignature))
-          ? ContractStatus.PENDING_SIGNATURE
-          : ContractStatus.ACTIVE)
-      : undefined;
 
     const updated = await this.prisma.contract.update({
       where: { id: contractId },
       data: {
-        ...(nextStatus && { status: nextStatus }),
         ...(dto.roomId !== undefined && { roomId: dto.roomId }),
         ...(dto.startDate !== undefined && { startDate: new Date(dto.startDate) }),
         ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
@@ -319,33 +419,24 @@ export class ProviderContractsService {
       include: { services: true, terms: { include: { term: true } }, files: true },
     });
 
-    // Khi Provider hoàn thiện bản nháp (truyền services/startDate):
-    // Tự động tạo file PDF, băm SHA-256
+    // Khi có thay đổi thực sự: Tự động tạo file PDF snapshot và băm SHA-256 mới
     if (finalServices !== undefined && finalServices.length > 0) {
       try {
         const file = await this.createSigningFile(providerId, contractId, updated);
-
-        void this.secureRpc.send(
-          this.notificationClient,
-          { cmd: NotificationPatterns.CREATE_IN_APP },
-          {
-            userId: existing.customerId,
-            providerId,
-            title: updated.requireSignature ? 'Nhà cung cấp đã gửi hợp đồng để ký' : 'Hợp đồng dịch vụ đã kích hoạt',
-            content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contractNumber}.${updated.requireSignature ? ' Vui lòng kiểm tra và ký hợp đồng.' : ''}`,
-          },
-        ).catch(() => {});
-
         return {
           ...updated,
+          hasChanges: true,
           files: file ? [file] : updated.files,
-        };
+        } as any;
       } catch (err: any) {
-        this.logger.error(`Error finalizing contract PDF: ${err?.message || err}`);
+        this.logger.error(`Error finalizing contract PDF snapshot: ${err?.message || err}`);
       }
     }
 
-    return updated;
+    return {
+      ...updated,
+      hasChanges: true,
+    } as any;
   }
 
   /**
@@ -360,21 +451,74 @@ export class ProviderContractsService {
     if (existing.status !== ContractStatus.DRAFT) {
       throw new RpcException({ statusCode: 400, message: 'Invalid status for send' });
     }
-    if (existing.contractNumber.startsWith('YCDV-')) {
+    const isRequestDraft = existing.contractNumber.startsWith('YCDV-') || existing.contractNumber.startsWith('CTR-');
+    if (isRequestDraft) {
       throw new RpcException({ statusCode: 400, message: 'Cần hoàn thiện bản nháp trước khi gửi hợp đồng.' });
     }
 
-    // Luôn sinh snapshot PDF chính thức của hợp đồng và tính mã hash SHA-256
-    await this.createSigningFile(providerId, contractId);
+    const servicesCount = await this.prisma.contractService.count({ where: { contractId } });
+    if (servicesCount === 0) {
+      throw new RpcException({ statusCode: 400, message: 'Hợp đồng chưa có dịch vụ nào. Vui lòng hoàn thiện bản nháp trước khi gửi.' });
+    }
 
-    const nextStatus = existing.requireSignature
-      ? ContractStatus.PENDING_SIGNATURE
-      : ContractStatus.ACTIVE;
+    // Kiểm tra và xử lý file ký hợp đồng
+    let file = await this.prisma.contractFile.findFirst({
+      where: { contractId, contract: { providerId } },
+      orderBy: { id: 'desc' },
+    });
 
-    const contract = await this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: nextStatus, updatedAt: new Date() },
-      include: { services: true, terms: true, files: true }
+    if (existing.requireSignature) {
+      if (!file) {
+        // Sinh snapshot file nếu chưa có
+        file = await this.createSigningFile(providerId, contractId, existing);
+      }
+      // Kiểm tra chữ ký của Provider qua signature-service
+      const verification = await this.secureRpc.send<any>(
+        this.signatureClient,
+        { cmd: CustomerPatterns.VERIFY_CONTRACT },
+        { contractFileId: file.id },
+        15000,
+      ).catch((err) => {
+        this.logger.warn(`Could not verify contract signatures: ${err?.message || err}`);
+        return null;
+      });
+
+      if (!verification?.providerSigned) {
+        throw new RpcException({
+          statusCode: 400,
+          message: 'Hợp đồng này yêu cầu chữ ký điện tử. Nhà cung cấp phải ký hợp đồng trước khi gửi cho khách hàng.',
+        });
+      }
+    } else if (!file) {
+      await this.createSigningFile(providerId, contractId, existing);
+    }
+
+    const nextStatus = ContractStatus.PENDING_SIGNATURE;
+
+    const contract = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.contract.update({
+        where: { id: contractId },
+        data: { status: nextStatus, updatedAt: new Date(), revision: { increment: 1 } },
+        include: { services: true, terms: true, files: true }
+      });
+
+      await this.outboxService.publishLocal(tx, {
+        aggregateType: 'Contract',
+        aggregateId: updated.id,
+        aggregateRevision: updated.revision,
+        eventType: ContractEventPatterns.SENT_FOR_SIGNING,
+        payload: {
+          contractId: updated.id,
+          contractNumber: updated.contractNumber,
+          providerId: updated.providerId,
+          customerId: updated.customerId,
+          roomId: updated.roomId,
+          requireSignature: updated.requireSignature,
+          status: nextStatus,
+        },
+      });
+
+      return updated;
     });
 
     await this.secureRpc.send(
@@ -383,20 +527,39 @@ export class ProviderContractsService {
       {
         userId: contract.customerId,
         providerId,
-        title: existing.requireSignature ? 'Nhà cung cấp đã gửi hợp đồng để ký' : 'Hợp đồng dịch vụ đã kích hoạt',
-        content: `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}.${existing.requireSignature ? ' Vui lòng kiểm tra và ký hợp đồng.' : ''}`,
+        title: existing.requireSignature
+          ? 'Nhà cung cấp đã ký và gửi hợp đồng'
+          : 'Nhà cung cấp đã gửi hợp đồng dịch vụ',
+        content: existing.requireSignature
+          ? `Nhà cung cấp đã hoàn thiện và ký hợp đồng. Số hợp đồng: ${contract.contractNumber}. Vui lòng kiểm tra và ký hợp đồng.`
+          : `Nhà cung cấp đã hoàn thiện hợp đồng. Số hợp đồng: ${contract.contractNumber}. Vui lòng kiểm tra và xác nhận điều khoản hợp đồng.`,
       },
     );
+
+    this.contractRealtime.emitStatusChanged({
+      contractId,
+      status: nextStatus,
+      recipientUserIds: [providerId, contract.customerId],
+    });
+
     return contract;
   }
 
   async findSigningFile(providerId: string, contractId: string) {
-    const file = await this.prisma.contractFile.findFirst({
+    let file = await this.prisma.contractFile.findFirst({
       where: { contractId, contract: { providerId } },
       orderBy: { id: 'desc' },
       select: { id: true, pdfUrl: true, hashContract: true },
     });
-    if (!file) throw new RpcException({ statusCode: 404, message: 'Hợp đồng chưa có file để ký.' });
+    if (!file) {
+      const existing = await this.prisma.contract.findFirst({
+        where: { id: contractId, providerId },
+        include: { services: true, terms: { include: { term: true } }, files: true },
+      });
+      if (!existing) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
+      const created = await this.createSigningFile(providerId, contractId, existing);
+      return { id: created.id, pdfUrl: created.pdfUrl, hashContract: created.hashContract };
+    }
     return file;
   }
 
@@ -409,7 +572,7 @@ export class ProviderContractsService {
 
     // 1. Chạy song song các RPC calls để tải đầy đủ thông tin bên A, bên B, phòng và giá dịch vụ
     const priceIds = contract.services.map((s) => s.servicePriceId);
-    const [priceList, providerInfo, customerInfo, rooms] = await Promise.all([
+    const [priceList, providerInfo, customerBatch, customerDetail, rooms] = await Promise.all([
       priceIds.length > 0
         ? this.secureRpc.send<any[]>(
             this.catalogClient,
@@ -429,6 +592,15 @@ export class ProviderContractsService {
       ).catch((err) => {
         this.logger.warn(`Could not fetch provider profile: ${err?.message || err}`);
         return {};
+      }),
+      this.secureRpc.send<any[]>(
+        this.identityClient,
+        { cmd: ProviderIdentityPatterns.IDENTITIES_BATCH },
+        { identityIds: [contract.customerId] },
+        20000,
+      ).catch((err) => {
+        this.logger.warn(`Could not fetch customer identity batch: ${err?.message || err}`);
+        return [];
       }),
       this.secureRpc.send<any>(
         this.identityClient,
@@ -451,6 +623,8 @@ export class ProviderContractsService {
           })
         : Promise.resolve([]),
     ]);
+
+    const customerIdentity = Array.isArray(customerBatch) && customerBatch.length > 0 ? customerBatch[0] : null;
 
     const priceMap = new Map((priceList || []).map((p: any) => [p.id, p]));
 
@@ -552,11 +726,38 @@ export class ProviderContractsService {
       },
       customer: {
         id: contract.customerId,
-        name: customerInfo?.fullName || customerInfo?.name || 'Khách hàng',
-        cccd: customerInfo?.identityCardNumber || customerInfo?.cccd,
-        address: customerInfo?.address,
-        phone: customerInfo?.phone,
-        email: customerInfo?.email,
+        name:
+          customerIdentity?.fullName ||
+          customerDetail?.personalInfo?.fullName ||
+          customerDetail?.fullName ||
+          customerIdentity?.phone ||
+          customerDetail?.contactInfo?.phone ||
+          customerIdentity?.email ||
+          customerDetail?.contactInfo?.email ||
+          'Khách hàng',
+        cccd:
+          customerIdentity?.cccd ||
+          customerIdentity?.documentNumber ||
+          customerDetail?.identityVerification?.documentNumber ||
+          customerDetail?.personalInfo?.documentNumber ||
+          customerDetail?.cccd ||
+          '',
+        address:
+          customerIdentity?.address ||
+          customerIdentity?.placeOfResidence ||
+          customerDetail?.personalInfo?.permanentAddress ||
+          customerDetail?.address ||
+          '',
+        phone:
+          customerIdentity?.phone ||
+          customerDetail?.contactInfo?.phone ||
+          customerDetail?.phone ||
+          '',
+        email:
+          customerIdentity?.email ||
+          customerDetail?.contactInfo?.email ||
+          customerDetail?.email ||
+          '',
       },
       services: serviceItems,
       terms: contract.terms.map((item) => ({ id: item.term.id, content: item.term.content })),
@@ -568,8 +769,27 @@ export class ProviderContractsService {
     // 7. Tính mã băm cryptographic SHA-256 trên buffer file PDF thật sự
     const hashContract = createHash('sha256').update(pdfBuffer).digest('hex');
 
-    // 8. Upload file .pdf thật lên Cloudinary
-    const pdfUrl = await this.uploadContractSnapshot(contract.contractNumber, pdfBuffer);
+    // 8. Định dạng tên file theo tiêu chuẩn hợp đồng điện tử thông dụng: HopDong_[SoHopDong]_[TenKhachHang].pdf
+    const safeContractNumber = (contract.contractNumber || 'HD').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeCustomerName = (
+      customerIdentity?.fullName ||
+      customerDetail?.personalInfo?.fullName ||
+      customerDetail?.fullName ||
+      ''
+    )
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .replace(/_+/g, '_')
+      .trim();
+
+    const standardFileName = safeCustomerName
+      ? `HopDong_${safeContractNumber}_${safeCustomerName}.pdf`
+      : `HopDong_${safeContractNumber}.pdf`;
+
+    const pdfUrl = await this.uploadContractSnapshot(standardFileName, pdfBuffer);
 
     // 9. Lưu bản ghi ContractFile
     const existingFile = (contract as any)?.files?.[0] || await this.prisma.contractFile.findFirst({
@@ -587,16 +807,17 @@ export class ProviderContractsService {
     return this.prisma.contractFile.create({ data: { contractId, pdfUrl, hashContract } });
   }
 
-  private async uploadContractSnapshot(contractNumber: string, content: Buffer): Promise<string> {
+  private async uploadContractSnapshot(contractFileName: string, content: Buffer): Promise<string> {
     const creds = this.getCloudinaryCredentials();
     if (creds) {
       try {
         const { cloudName, apiKey, apiSecret } = creds;
         const timestamp = Math.floor(Date.now() / 1000);
-        const publicId = `servicehub/contracts/${contractNumber}-${timestamp}.pdf`;
+        const nameWithoutExt = contractFileName.replace(/\.pdf$/i, '');
+        const publicId = `servicehub/contracts/${nameWithoutExt}-${timestamp}.pdf`;
         const signature = createHash('sha1').update(`public_id=${publicId}&timestamp=${timestamp}${apiSecret}`).digest('hex');
         const form = new FormData();
-        form.set('file', new Blob([Uint8Array.from(content)], { type: 'application/pdf' }), `${contractNumber}.pdf`);
+        form.set('file', new Blob([Uint8Array.from(content)], { type: 'application/pdf' }), contractFileName);
         form.set('public_id', publicId);
         form.set('timestamp', String(timestamp));
         form.set('api_key', apiKey);
@@ -606,7 +827,7 @@ export class ProviderContractsService {
         const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
           method: 'POST',
           body: form,
-          signal: AbortSignal.timeout(1500),
+          signal: AbortSignal.timeout(10000),
         });
         if (response.ok) {
           const payload = await response.json() as { secure_url?: string };
@@ -655,10 +876,18 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Invalid status for revoke' });
     }
 
-    return this.prisma.contract.update({
+    const updated = await this.prisma.contract.update({
       where: { id: contractId },
       data: { status: ContractStatus.DRAFT, updatedAt: new Date() }
     });
+
+    this.contractRealtime.emitStatusChanged({
+      contractId,
+      status: ContractStatus.DRAFT,
+      recipientUserIds: [providerId, existing.customerId],
+    });
+
+    return updated;
   }
 
   /**
@@ -679,9 +908,28 @@ export class ProviderContractsService {
       throw new RpcException({ statusCode: 400, message: 'Chỉ có thể từ chối yêu cầu dịch vụ đang ở trạng thái nháp.' });
     }
 
-    const contract = await this.prisma.contract.update({
-      where: { id: contractId },
-      data: { status: ContractStatus.CANCELLED, updatedAt: new Date() }
+    const contract = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.contract.update({
+        where: { id: contractId },
+        data: { status: ContractStatus.CANCELLED, updatedAt: new Date(), revision: { increment: 1 } }
+      });
+
+      await this.outboxService.publishLocal(tx, {
+        aggregateType: 'Contract',
+        aggregateId: updated.id,
+        aggregateRevision: updated.revision,
+        eventType: ContractEventPatterns.CANCELLED,
+        payload: {
+          contractId: updated.id,
+          contractNumber: updated.contractNumber,
+          providerId: updated.providerId,
+          customerId: updated.customerId,
+          roomId: updated.roomId,
+          reason: normalizedReason,
+        },
+      });
+
+      return updated;
     });
     await this.secureRpc.send(
       this.notificationClient,
@@ -693,6 +941,13 @@ export class ProviderContractsService {
         content: `Yêu cầu dịch vụ ${contract.contractNumber} đã bị từ chối. Lý do: ${normalizedReason}`,
       },
     );
+
+    this.contractRealtime.emitStatusChanged({
+      contractId,
+      status: ContractStatus.CANCELLED,
+      recipientUserIds: [providerId, contract.customerId],
+    });
+
     return contract;
   }
 
@@ -727,9 +982,9 @@ export class ProviderContractsService {
           ).catch(() => [])
         : [],
     ]);
-    const identitiesById = new Map(identities.map((identity) => [identity.id, identity] as const));
-    const roomsById = new Map(rooms.map((room) => [room.id, room] as const));
-    const pricesById = new Map(prices.map((price) => [price.id, price] as const));
+    const identitiesById = new Map((identities || []).map((identity) => [identity.id, identity] as const));
+    const roomsById = new Map((rooms || []).map((room) => [room.id, room] as const));
+    const pricesById = new Map((prices || []).map((price) => [price.id, price] as const));
 
     return contracts.map((contract) => {
       const customer = identitiesById.get(contract.customerId);
@@ -738,6 +993,9 @@ export class ProviderContractsService {
         ...contract,
         customerName: customer?.fullName || customer?.email || customer?.phone || 'Khách hàng',
         customerPhone: customer?.phone || '',
+        customerCccd: customer?.cccd || customer?.documentNumber || '',
+        customerAddress: customer?.address || customer?.placeOfResidence || '',
+        customerEmail: customer?.email || '',
         roomName: room?.roomNumber || (contract.roomId ? 'Chưa xếp phòng' : null),
         services: contract.services.map((service) => {
           const price = pricesById.get(service.servicePriceId);
@@ -763,6 +1021,7 @@ export class ProviderContractsService {
         providerId,
         ...(status ? { status: status as ContractStatus } : {})
       },
+      orderBy: { createdAt: 'desc' },
       take: Number(limit),
       skip: (Number(page) - 1) * Number(limit),
       include: { services: true, terms: { include: { term: true } }, files: { orderBy: { id: 'desc' }, take: 1 } }
@@ -774,7 +1033,7 @@ export class ProviderContractsService {
   /**
    * Retrieves a specific contract and enriches it.
    */
-  async findOneContract(providerId: string, contractId: string): Promise<EnrichedContract> {
+  async findOneContract(providerId: string, contractId: string): Promise<EnrichedContract & { signaturesStatus?: any }> {
     this.logger.log(`Fetching contract details for ID: ${contractId}`);
     const contract = await this.prisma.contract.findFirst({
       where: { id: contractId, providerId },
@@ -783,7 +1042,32 @@ export class ProviderContractsService {
     
     if (!contract) throw new RpcException({ statusCode: 404, message: 'Contract not found' });
     
-    return (await this.enrichContractsData([contract]))[0];
+    const enriched = (await this.enrichContractsData([contract]))[0];
+
+    if (contract.requireSignature && contract.files?.[0]?.id) {
+      try {
+        const verifyResult = await this.secureRpc.send<any>(
+          this.signatureClient,
+          { cmd: CustomerPatterns.VERIFY_CONTRACT },
+          { contractFileId: contract.files[0].id },
+          10000,
+        );
+        return {
+          ...enriched,
+          signaturesStatus: {
+            providerSigned: !!verifyResult?.providerSigned,
+            customerSigned: !!verifyResult?.customerSigned,
+            fullySigned: !!verifyResult?.fullySigned,
+            providerSignedAt: verifyResult?.provider?.signedAt ?? null,
+            customerSignedAt: verifyResult?.customer?.[0]?.signedAt ?? null,
+          },
+        };
+      } catch (err: any) {
+        this.logger.warn(`Could not verify contract signatures for contract ${contractId}: ${err?.message || err}`);
+      }
+    }
+    
+    return enriched;
   }
 
   async findDraftByRequestNumber(providerId: string, contractNumber: string): Promise<EnrichedContract> {
@@ -1126,19 +1410,121 @@ export class ProviderContractsService {
   }
 
   async getRecentContracts(providerId: string) {
-    const contracts = await this.prisma.contract.findMany({
-      where: { providerId },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
+    const [contracts, violations, appeals] = await Promise.all([
+      this.prisma.contract.findMany({
+        where: { providerId },
+        orderBy: { updatedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          contractNumber: true,
+          status: true,
+          roomId: true,
+          startDate: true,
+          endDate: true,
+          signedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.violationCase.findMany({
+        where: { providerId },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        select: {
+          id: true,
+          description: true,
+          status: true,
+          createdAt: true,
+          violationRule: { select: { name: true } },
+        },
+      }),
+      this.prisma.violationAppeal.findMany({
+        where: { violationCase: { providerId } },
+        orderBy: { createdAt: 'desc' },
+        take: 2,
+        select: {
+          id: true,
+          reason: true,
+          status: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const contractActivities = contracts.map((c) => {
+      let title = 'Hợp đồng mới khởi tạo';
+      let color = '#3B82F6';
+      let timestamp = c.createdAt;
+
+      if (c.status === 'ACTIVE') {
+        title = c.signedAt ? 'Khách hàng đã ký số hợp đồng' : 'Hợp đồng có hiệu lực';
+        color = '#10B981';
+        timestamp = c.signedAt || c.updatedAt || c.createdAt;
+      } else if (c.status === 'PENDING_SIGNATURE') {
+        title = c.roomId ? 'Hợp đồng chờ ký số' : 'Yêu cầu dịch vụ chờ ký';
+        color = '#F59E0B';
+        timestamp = c.updatedAt || c.createdAt;
+      } else if (c.status === 'PENDING_PAYMENT') {
+        title = 'Hợp đồng chờ thanh toán cọc';
+        color = '#8B5CF6';
+        timestamp = c.updatedAt || c.createdAt;
+      } else if (c.status === 'CANCELLED' || c.status === 'TERMINATED') {
+        title = 'Hợp đồng đã chấm dứt';
+        color = '#6B7280';
+        timestamp = c.updatedAt || c.createdAt;
+      } else if (c.status === 'EXPIRED') {
+        title = 'Hợp đồng đã kết thúc thời hạn';
+        color = '#9CA3AF';
+        timestamp = c.endDate || c.updatedAt || c.createdAt;
+      }
+
+      return {
+        id: c.id,
+        type: 'CONTRACT',
+        title,
+        description: `HĐ ${c.contractNumber}${c.roomId ? ' • Phòng ' + c.roomId.slice(-3) : ' • Dịch vụ ngoài'}`,
+        timestamp,
+        color,
+        actionUrl: '/provider/contracts',
+        customerName: 'Khách hàng',
+        roomName: c.roomId ? 'Phòng ' + c.roomId.slice(-3) : 'Dịch vụ ngoài',
+        startDate: c.startDate ? c.startDate.toISOString().split('T')[0] : 'N/A',
+        status: c.status,
+      };
     });
 
-    return contracts.map((c) => ({
-      id: c.id,
+    const violationActivities = violations.map((v) => ({
+      id: v.id,
+      type: 'VIOLATION',
+      title: 'Sự cố / Vi phạm mới ghi nhận',
+      description: v.violationRule?.name || v.description,
+      timestamp: v.createdAt,
+      color: '#EF4444',
+      actionUrl: '/provider/violations',
       customerName: 'Khách hàng',
-      roomName: c.roomId ? 'Phòng ' + c.roomId.slice(-3) : 'Chưa xếp phòng',
-      startDate: c.startDate ? c.startDate.toISOString().split('T')[0] : 'N/A',
-      status: c.status,
+      roomName: 'Vi phạm',
+      startDate: v.createdAt.toISOString().split('T')[0],
+      status: v.status,
     }));
+
+    const appealActivities = appeals.map((a) => ({
+      id: a.id,
+      type: 'APPEAL',
+      title: 'Khách hàng gửi đơn khiếu nại',
+      description: a.reason ? `Khiếu nại: ${a.reason.slice(0, 45)}...` : 'Khiếu nại vụ vi phạm',
+      timestamp: a.createdAt,
+      color: '#D97706',
+      actionUrl: '/provider/violations',
+      customerName: 'Khách hàng',
+      roomName: 'Khiếu nại',
+      startDate: a.createdAt.toISOString().split('T')[0],
+      status: a.status,
+    }));
+
+    return [...contractActivities, ...violationActivities, ...appealActivities]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 5);
   }
 
   async findCustomersByProvider(providerId: string, options?: { status?: string; page?: number; limit?: number; search?: string }) {
@@ -1194,5 +1580,134 @@ export class ProviderContractsService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Consumer xử lý sự kiện billing.invoice_paid.v1 từ Billing Service theo Saga Choreography
+   * Đảm bảo Idempotency qua Inbox Pattern và tự động chuyển hợp đồng sang ACTIVE khi đủ điều kiện chữ ký
+   */
+  async handleInvoicePaidEvent(envelope: EventEnvelope<any>) {
+    const consumerName = 'contract-invoice-paid-consumer';
+    const claimed = await this.inboxService.claim(this.prisma, {
+      consumerName,
+      eventId: envelope.id,
+      eventType: envelope.eventType,
+      producer: envelope.source,
+      orderingKey: envelope.orderingKey,
+    });
+    if (!claimed) {
+      this.logger.log(`[handleInvoicePaidEvent] Event ${envelope.id} đã xử lý hoặc đang xử lý. Bỏ qua.`);
+      return;
+    }
+
+    const { contractId, invoiceId } = envelope.payload || {};
+    if (!contractId) {
+      this.logger.log(`[handleInvoicePaidEvent] Hóa đơn ${invoiceId} không gắn với contractId. Bỏ qua.`);
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      return;
+    }
+
+    try {
+      const contract = await this.prisma.contract.findUnique({
+        where: { id: contractId },
+        include: { files: true },
+      });
+
+      if (!contract) {
+        this.logger.warn(`[handleInvoicePaidEvent] Không tìm thấy hợp đồng ${contractId}`);
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      if (contract.status === ContractStatus.ACTIVE) {
+        this.logger.log(`[handleInvoicePaidEvent] Hợp đồng ${contractId} đã ACTIVE từ trước.`);
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      // Kiểm tra chữ ký số nếu hợp đồng yêu cầu ký
+      let fullySigned = true;
+      if (contract.requireSignature) {
+        const file = contract.files?.[0];
+        if (file) {
+          const verification = await this.secureRpc.send<any>(
+            this.signatureClient,
+            { cmd: CustomerPatterns.VERIFY_CONTRACT },
+            { contractFileId: file.id },
+            15000,
+          ).catch(() => null);
+          fullySigned = Boolean(verification?.providerSigned && verification?.customerSigned);
+        } else {
+          fullySigned = false;
+        }
+      }
+
+      const now = new Date();
+
+      if (!fullySigned) {
+        this.logger.warn(`[handleInvoicePaidEvent] Hợp đồng ${contractId} đã thanh toán nhưng chưa đủ chữ ký số.`);
+        await this.prisma.$transaction(async (tx) => {
+          await this.outboxService.publishLocal(tx, {
+            aggregateType: 'Contract',
+            aggregateId: contract.id,
+            aggregateRevision: contract.revision,
+            orderingKey: contract.id,
+            eventType: ContractEventPatterns.ACTIVATION_FAILED,
+            payload: {
+              contractId: contract.id,
+              invoiceId,
+              reason: 'Chưa hoàn tất chữ ký số 2 bên trước khi kích hoạt.',
+            },
+          });
+        });
+        await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+        return;
+      }
+
+      // Đã đủ điều kiện: Chuyển sang ACTIVE và phát Outbox ContractEventPatterns.ACTIVATED
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const c = await tx.contract.update({
+          where: { id: contractId },
+          data: {
+            status: ContractStatus.ACTIVE,
+            signedAt: contract.signedAt || now,
+            updatedAt: now,
+            revision: { increment: 1 },
+          },
+        });
+
+        await this.outboxService.publishLocal(tx, {
+          aggregateType: 'Contract',
+          aggregateId: c.id,
+          aggregateRevision: c.revision,
+          orderingKey: c.id,
+          eventType: ContractEventPatterns.ACTIVATED,
+          payload: {
+            contractId: c.id,
+            contractNumber: c.contractNumber,
+            providerId: c.providerId,
+            customerId: c.customerId,
+            roomId: c.roomId,
+            activatedAt: now.toISOString(),
+          },
+        });
+
+        return c;
+      });
+
+      // Phát Socket Invalidation Realtime cho hai bên giao diện
+      this.contractRealtime.emitStatusChanged({
+        contractId: updated.id,
+        status: ContractStatus.ACTIVE,
+        recipientUserIds: [updated.providerId, updated.customerId],
+      });
+
+      await this.inboxService.markProcessed(this.prisma, consumerName, envelope.id);
+      this.logger.log(`[handleInvoicePaidEvent] Đã kích hoạt hợp đồng ${contractId} sang ACTIVE thành công qua Saga Outbox.`);
+    } catch (err: any) {
+      this.logger.error(`[handleInvoicePaidEvent] Lỗi xử lý event ${envelope.id}: ${err?.message || err}`);
+      await this.inboxService.markFailed(this.prisma, consumerName, envelope.id);
+      throw err;
+    }
   }
 }

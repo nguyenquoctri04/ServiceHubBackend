@@ -9,8 +9,8 @@ export class AuditLogsController {
   constructor(private readonly service: AuditLogsService) {}
 
   /**
-   * Fire-and-forget event — emitted from gateway with .emit(), no HMAC envelope.
-   * Uses @EventPattern so HmacGuard does not apply (guard only intercepts RPC context).
+   * Event pattern — emitted from gateway with HMAC signature and replay protection.
+   * Fully intercepted and authenticated by global HmacGuard.
    */
   @EventPattern('audit.log')
   async handleAuditEvent(@Payload() data: CreateAuditLogDto) {

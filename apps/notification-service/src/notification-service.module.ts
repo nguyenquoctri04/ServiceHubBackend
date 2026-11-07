@@ -2,7 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { NotificationsModule } from './notifications/notifications.module';
-import { CommonModule } from '@app/common';
+import { CommonModule, HmacGuard } from '@app/common';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -15,6 +16,11 @@ import { CommonModule } from '@app/common';
     NotificationsModule
   ],
   controllers: [],
-  providers: [],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useExisting: HmacGuard,
+    },
+  ],
 })
 export class NotificationServiceModule {}

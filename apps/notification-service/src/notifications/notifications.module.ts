@@ -1,4 +1,4 @@
-import { parseRedisUrl } from '@app/common';
+import { SERVICE_QUEUES, getRabbitMqClientOptions } from '@app/common';
 import { Module } from '@nestjs/common';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
@@ -6,7 +6,7 @@ import { CustomerNotificationsController } from './customer.notifications.contro
 import { CustomerNotificationsService } from './customer.notifications.service';
 import { ProviderNotificationsController } from './provider.notifications.controller';
 import { ProviderNotificationsService } from './provider.notifications.service';
-import { ClientsModule, ClientsModuleAsyncOptions, Transport } from '@nestjs/microservices';
+import { ClientsModule, ClientsModuleAsyncOptions } from '@nestjs/microservices';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 
@@ -16,10 +16,11 @@ const clientProviders: ClientsModuleAsyncOptions = [
   {
     name: "IDENTITY_SERVICE",
     imports: [ConfigModule],
-    useFactory: (configService: ConfigService) => ({
-      transport: Transport.REDIS,
-      options: parseRedisUrl(configService.get<string>("REDIS_BROKER_URL")),
-    }),
+    useFactory: (configService: ConfigService) =>
+      getRabbitMqClientOptions(
+        SERVICE_QUEUES.IDENTITY,
+        configService.get<string>("RABBITMQ_URL"),
+      ),
     inject: [ConfigService],
   },
 ];

@@ -505,6 +505,46 @@ const externalServicesData = [
         unit: "máy",
         img: "https://images.unsplash.com/photo-1588702547919-26089e690ecc?w=800",
     },
+    // Provider 26: Dịch vụ Tiện ích Cư dân Vinhomes (support@vinhomes.vn)
+    {
+        providerNum: 26,
+        catId: 2,
+        name: "Giặt sấy & Vệ sinh rèm cửa cao cấp Vinhomes Living",
+        desc: "Dịch vụ giặt sấy công nghệ hơi nước kháng khuẩn, giao nhận tận căn hộ cư dân trong vòng 24h.",
+        type: "QUANTITY" as const,
+        servType: "NORMAL" as const,
+        calc: "QUANTITY" as const,
+        freq: "ONE_TIME" as const,
+        price: 35000,
+        unit: "kg",
+        img: "https://images.unsplash.com/photo-1545173168-9f1947eebb7f?w=800",
+    },
+    {
+        providerNum: 26,
+        catId: 2,
+        name: "Gói Dọn dẹp & Chăm sóc căn hộ định kỳ Vinhomes Care",
+        desc: "Nhân viên chuyên nghiệp dọn dẹp hút bụi, lau sàn, khử khuẩn phòng khách, bếp và nhà tắm 2 lần/tuần.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "RECURRING" as const,
+        price: 850000,
+        unit: "tháng",
+        img: "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800",
+    },
+    {
+        providerNum: 26,
+        catId: 6,
+        name: "Gói Nước uống tinh khiết Vinhomes Fresh (4 bình 19L/tháng)",
+        desc: "Cung cấp nước khoáng thiên nhiên ion kiềm đóng bình tận cửa căn hộ định kỳ hàng tháng.",
+        type: "FIXED" as const,
+        servType: "ADDITION" as const,
+        calc: "FIXED" as const,
+        freq: "RECURRING" as const,
+        price: 260000,
+        unit: "tháng",
+        img: "https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=800",
+    },
 ];
 
 async function main() {
@@ -524,6 +564,8 @@ async function main() {
     await prisma.roomType.deleteMany();
     await prisma.property.deleteMany();
     await prisma.category.deleteMany();
+    await prisma.outboxMessage.deleteMany();
+    await prisma.inboxMessage.deleteMany();
 
     // 2. CATEGORIES (6 Danh mục)
     await prisma.category.createMany({
@@ -619,11 +661,14 @@ async function main() {
                     const roomNumber = `P.${fIdx}${String(rIdx).padStart(2, "0")}`; // e.g., P.101, P.102
 
                     // Phân bổ trạng thái phòng thực tế: 85% ACTIVE, 10% MAINTENANCE, 5% INACTIVE
+                    const roomInProperty = ((totalRoomCount - 1) % 40) + 1;
                     let status: "ACTIVE" | "MAINTENANCE" | "INACTIVE" = "ACTIVE";
-                    if (totalRoomCount % 10 === 0) {
-                        status = "MAINTENANCE";
-                    } else if (totalRoomCount % 20 === 0) {
-                        status = "INACTIVE";
+                    if (roomInProperty > 12) {
+                        if (roomInProperty % 20 === 0) {
+                            status = "INACTIVE";
+                        } else if (roomInProperty % 10 === 0) {
+                            status = "MAINTENANCE";
+                        }
                     }
 
                     // Ghép loại phòng tương ứng

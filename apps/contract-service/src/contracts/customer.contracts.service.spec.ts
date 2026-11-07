@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { CustomerContractsService } from './customer.contracts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SecureRpcService } from '@app/common';
+import { ContractRealtimeService } from './contract-realtime.service';
 
 describe('CustomerContractsService', () => {
   let service: CustomerContractsService;
@@ -23,6 +24,7 @@ describe('CustomerContractsService', () => {
         { provide: 'IDENTITY_SERVICE', useValue: {} },
         { provide: 'CATALOG_SERVICE', useValue: {} },
         { provide: 'NOTIFICATION_SERVICE', useValue: {} },
+        { provide: ContractRealtimeService, useValue: { emitStatusChanged: jest.fn() } },
       ],
     }).compile();
     service = module.get(CustomerContractsService);

@@ -1,6 +1,5 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
-import { ForbiddenException } from '@nestjs/common';
 import { ProviderIdentityPatterns } from '@app/common';
 import { GatewayProxyService } from '../proxy/gateway-proxy.service';
 

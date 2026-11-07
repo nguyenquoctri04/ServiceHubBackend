@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Inject, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { CurrentUser, JwtAuthGuard, ProviderBillingPatterns, ProviderContractPatterns, ProviderIdentityPatterns, Roles, RolesGuard } from '@app/common';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
 import { ProviderCacheService } from '../provider-cache.service';
 import { ProviderBffService } from '../provider-bff.service';
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
+import { AuditEmitterService } from '../../shared/audit-emitter.service';
 import { CurrentUserPayload } from '../provider.controller';
 import { UpdateProviderProfileDto } from '../dto/update-provider-profile.dto';
 import { CreateLegalDocumentDto } from '../dto/create-legal-document.dto';
@@ -23,6 +24,7 @@ export class ProviderProfileController {
     private readonly proxy: GatewayProxyService,
     private readonly providerCache: ProviderCacheService,
     private readonly providerBffService: ProviderBffService,
+    private readonly auditEmitter: AuditEmitterService,
   ) {}
 
   @Get('profile')
@@ -41,11 +43,20 @@ export class ProviderProfileController {
     @Body() dto: UpdateProviderProfileDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.identityClient,
       { cmd: ProviderIdentityPatterns.UPDATE_PROFILE },
       { identityId: user.id, providerId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'identity-service',
+      action: 'UPDATE_PROVIDER',
+      entityType: 'Provider',
+      entityId: providerId,
+      description: 'Cập nhật hồ sơ nhà cung cấp',
+    });
+    return result;
   }
 
   @Post('legal-documents')
@@ -54,11 +65,20 @@ export class ProviderProfileController {
     @Body() dto: CreateLegalDocumentDto,
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.identityClient,
       { cmd: ProviderIdentityPatterns.ADD_LEGAL_DOCUMENT },
       { identityId: user.id, providerId, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'identity-service',
+      action: 'CREATE',
+      entityType: 'LegalDocument',
+      entityId: providerId,
+      description: `Tải lên giấy tờ pháp lý: ${dto.documentType}`,
+    });
+    return result;
   }
 
   @Get('my-providers')
@@ -71,15 +91,24 @@ export class ProviderProfileController {
   }
 
   @Post('register')
-  registerProvider(
+  async registerProvider(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateProviderDto,
   ) {
-    return this.proxy.send(
+    const result = await this.proxy.send(
       this.identityClient,
       { cmd: ProviderIdentityPatterns.CREATE },
       { identityId: user.id, dto },
     );
+    this.auditEmitter.emit({
+      userId: user.id,
+      serviceName: 'identity-service',
+      action: 'CREATE_PROVIDER',
+      entityType: 'Provider',
+      entityId: (result as any)?.id,
+      description: `Đăng ký workspace nhà cung cấp: ${dto.providerName}`,
+    });
+    return result;
   }
 
   @Get('statistics')
@@ -106,7 +135,7 @@ export class ProviderProfileController {
       monthlyRevenue: invoices.monthlyRevenue,
       unpaidRevenue: invoices.unpaidRevenue,
       violationCount: violationCount.status === 'fulfilled' ? violationCount.value : 0,
-      totalMeters: contracts.activeContracts > 0 ? contracts.activeContracts * 2 : (meters?.totalMeters || 0),
+      totalMeters: meters?.totalMeters || 0,
       recordedMeters: meters?.recordedMeters || 0,
     };
   }
@@ -162,13 +191,14 @@ export class ProviderProfileController {
         type: 'warning',
         message: `Có ${expiringContracts.value.length} hợp đồng sắp hết hạn vào tháng tới.`,
         actionText: 'Xem',
+        actionUrl: '/provider/contracts',
       });
     }
     // Aggregate recent activities
     const activities = [
       ...(recentPayments.status === 'fulfilled' ? recentPayments.value : []),
       ...(recentContracts.status === 'fulfilled' ? recentContracts.value : [])
-    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 5);
+    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 6);
 
     return {
       revenueGrowth: revenueGrowth.status === 'fulfilled' ? revenueGrowth.value : [],
@@ -177,5 +207,22 @@ export class ProviderProfileController {
       alerts,
       activities
     };
+  }
+
+  @Get('dashboard/activities')
+  async getDashboardActivities(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+
+    const [recentPayments, recentContracts] = await Promise.allSettled([
+      this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_RECENT_PAYMENTS }, { providerId }),
+      this.proxy.send(this.contractClient, { cmd: ProviderContractPatterns.RECENT }, { providerId }),
+    ]);
+
+    const activities = [
+      ...(recentPayments.status === 'fulfilled' && Array.isArray(recentPayments.value) ? recentPayments.value : []),
+      ...(recentContracts.status === 'fulfilled' && Array.isArray(recentContracts.value) ? recentContracts.value : [])
+    ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 6);
+
+    return { activities };
   }
 }

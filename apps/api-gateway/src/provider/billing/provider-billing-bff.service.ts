@@ -1,25 +1,73 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
 import { GatewayProxyService } from '../../proxy/gateway-proxy.service';
 import { ProviderContractPatterns, ProviderIdentityPatterns } from '@app/common/constants/provider.patterns';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CatalogPatterns } from '@app/common/constants/catalog.patterns';
+import { NotificationPatterns } from '@app/common/constants/notification.patterns';
+import { RedisService } from '@app/common/utils/redis.service';
 import { InvoiceQueryDto } from '@app/common/dto/billing/invoice-query.dto';
 import { GroupedMeterQueryDto } from '../dto/meter.dto';
 import { RevenueLedgerQueryDto } from '../dto/revenue-ledger-query.dto';
 
 @Injectable()
 export class ProviderBillingBffService {
+  private readonly logger = new Logger(ProviderBillingBffService.name);
+  private readonly reminderCooldowns = new Map<string, number>();
+
   constructor(
     @Inject('BILLING_SERVICE') private readonly billingClient: ClientProxy,
     @Inject('CONTRACT_SERVICE') private readonly contractClient: ClientProxy,
     @Inject('CATALOG_SERVICE') private readonly catalogClient: ClientProxy,
     @Inject('IDENTITY_SERVICE') private readonly identityClient: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE') private readonly notificationClient: ClientProxy,
     private readonly proxy: GatewayProxyService,
+    @Optional() private readonly redisService?: RedisService,
   ) {}
 
   async getInvoices(providerId: string, query: InvoiceQueryDto) {
-    const invoicesResp = await this.proxy.send(this.billingClient, { cmd: ProviderBillingPatterns.INVOICES_FIND }, { providerId, query });
+    const enrichedQuery: InvoiceQueryDto = { ...query };
+
+    if (query.search?.trim()) {
+      const searchLower = query.search.trim().toLowerCase();
+
+      // Resolve matching contracts & customers across this provider
+      const contracts = await this.proxy.send<any[]>(
+        this.contractClient,
+        { cmd: ProviderContractPatterns.CUSTOMERS_FIND },
+        { providerId, query: { limit: 1000 } },
+      ).catch(() => []);
+
+      const matchedContractIds = new Set<string>();
+      const matchedCustomerIds = new Set<string>();
+
+      if (Array.isArray(contracts)) {
+        for (const c of contracts) {
+          const matchCustomer = c.customerName && c.customerName.toLowerCase().includes(searchLower);
+          const matchPhone = c.customerPhone && c.customerPhone.toLowerCase().includes(searchLower);
+          const matchContractNum = c.contractNumber && c.contractNumber.toLowerCase().includes(searchLower);
+          const matchRoom = c.roomName && c.roomName.toLowerCase().includes(searchLower);
+
+          if (matchCustomer || matchPhone || matchContractNum || matchRoom) {
+            if (c.id) matchedContractIds.add(c.id);
+            if (c.customerId) matchedCustomerIds.add(c.customerId);
+          }
+        }
+      }
+
+      if (matchedContractIds.size > 0) {
+        enrichedQuery.contractIds = [...matchedContractIds];
+      }
+      if (matchedCustomerIds.size > 0) {
+        enrichedQuery.customerIds = [...matchedCustomerIds];
+      }
+    }
+
+    const invoicesResp = await this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.INVOICES_FIND },
+      { providerId, query: enrichedQuery },
+    );
     
     if (!invoicesResp || !invoicesResp.data) return invoicesResp;
 
@@ -165,7 +213,7 @@ export class ProviderBillingBffService {
       (contracts || [])
         .filter((contract: any) => Boolean(contract.roomId))
         .map((contract: any) => {
-          const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)));
+          const serviceIds = new Set((contract.services || []).map((s: any) => serviceIdByPriceId.get(s.servicePriceId)).filter(Boolean));
           return [contract.roomId, { id: contract.id, contractNumber: contract.contractNumber, customerId: contract.customerId, serviceIds }];
         }),
     );
@@ -181,8 +229,11 @@ export class ProviderBillingBffService {
       const activeContract = contractsByRoom.get(room.id);
       let roomMeters = metersByRoom?.[room.id] || [];
       
-      if (activeContract) {
-        roomMeters = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
+      if (activeContract && activeContract.serviceIds && activeContract.serviceIds.size > 0) {
+        const filtered = roomMeters.filter((m: any) => activeContract.serviceIds.has(m.meter.serviceId));
+        if (filtered.length > 0) {
+          roomMeters = filtered;
+        }
       }
 
       const identity = activeContract?.customerId ? identitiesById.get(activeContract.customerId) : null;
@@ -219,5 +270,98 @@ export class ProviderBillingBffService {
       { cmd: ProviderBillingPatterns.METERS_IMPORT_CONFIRM },
       { providerId, recordedBy, dto }
     );
+  }
+
+  async remindInvoice(providerId: string, invoiceId: string, providerUserId: string) {
+    const COOLDOWN_SECONDS = 24 * 60 * 60;
+    const COOLDOWN_MS = COOLDOWN_SECONDS * 1000;
+    const now = Date.now();
+    const cacheKey = `reminder:invoice:${invoiceId}`;
+
+    let isLockedViaRedis = false;
+
+    // 1. Kiểm tra Cooldown & Chống Race Condition bằng Atomic Distributed Lock (Redis NX)
+    if (this.redisService) {
+      try {
+        const client = this.redisService.getClient();
+        const setResult = await client.set(cacheKey, String(now), 'EX', COOLDOWN_SECONDS, 'NX');
+        if (!setResult) {
+          const ttl = await client.ttl(cacheKey);
+          const remainingHours = ttl > 0 ? Math.ceil(ttl / 3600) : 24;
+          throw new BadRequestException(
+            `Hóa đơn này đã được gửi nhắc nợ hôm nay. Vui lòng đợi thêm khoảng ${remainingHours} giờ trước khi gửi lại.`
+          );
+        }
+        isLockedViaRedis = true;
+      } catch (err: any) {
+        if (err instanceof BadRequestException) throw err;
+        this.logger.warn(`Lỗi kiểm tra Redis cooldown: ${err?.message}, chuyển sang kiểm tra in-memory`);
+      }
+    }
+
+    if (!isLockedViaRedis) {
+      const cooldownExpires = this.reminderCooldowns.get(invoiceId);
+      if (cooldownExpires && cooldownExpires > now) {
+        const remainingHours = Math.ceil((cooldownExpires - now) / (60 * 60 * 1000));
+        throw new BadRequestException(
+          `Hóa đơn này đã được gửi nhắc nợ hôm nay. Vui lòng đợi thêm khoảng ${remainingHours} giờ trước khi gửi lại.`
+        );
+      }
+    }
+
+    try {
+      // 2. Xác thực hóa đơn & quyền sở hữu của Provider qua RPC
+      const invoice = await this.proxy.send<any>(
+        this.billingClient,
+        { cmd: ProviderBillingPatterns.INVOICES_REMIND },
+        { providerId, invoiceId },
+      );
+
+      // 3. Trích xuất Customer ID (từ hóa đơn hoặc hợp đồng thuộc Provider)
+      let customerId = invoice.customerId;
+      if (!customerId && invoice.contractId) {
+        const contractsById = await this.proxy.send<any>(
+          this.contractClient,
+          { cmd: ProviderContractPatterns.FIND_BY_IDS },
+          { providerId, contractIds: [invoice.contractId] },
+        ).catch(() => ({}));
+        customerId = contractsById?.[invoice.contractId]?.customerId;
+      }
+
+      if (!customerId) {
+        throw new BadRequestException('Không tìm thấy thông tin khách hàng gắn với hóa đơn này để gửi nhắc nợ');
+      }
+
+      // 4. Phát lệnh gửi thông báo In-App tới đúng người dùng
+      const totalFormatted = Number(invoice.total).toLocaleString('vi-VN');
+      await this.proxy.send(
+        this.notificationClient,
+        { cmd: NotificationPatterns.CREATE_IN_APP },
+        {
+          userId: customerId,
+          title: `Nhắc nhở thanh toán hóa đơn ${invoice.invoiceNumber}`,
+          content: `Hóa đơn ${invoice.invoiceNumber} với số tiền ${totalFormatted} đ đang chờ thanh toán. Quý khách vui lòng kiểm tra và hoàn tất thanh toán.`,
+          createdBy: providerUserId,
+        },
+      ).catch((err: any) => {
+        this.logger.warn(`Không thể gửi notification cho khách hàng ${customerId}: ${err?.message || err}`);
+      });
+
+      this.reminderCooldowns.set(invoiceId, now + COOLDOWN_MS);
+
+      return {
+        success: true,
+        message: `Đã gửi thông báo nhắc nợ hóa đơn ${invoice.invoiceNumber} thành công`,
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
+      };
+    } catch (error) {
+      // Giải phóng khóa nếu request bị lỗi nghiệp vụ
+      if (isLockedViaRedis && this.redisService) {
+        await this.redisService.del(cacheKey).catch(() => null);
+      }
+      this.reminderCooldowns.delete(invoiceId);
+      throw error;
+    }
   }
 }

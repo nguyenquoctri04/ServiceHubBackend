@@ -1,10 +1,4 @@
-import {
-    ForbiddenException,
-    Inject,
-    Injectable,
-    Logger,
-    OnModuleInit,
-} from "@nestjs/common";
+import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import { ClientProxy, RpcException } from "@nestjs/microservices";
 import { PrismaService } from "../prisma/prisma.service";
 import { DigitalSignature } from "@app/common/dto/customer/identity";
@@ -12,22 +6,13 @@ import { SecureRpcService } from "@app/common";
 import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import {
     createCipheriv,
     createDecipheriv,
     randomBytes,
     scrypt,
 } from "node:crypto";
-import {
-    clearGpgBinaryCache,
-    getGpgBinary,
-    getGpgAgentBinary,
-    getPinentryBinary,
-    getGpgBaseArgs,
-    getDefaultGnupgHome,
-    getGpgEnv,
-    prepareGnupgHome,
-} from "../gpg.util";
 
 const execFileAsync = promisify(execFile);
 const scryptAsync = promisify(scrypt);
@@ -39,12 +24,9 @@ const ENCRYPTION_IV_LENGTH = 12;
 const ENCRYPTION_AUTH_TAG_LENGTH = 16;
 
 @Injectable()
-export class KeysService implements OnModuleInit {
-    private readonly logger = new Logger(KeysService.name);
-    private readonly gnupgHome = getDefaultGnupgHome();
-    private get gpgBin(): string {
-        return getGpgBinary();
-    }
+export class KeysService {
+    private readonly gnupgHome =
+        process.env.GNUPGHOME ?? "/var/lib/signature-service/gnupg";
 
     constructor(
         private readonly prisma: PrismaService,
@@ -68,20 +50,6 @@ export class KeysService implements OnModuleInit {
                     `Tài khoản cần xác thực eKYC trước khi ${action}.`,
                 ),
             );
-        }
-    }
-
-    async onModuleInit() {
-        try {
-            clearGpgBinaryCache();
-            await prepareGnupgHome(this.gnupgHome);
-            const agent = getGpgAgentBinary();
-            const pinentry = getPinentryBinary();
-            this.logger.log(
-                `Initialized GPG home: ${this.gnupgHome} | gpg: ${this.gpgBin} | agent: ${agent ?? "default"} | pinentry: ${pinentry ?? "default"}`,
-            );
-        } catch (error) {
-            this.logger.warn(`Failed to initialize GPG home during module init: ${(error as Error).message}`);
         }
     }
 
@@ -199,7 +167,10 @@ export class KeysService implements OnModuleInit {
          * 2. Prepare GPG home
          * -----------------------------------------------------
          */
-        await prepareGnupgHome(this.gnupgHome);
+        await mkdir(this.gnupgHome, {
+            recursive: true,
+            mode: 0o700,
+        });
 
         let fingerprint: string | null = null;
 
@@ -222,10 +193,13 @@ export class KeysService implements OnModuleInit {
              * -------------------------------------------------
              */
             const { stdout: fingerprintOutput } = await execFileAsync(
-                this.gpgBin,
-                [...getGpgBaseArgs(), "--with-colons", "--list-keys", email],
+                "gpg",
+                ["--batch", "--with-colons", "--list-keys", email],
                 {
-                    env: getGpgEnv(this.gnupgHome),
+                    env: {
+                        ...process.env,
+                        GNUPGHOME: this.gnupgHome,
+                    },
                 },
             );
 
@@ -413,11 +387,10 @@ export class KeysService implements OnModuleInit {
     }) {
         const { name, email, passphrase, expiresIn } = input;
 
-        this.logger.log(`Generating GPG key for ${name} <${email}> using binary: ${this.gpgBin}`);
         await execFileAsync(
-            this.gpgBin,
+            "gpg",
             [
-                ...getGpgBaseArgs(),
+                "--batch",
                 "--pinentry-mode",
                 "loopback",
                 "--passphrase",
@@ -434,7 +407,10 @@ export class KeysService implements OnModuleInit {
                 expiresIn,
             ],
             {
-                env: getGpgEnv(this.gnupgHome),
+                env: {
+                    ...process.env,
+                    GNUPGHOME: this.gnupgHome,
+                },
             },
         );
     }
@@ -446,10 +422,13 @@ export class KeysService implements OnModuleInit {
      */
     private async exportPublicKey(fingerprint: string): Promise<string> {
         const { stdout } = await execFileAsync(
-            this.gpgBin,
-            [...getGpgBaseArgs(), "--armor", "--export", fingerprint],
+            "gpg",
+            ["--armor", "--export", fingerprint],
             {
-                env: getGpgEnv(this.gnupgHome),
+                env: {
+                    ...process.env,
+                    GNUPGHOME: this.gnupgHome,
+                },
             },
         );
 
@@ -469,9 +448,9 @@ export class KeysService implements OnModuleInit {
         passphrase: string,
     ): Promise<string> {
         const { stdout } = await execFileAsync(
-            this.gpgBin,
+            "gpg",
             [
-                ...getGpgBaseArgs(),
+                "--batch",
                 "--yes",
                 "--pinentry-mode",
                 "loopback",
@@ -487,7 +466,10 @@ export class KeysService implements OnModuleInit {
                 fingerprint,
             ],
             {
-                env: getGpgEnv(this.gnupgHome),
+                env: {
+                    ...process.env,
+                    GNUPGHOME: this.gnupgHome,
+                },
             },
         );
 
@@ -603,10 +585,13 @@ export class KeysService implements OnModuleInit {
      */
     private async deleteSecretKey(fingerprint: string): Promise<void> {
         await execFileAsync(
-            this.gpgBin,
-            [...getGpgBaseArgs(), "--yes", "--delete-secret-key", fingerprint],
+            "gpg",
+            ["--batch", "--yes", "--delete-secret-key", fingerprint],
             {
-                env: getGpgEnv(this.gnupgHome),
+                env: {
+                    ...process.env,
+                    GNUPGHOME: this.gnupgHome,
+                },
             },
         );
     }
@@ -623,10 +608,13 @@ export class KeysService implements OnModuleInit {
              */
             try {
                 await execFileAsync(
-                    this.gpgBin,
-                    [...getGpgBaseArgs(), "--yes", "--delete-secret-key", fingerprint],
+                    "gpg",
+                    ["--batch", "--yes", "--delete-secret-key", fingerprint],
                     {
-                        env: getGpgEnv(this.gnupgHome),
+                        env: {
+                            ...process.env,
+                            GNUPGHOME: this.gnupgHome,
+                        },
                     },
                 );
             } catch {
@@ -641,10 +629,13 @@ export class KeysService implements OnModuleInit {
              */
             try {
                 await execFileAsync(
-                    this.gpgBin,
-                    [...getGpgBaseArgs(), "--yes", "--delete-key", fingerprint],
+                    "gpg",
+                    ["--batch", "--yes", "--delete-key", fingerprint],
                     {
-                        env: getGpgEnv(this.gnupgHome),
+                        env: {
+                            ...process.env,
+                            GNUPGHOME: this.gnupgHome,
+                        },
                     },
                 );
             } catch {

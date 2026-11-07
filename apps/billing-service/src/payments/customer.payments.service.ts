@@ -17,6 +17,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PAYOS_CLIENT } from "../payos/payos.provider";
 import { firstValueFrom, timeout } from "rxjs";
 import { PayOSService } from "../payos/payos.service";
+import { Prisma } from "@prisma/client-billing";
 
 const RECONCILE_SCHEDULE_KEY = "payments:reconcile:schedule";
 const RECONCILE_HASH_PREFIX = "payment:reconcile:";
@@ -44,7 +45,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         @Inject(PAYOS_CLIENT) private readonly payOS: PayOS,
         @Inject("NOTIFICATION_SERVICE")
         private readonly notificationClient: ClientProxy,
-    ) {}
+    ) { }
 
     onModuleInit() {
         this.workerTimer = setInterval(() => {
@@ -141,13 +142,14 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
 
             // ========== Test xong bỏ comment chỗ này ==========
             if (
-                link.status === "PAID" 
+                link.status === "PAID"
                 // && link.amountPaid >= Number(invoice.total)
             ) {
                 const updated = await this.markInvoicePaid(
                     invoice.id,
                     paymentLinkId,
                     this.getPaidAt(link),
+                    link.amountPaid,
                 );
                 await this.removeReconciliation(paymentLinkId);
                 if (updated && invoice.customerId) {
@@ -215,6 +217,7 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
                 invoiceId,
                 paymentLinkId,
                 link.paidAt ? new Date(link.paidAt) : new Date(),
+                link.amountPaid,
             );
             await this.removeReconciliation(paymentLinkId);
             if (updated && payment.invoice.customerId) {
@@ -368,13 +371,14 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
 
             // ========== Test xong bỏ comment chỗ này ==========
             if (
-                link.status === "PAID" 
+                link.status === "PAID"
                 // && link.amountPaid >= Number(invoice.total)
             ) {
                 const updated = await this.markInvoicePaid(
                     invoice.id,
                     paymentLinkId,
                     this.getPaidAt(link),
+                    link.amountPaid,
                 );
                 await this.removeReconciliation(paymentLinkId);
                 if (updated && invoice.customerId) {
@@ -436,52 +440,113 @@ export class CustomerPaymentsService implements OnModuleInit, OnModuleDestroy {
         invoiceId: string,
         paymentLinkId: string,
         paidAt: Date,
+        amountPaid: number,
     ): Promise<boolean> {
         return this.prisma.$transaction(async (tx) => {
-            const payment = await tx.payment.findUnique({
-                where: { paymentLinkId },
-            });
-            if (!payment || payment.invoiceId !== invoiceId) return false;
+            return this.markInvoicePaidInTransaction(
+                tx,
+                invoiceId,
+                paymentLinkId,
+                paidAt,
+                amountPaid,
+            );
+        });
+    }
 
-            const invoice = await tx.invoice.findUnique({
-                where: { id: invoiceId },
-            });
-            if (!invoice || invoice.status === "PAID") return false;
+    async markInvoicePaidInTransaction(
+        tx: Prisma.TransactionClient,
+        invoiceId: string,
+        paymentLinkId: string,
+        paidAt: Date,
+        amountPaid: number,
+    ): Promise<boolean> {
+        const payment = await tx.payment.findUnique({
+            where: { paymentLinkId },
+            include: { invoice: true },
+        });
+        if (
+            !payment ||
+            payment.invoiceId !== invoiceId ||
+            !Number.isFinite(amountPaid)
+        ) {
+            return false;
+        }
 
+        let transitionedToPaid = false;
+        if (payment.invoice.status !== "PAID") {
             const invoiceUpdate = await tx.invoice.updateMany({
                 where: { id: invoiceId, status: { not: "PAID" } },
                 data: { status: "PAID", revision: { increment: 1 }, updatedAt: new Date() },
             });
-            if (invoiceUpdate.count === 0) return false;
+            transitionedToPaid = invoiceUpdate.count === 1;
 
-            await tx.payment.update({
-                where: { id: payment.id },
-                data: { paymentMethod: "TRANSFER", status: "SUCCESS", paidAt },
-            });
-
-            // Ghi Outbox để kích hoạt Hợp đồng và phát tán sự kiện (Saga)
-            if (invoice.contractId) {
-                await this.outboxService.publishLocal(tx, {
-                    eventType: BillingEventPatterns.INVOICE_PAID,
-                    aggregateType: 'INVOICE',
-                    aggregateId: invoiceId,
-                    aggregateRevision: (invoice.revision || 1) + 1,
-                    orderingKey: invoice.contractId,
-                    payload: {
-                        invoiceId,
-                        invoiceNumber: invoice.invoiceNumber,
-                        contractId: invoice.contractId,
-                        customerId: invoice.customerId,
-                        providerId: invoice.providerId,
-                        amount: Number(invoice.total),
-                        paymentMethod: 'TRANSFER',
-                        paidAt,
-                    },
+            if (!transitionedToPaid) {
+                const currentInvoice = await tx.invoice.findUnique({
+                    where: { id: invoiceId },
+                    select: { status: true },
                 });
+                if (currentInvoice?.status !== "PAID") return false;
             }
+        }
 
-            return true;
+        await tx.payment.update({
+            where: { id: payment.id },
+            data: {
+                paymentMethod: "TRANSFER",
+                status: "SUCCESS",
+                paidAt: payment.paidAt ?? paidAt,
+            },
         });
+
+        // Ghi Outbox để kích hoạt Hợp đồng và phát tán sự kiện (Saga)
+        if (transitionedToPaid && payment.invoice.contractId) {
+            await this.outboxService.publishLocal(tx, {
+                eventType: BillingEventPatterns.INVOICE_PAID,
+                aggregateType: 'INVOICE',
+                aggregateId: invoiceId,
+                aggregateRevision: (payment.invoice.revision || 1) + 1,
+                orderingKey: payment.invoice.contractId,
+                payload: {
+                    invoiceId,
+                    invoiceNumber: payment.invoice.invoiceNumber,
+                    contractId: payment.invoice.contractId,
+                    customerId: payment.invoice.customerId,
+                    providerId: payment.invoice.providerId,
+                    amount: Number(payment.invoice.total),
+                    paymentMethod: 'TRANSFER',
+                    paidAt,
+                },
+            });
+        }
+
+        // One credit record per invoice makes repeated webhooks/retries idempotent.
+        // Keep its amount equal to PayOS's cumulative amount paid, not Invoice.total.
+        const recordedAt = new Date();
+        await tx.ledger.upsert({
+            where: {
+                referenceId: `INVOICE_PAYMENT:${payment.invoice.id}`,
+            },
+            create: {
+                providerId: payment.invoice.providerId,
+                invoiceId: payment.invoice.id,
+                type: "INCOME",
+                amount: amountPaid,
+                currency: "VND",
+                status: "SUCCEEDED",
+                referenceId: `INVOICE_PAYMENT:${payment.invoice.id}`,
+                createdAt: recordedAt,
+                updatedAt: recordedAt,
+                completedAt: paidAt,
+            },
+            update: {
+                amount: amountPaid,
+                status: "SUCCEEDED",
+                updatedAt: recordedAt,
+                completedAt: paidAt,
+            },
+        });
+
+        return transitionedToPaid;
     }
 
     private async markPaymentFailed(invoiceId: string, paymentLinkId: string) {

@@ -24,6 +24,8 @@ export class ProviderBillingPatterns {
   public static readonly INVOICES_REVENUE_GROWTH = 'billing.invoices.revenueGrowth';
   public static readonly INVOICES_AGING = 'billing.invoices.aging';
   public static readonly INVOICES_RECENT_PAYMENTS = 'billing.invoices.recentPayments';
+  public static readonly REVENUE_SUMMARY = 'billing.revenue.summary';
+  public static readonly REVENUE_TRANSACTIONS = 'billing.revenue.transactions';
   public static readonly METERS_DASHBOARD_STATS = 'billing.meters.dashboardStats';
 
 }

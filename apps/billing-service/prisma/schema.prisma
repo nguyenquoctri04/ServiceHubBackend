@@ -75,6 +75,7 @@ model Invoice {
   createdAt       DateTime      @map("created_at")
   updatedAt       DateTime      @map("updated_at")
   items           InvoiceItem[]
+  ledgerEntries   Ledger[]
   payments        Payment[]
 
   @@index([customerId])
@@ -118,6 +119,42 @@ model Payment {
   @@map("payment")
 }
 
+model PayoutBatch {
+  id            String            @id @default(uuid()) @db.Uuid
+  batchId       String            @map("batch_id")
+  status        PayoutBatchStatus
+  createdAt     DateTime          @map("created_at")
+  ledgerEntries Ledger[]
+
+  @@map("payout_batch")
+}
+
+model Ledger {
+  id                    String       @id @default(uuid()) @db.Uuid
+  providerId            String       @map("provider_id") @db.Uuid
+  invoiceId             String?      @map("invoice_id") @db.Uuid
+  payoutBatchId         String?      @map("payout_batch_id") @db.Uuid
+  type                  LedgerType
+  amount                Decimal      @db.Decimal(18, 2)
+  currency              String       @default("VND")
+  status                LedgerStatus
+  referenceId           String       @unique @map("reference_id")
+  idempotencyKey        String?      @unique @map("idempotency_key")
+  externalTransactionId String?      @unique @map("external_transaction_id")
+  errorMessage          String?      @map("error_message")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @default(now()) @updatedAt @map("updated_at")
+  completedAt           DateTime?    @map("completed_at")
+  invoice               Invoice?     @relation(fields: [invoiceId], references: [id])
+  payoutBatch           PayoutBatch? @relation(fields: [payoutBatchId], references: [id])
+
+  @@index([providerId, type, status])
+  @@index([providerId, createdAt])
+  @@index([invoiceId])
+  @@index([payoutBatchId])
+  @@map("ledger")
+}
+
 enum MeterStatus {
   ACTIVE
   INACTIVE
@@ -149,6 +186,34 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+}
+
+enum PayoutBatchStatus {
+  DRAFTING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+  SCHEDULED
+  PROCESSING
+  FAILED
+  PARTIAL_COMPLETED
+  COMPLETED
+}
+
+enum LedgerType {
+  INCOME
+  PAYOUT
+  REFUND
+}
+
+enum LedgerStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  UNKNOWN
+  CANCELLED
 }
 
 // =========================================================================

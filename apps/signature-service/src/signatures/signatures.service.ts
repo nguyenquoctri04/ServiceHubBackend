@@ -6,17 +6,10 @@ import { CustomerPatterns } from "@app/common/constants/customer.patterns";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
-import { rm, writeFile, readFile } from "node:fs/promises";
+import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { PrismaService } from "../prisma/prisma.service";
 import { KeysService } from "../keys/keys.service";
-import {
-    getGpgBinary,
-    getGpgBaseArgs,
-    getTempGnupgDir,
-    getGpgEnv,
-    prepareGnupgHome,
-} from "../gpg.util";
 
 const execFileAsync = promisify(execFile);
 
@@ -31,10 +24,6 @@ interface ContractFileForSigning {
 
 @Injectable()
 export class SignaturesService {
-    private get gpgBin(): string {
-        return getGpgBinary();
-    }
-
     constructor(
         private readonly prisma: PrismaService,
         private readonly keysService: KeysService,
@@ -43,7 +32,7 @@ export class SignaturesService {
         private readonly contractClient: ClientProxy,
 
         private readonly secureRpc: SecureRpcService,
-    ) {}
+    ) { }
 
     async signContract(input: {
         identityId: string;
@@ -112,18 +101,18 @@ export class SignaturesService {
             });
         }
 
-        const tempHome = getTempGnupgDir("sign", randomUUID());
+        const tempHome = path.join("/tmp/signature-service/sign", randomUUID());
 
         try {
-            await prepareGnupgHome(tempHome);
+            await mkdir(tempHome, { recursive: true, mode: 0o700 });
 
             const keyFile = path.join(tempHome, "key.asc");
             await writeFile(keyFile, privateKey, "utf8");
 
             await execFileAsync(
-                this.gpgBin,
+                "gpg",
                 [
-                    ...getGpgBaseArgs(),
+                    "--batch",
                     "--yes",
                     "--pinentry-mode",
                     "loopback",
@@ -132,7 +121,7 @@ export class SignaturesService {
                     "--import",
                     keyFile,
                 ],
-                { env: getGpgEnv(tempHome) },
+                { env: { ...process.env, GNUPGHOME: tempHome } },
             );
 
             const dataFile = path.join(tempHome, "data.txt");
@@ -141,9 +130,9 @@ export class SignaturesService {
             await writeFile(dataFile, hashContract, "utf8");
 
             await execFileAsync(
-                this.gpgBin,
+                "gpg",
                 [
-                    ...getGpgBaseArgs(),
+                    "--batch",
                     "--yes",
                     "--pinentry-mode",
                     "loopback",
@@ -157,30 +146,30 @@ export class SignaturesService {
                     sigFile,
                     dataFile,
                 ],
-                { env: getGpgEnv(tempHome) },
+                { env: { ...process.env, GNUPGHOME: tempHome } },
             );
 
             const signatureFile = await readFile(sigFile, "utf8");
 
             const signature = existing
                 ? await this.prisma.contractSignature.update({
-                      where: { id: existing.id },
-                      data: {
-                          gnupgKeyId,
-                          signatureFile,
-                          signatureHash: hashContract,
-                          signedAt: new Date(),
-                      },
-                  })
+                    where: { id: existing.id },
+                    data: {
+                        gnupgKeyId,
+                        signatureFile,
+                        signatureHash: hashContract,
+                        signedAt: new Date(),
+                    },
+                })
                 : await this.prisma.contractSignature.create({
-                      data: {
-                          contractFileId,
-                          gnupgKeyId,
-                          signatureFile,
-                          signatureHash: hashContract,
-                          signedAt: new Date(),
-                      },
-                  });
+                    data: {
+                        contractFileId,
+                        gnupgKeyId,
+                        signatureFile,
+                        signatureHash: hashContract,
+                        signedAt: new Date(),
+                    },
+                });
 
             // Customer ký thành công -> activate contract
             if (!isProviderSigning) {
@@ -258,8 +247,8 @@ export class SignaturesService {
 
         const providerSignature = providerKey
             ? await this.prisma.contractSignature.findFirst({
-                  where: { contractFileId, gnupgKeyId: providerKey.id },
-              })
+                where: { contractFileId, gnupgKeyId: providerKey.id },
+            })
             : null;
 
         if (!providerSignature) {
@@ -313,10 +302,16 @@ export class SignaturesService {
             };
         }
 
-        const tempHome = getTempGnupgDir("verify", randomUUID());
+        const tempHome = path.join(
+            "/tmp/signature-service/verify",
+            randomUUID(),
+        );
 
         try {
-            await prepareGnupgHome(tempHome);
+            await mkdir(tempHome, {
+                recursive: true,
+                mode: 0o700,
+            });
 
             const dataFile = path.join(tempHome, "data.txt");
             const sigFile = path.join(tempHome, "signature.asc");
@@ -328,15 +323,18 @@ export class SignaturesService {
 
             await writeFile(pubKeyFile, signature.gnupgKey.publicKey, "utf8");
 
-            const env = getGpgEnv(tempHome);
+            const env = {
+                ...process.env,
+                GNUPGHOME: tempHome,
+            };
 
-            await execFileAsync(this.gpgBin, [...getGpgBaseArgs(), "--import", pubKeyFile], {
+            await execFileAsync("gpg", ["--batch", "--import", pubKeyFile], {
                 env,
             });
 
             const { stdout, stderr } = await execFileAsync(
-                this.gpgBin,
-                [...getGpgBaseArgs(), "--status-fd", "1", "--verify", sigFile, dataFile],
+                "gpg",
+                ["--status-fd", "1", "--verify", sigFile, dataFile],
                 { env },
             ).catch((err) => ({
                 stdout: err.stdout ?? "",
@@ -458,12 +456,12 @@ export class SignaturesService {
             customerSigned,
             provider: providerSignature
                 ? {
-                      signatureId: providerSignature.signatureId,
-                      fingerprint: providerSignature.fingerprint,
-                      signedAt: providerSignature.signedAt,
-                      valid: providerSignature.valid,
-                      hashValid: providerSignature.hashValid,
-                  }
+                    signatureId: providerSignature.signatureId,
+                    fingerprint: providerSignature.fingerprint,
+                    signedAt: providerSignature.signedAt,
+                    valid: providerSignature.valid,
+                    hashValid: providerSignature.hashValid,
+                }
                 : null,
             customer: customerSignatures.map((signature) => ({
                 signatureId: signature.signatureId,

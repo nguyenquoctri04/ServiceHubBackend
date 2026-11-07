@@ -10,6 +10,7 @@ import { CreateProviderDto } from './dto/create-provider.dto';
 @Injectable()
 export class ProvidersService {
   private readonly logger = new Logger(ProvidersService.name);
+  private bankBinsByNormalizedName?: Map<string, string>;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -142,6 +143,7 @@ export class ProvidersService {
         businessType: true,
         numberCard: true,
         nameBank: true,
+        bin: true,
       },
     });
 
@@ -169,7 +171,34 @@ export class ProvidersService {
       businessType: provider.businessType || undefined,
       accountNumber: provider.numberCard || undefined,
       bankName: provider.nameBank || undefined,
+      bin: provider.bin || await this.resolveBankBin(provider.nameBank),
     };
+  }
+
+  private async resolveBankBin(bankName?: string | null): Promise<string | undefined> {
+    if (!bankName?.trim()) return undefined;
+    if (!this.bankBinsByNormalizedName) {
+      const banks = await this.prisma.bank.findMany({
+        select: { name: true, code: true, shortName: true, bin: true },
+      });
+      const binMap = new Map<string, string>();
+      for (const bank of banks) {
+        for (const alias of [bank.name, bank.code, bank.shortName]) {
+          const key = this.normalizeBankName(alias);
+          if (key) binMap.set(key, bank.bin);
+        }
+      }
+      this.bankBinsByNormalizedName = binMap;
+    }
+    return this.bankBinsByNormalizedName.get(this.normalizeBankName(bankName));
+  }
+
+  private normalizeBankName(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
   }
 
   /**

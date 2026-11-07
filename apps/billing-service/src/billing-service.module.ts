@@ -5,6 +5,7 @@ import { InvoicesModule } from "./invoices/invoices.module";
 import { PaymentsModule } from "./payments/payments.module";
 import { CommonModule, ReliabilityModule } from "@app/common";
 import { MetersModule } from "./meters/meters.module";
+import { ScheduleModule } from "@nestjs/schedule";
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { MetersModule } from "./meters/meters.module";
       secretEnv: "BILLING_SERVICE_SECRET",
     }),
     ReliabilityModule,
+    ScheduleModule.forRoot(),
     PrismaModule,
     InvoicesModule,
     PaymentsModule,
@@ -22,4 +24,4 @@ import { MetersModule } from "./meters/meters.module";
   controllers: [],
   providers: [],
 })
-export class BillingServiceModule {}
+export class BillingServiceModule { }

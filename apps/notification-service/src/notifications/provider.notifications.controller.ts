@@ -12,7 +12,7 @@ function extractPayload<T>(raw: any): T {
 
 @Controller()
 export class ProviderNotificationsController {
-  constructor(private readonly service: ProviderNotificationsService) {}
+  constructor(private readonly service: ProviderNotificationsService) { }
 
   /**
    * Lấy danh sách thông báo IN_APP của user/provider.
@@ -29,18 +29,50 @@ export class ProviderNotificationsController {
 
   @MessagePattern({ cmd: NotificationPatterns.CREATE_IN_APP })
   async createInAppNotification(
-    @Payload() data: any,
+    @Payload() raw: any,
   ) {
-    const payload = extractPayload<{ userId?: string; providerId?: string; title?: string; content?: string; createdBy?: string }>(data);
-    const targetUserId = payload?.userId || payload?.providerId;
-    const createdBy = payload?.createdBy || (payload?.userId && payload?.providerId ? payload?.providerId : null);
-    if (!targetUserId) {
-      throw new RpcException({ message: 'Target userId or providerId is required', statusCode: 400 });
+    const payload = extractPayload<{
+      userId?: string;
+      providerId?: string;
+      title?: string;
+      content?: string;
+      createdBy?: string;
+      data?: {
+        userId?: string;
+        providerId?: string;
+        title?: string;
+        content?: string;
+        createdBy?: string;
+      };
+    }>(raw);
+
+    // HmacGuard thường bóc envelope; hỗ trợ thêm trường hợp transport vẫn chuyển { meta, data } nguyên vẹn.
+    const data = payload?.data ?? payload;
+    if (!data || typeof data !== 'object') {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Payload thông báo không hợp lệ.',
+      });
     }
+
+    const targetUserId = data.userId || data.providerId;
+    const createdBy = data.createdBy || (data.userId && data.providerId ? data.providerId : null);
+
+    if (
+      !targetUserId ||
+      typeof data.title !== 'string' ||
+      typeof data.content !== 'string'
+    ) {
+      throw new RpcException({
+        statusCode: 400,
+        message: 'Thiếu người nhận hoặc nội dung thông báo.',
+      });
+    }
+
     return this.service.createInAppNotification({
       userId: targetUserId,
-      title: payload?.title || 'Thông báo mới',
-      content: payload?.content || '',
+      title: data.title,
+      content: data.content,
       createdBy,
     });
   }

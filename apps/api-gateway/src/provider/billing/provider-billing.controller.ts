@@ -27,6 +27,7 @@ import { ProviderBillingBffService } from './provider-billing-bff.service';
 import { ProviderBillingPatterns } from '@app/common/constants/provider.billing.patterns';
 import { CurrentUserPayload } from '../provider.controller';
 import { AuditEmitterService } from '../../shared/audit-emitter.service';
+import { RevenueLedgerQueryDto } from '../dto/revenue-ledger-query.dto';
 
 @Controller('api/provider/billing')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,12 +39,31 @@ export class ProviderBillingController {
     private readonly providerCache: ProviderCacheService,
     private readonly billingBffService: ProviderBillingBffService,
     private readonly auditEmitter: AuditEmitterService,
-  ) {}
+  ) { }
 
   @Get('invoices')
   async getInvoices(@CurrentUser() user: CurrentUserPayload, @Query() query: InvoiceQueryDto) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     return this.billingBffService.getInvoices(providerId, query);
+  }
+
+  @Get('revenue/summary')
+  async getRevenueSummary(@CurrentUser() user: CurrentUserPayload) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.proxy.send(
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.REVENUE_SUMMARY },
+      { providerId },
+    );
+  }
+
+  @Get('revenue/transactions')
+  async getRevenueTransactions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: RevenueLedgerQueryDto,
+  ) {
+    const providerId = await this.providerCache.resolveActiveProvider(user);
+    return this.billingBffService.getRevenueTransactions(providerId, query);
   }
 
   @Post('invoices/:id/pay')
@@ -56,8 +76,8 @@ export class ProviderBillingController {
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const result = await this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.INVOICES_PAY }, 
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.INVOICES_PAY },
       { providerId, invoiceId, dto, idempotencyKey }
     );
     this.auditEmitter.emit({
@@ -108,8 +128,8 @@ export class ProviderBillingController {
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const result = await this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.METERS_READING_CREATE }, 
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.METERS_READING_CREATE },
       { providerId, recordedBy: user.id, dto }
     );
     this.auditEmitter.emit({
@@ -130,8 +150,8 @@ export class ProviderBillingController {
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const result = await this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.METERS_READING_CANCEL }, 
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.METERS_READING_CANCEL },
       { providerId, readingId }
     );
     this.auditEmitter.emit({
@@ -161,8 +181,8 @@ export class ProviderBillingController {
   ) {
     const providerId = await this.providerCache.resolveActiveProvider(user);
     const result = await this.proxy.send(
-      this.billingClient, 
-      { cmd: ProviderBillingPatterns.METERS_OCR_CONFIRM }, 
+      this.billingClient,
+      { cmd: ProviderBillingPatterns.METERS_OCR_CONFIRM },
       { providerId, recordedBy: user.id, dto }
     );
     this.auditEmitter.emit({

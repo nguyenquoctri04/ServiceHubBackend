@@ -8,7 +8,7 @@ import { ContractEventPatterns, ViolationEventPatterns, EventEnvelope } from '@a
 
 @Controller()
 export class InvoicesController {
-  constructor(private readonly service: InvoicesService) {}
+  constructor(private readonly service: InvoicesService) { }
 
   // ── Provider patterns ──────────────────────────────────────────────────────
 
@@ -35,6 +35,18 @@ export class InvoicesController {
       payload.dto,
       payload.idempotencyKey,
     );
+  }
+
+  @MessagePattern({ cmd: ProviderBillingPatterns.REVENUE_SUMMARY })
+  getProviderRevenueSummary(@Payload() payload: { providerId: string }) {
+    return this.service.getRevenueSummary(payload.providerId);
+  }
+
+  @MessagePattern({ cmd: ProviderBillingPatterns.REVENUE_TRANSACTIONS })
+  getProviderRevenueTransactions(
+    @Payload() payload: { providerId: string; query: { page?: number; limit?: number; type?: string; status?: string; search?: string } },
+  ) {
+    return this.service.getRevenueTransactions(payload.providerId, payload.query);
   }
 
   @MessagePattern({ cmd: ProviderBillingPatterns.INVOICES_OUTSTANDING_TOTALS })

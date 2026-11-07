@@ -339,43 +339,15 @@ export class CustomerInvoicesService {
                 existingLink.status === "PAID"
                 // && existingLink.amountPaid >= Number(invoice.total)
             ) {
-                const invoiceUpdate = await tx.invoice.updateMany({
-                    where: {
-                        id: invoice.id,
-                        status: { in: ["UNPAID", "OVERDUE"] },
-                    },
-                    data: { status: "PAID", updatedAt: new Date() },
-                });
-                if (invoiceUpdate.count === 0) {
-                    const currentInvoice = await tx.invoice.findUnique({
-                        where: { id: invoice.id },
-                        select: { status: true },
-                    });
-                    if (currentInvoice?.status !== "PAID") {
-                        throw new RpcException({
-                            statusCode: 409,
-                            message: "Trạng thái hóa đơn đã thay đổi, vui lòng tải lại.",
-                        });
-                    }
-                    await this.customerPayments.removeReconciliation(
-                        existingPayment.paymentLinkId,
-                    );
-                    return {
-                        ...existingLink,
-                        ...savedLinkData,
-                    };
-                }
-
-                await tx.payment.update({
-                    where: { id: existingPayment.id },
-                    data: {
-                        paymentMethod: "TRANSFER",
-                        status: "SUCCESS",
-                        paidAt: existingLink.paidAt
-                            ? new Date(existingLink.paidAt)
-                            : new Date(),
-                    },
-                });
+                await this.customerPayments.markInvoicePaidInTransaction(
+                    tx,
+                    invoice.id,
+                    existingPayment.paymentLinkId,
+                    existingLink.paidAt
+                        ? new Date(existingLink.paidAt)
+                        : new Date(),
+                    existingLink.amountPaid,
+                );
                 await this.customerPayments.removeReconciliation(
                     existingPayment.paymentLinkId,
                 );
